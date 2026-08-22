@@ -1,0 +1,73 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: pukaar-postgres
+    environment:
+      POSTGRES_DB: pukaar
+      POSTGRES_USER: pukaar
+      POSTGRES_PASSWORD: pukaar_secret
+    ports:
+      - "5432:5432"
+    volumes:
+      - pukaar_pg_data:/var/lib/postgresql/data
+    command:
+      - postgres
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - effective_cache_size=1GB
+      - -c
+      - work_mem=16MB
+      - -c
+      - maintenance_work_mem=128MB
+      - -c
+      - max_connections=200
+      - -c
+      - wal_buffers=16MB
+      - -c
+      - random_page_cost=1.1
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pukaar -d pukaar"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: pukaar-redis
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build: ./backend
+    container_name: pukaar-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: pukaar
+      DB_USER: pukaar
+      DB_PASSWORD: pukaar_secret
+      REDIS_HOST: redis
+      JWT_SECRET: local-dev-change-me-to-a-very-long-secret-key-256bits
+      OTP_MOCK_ENABLED: "true"
+      STORAGE_TYPE: local
+      STORAGE_LOCAL_PATH: /data/evidence
+    ports:
+      - "8080:8080"
+    volumes:
+      - pukaar_evidence:/data/evidence
+
+volumes:
+  pukaar_pg_data:
+  pukaar_evidence:

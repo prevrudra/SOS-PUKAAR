@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">PUKAAR</string>
+    <string name="tagline">I don\'t have to think when something goes wrong.</string>
+    <string name="sos_instruction">Tap when you are in danger</string>
+    <string name="help_instruction">Tap when you need assistance</string>
+    <string name="menu">MENU</string>
+    <string name="im_safe">I\'M SAFE</string>
+    <string name="im_ok">I\'M OK</string>
+    <string name="emergency_channel_name">PUKAAR Emergency</string>
+    <string name="emergency_channel_desc">Critical SOS and HELP alerts</string>
+    <string name="disclaimer">PUKAAR attempts to alert trusted people and emergency pathways. It does not guarantee rescue or response.</string>
+</resources>

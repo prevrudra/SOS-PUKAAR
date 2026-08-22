@@ -1,0 +1,27 @@
+# PUKAAR
+.idea/
+*.iml
+.DS_Store
+*.log
+.env
+.env.*
+!.env.example
+
+# Backend
+backend/target/
+backend/data/
+backend/.mvn/wrapper/maven-wrapper.jar
+
+# Android
+frontend/.gradle/
+frontend/build/
+frontend/app/build/
+frontend/local.properties
+frontend/captures/
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# Evidence / local storage
+**/evidence/

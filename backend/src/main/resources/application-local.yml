@@ -1,0 +1,11 @@
+spring:
+  data:
+    redis:
+      host: localhost
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
+logging:
+  level:
+    com.pukaar: DEBUG

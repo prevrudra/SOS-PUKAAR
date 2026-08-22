@@ -1,0 +1,121 @@
+spring:
+  application:
+    name: pukaar-backend
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:pukaar}
+    username: ${DB_USER:pukaar}
+    password: ${DB_PASSWORD:pukaar_secret}
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX:30}
+      minimum-idle: ${DB_POOL_MIN:5}
+      connection-timeout: 5000
+      idle-timeout: 300000
+      max-lifetime: 1800000
+      pool-name: pukaar-hikari
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+          batch_size: 50
+        order_inserts: true
+        order_updates: true
+        format_sql: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      timeout: 2s
+  cache:
+    type: caffeine
+    caffeine:
+      spec: maximumSize=10000,expireAfterWrite=5m
+  servlet:
+    multipart:
+      max-file-size: 25MB
+      max-request-size: 30MB
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    default-property-inclusion: non_null
+
+server:
+  port: ${SERVER_PORT:8080}
+  compression:
+    enabled: true
+  tomcat:
+    threads:
+      max: ${TOMCAT_MAX_THREADS:200}
+      min-spare: 20
+    accept-count: 100
+    max-connections: 10000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when_authorized
+  metrics:
+    tags:
+      application: pukaar
+
+pukaar:
+  jwt:
+    secret: ${JWT_SECRET:change-me-to-a-very-long-secret-key-at-least-256-bits-for-hs256}
+    access-token-minutes: ${JWT_ACCESS_MINUTES:10080}
+    refresh-token-days: 30
+  otp:
+    length: 6
+    ttl-seconds: 300
+    mock-enabled: ${OTP_MOCK_ENABLED:true}
+    mock-code: "123456"
+  subscription:
+    individual-price-inr: 499
+    family-price-inr: 699
+    family-member-limit: 5
+    referral-family-price-inr: 499
+    referrals-required: 3
+    grace-days: 7
+  emergency:
+    audio-segment-seconds: 60
+    session-timeout-hours: 4
+    evidence-retention-days: 90
+  elderly:
+    soft-inactivity-hours: 6
+    medium-inactivity-hours: 10
+    urgent-inactivity-hours: 12
+    acknowledgment-timeout-minutes: 5
+  storage:
+    type: ${STORAGE_TYPE:local}
+    local-path: ${STORAGE_LOCAL_PATH:./data/evidence}
+    s3-bucket: ${S3_BUCKET:pukaar-evidence}
+    s3-region: ${S3_REGION:ap-south-1}
+  notification:
+    retry-max: 5
+    retry-backoff-ms: 2000
+    sms-fallback-enabled: ${SMS_FALLBACK:false}
+
+logging:
+  level:
+    root: INFO
+    com.pukaar: INFO
+    org.hibernate.SQL: WARN
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html

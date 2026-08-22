@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="pukaar_black">#FF000000</color>
+    <color name="pukaar_sos_red">#FFD32F2F</color>
+    <color name="pukaar_help_orange">#FFF57C00</color>
+    <color name="pukaar_white">#FFFFFFFF</color>
+    <color name="pukaar_gray">#FFBDBDBD</color>
+    <style name="Theme.Pukaar" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">@color/pukaar_black</item>
+        <item name="android:navigationBarColor">@color/pukaar_black</item>
+        <item name="android:windowBackground">@color/pukaar_black</item>
+        <item name="android:colorPrimary">@color/pukaar_sos_red</item>
+    </style>
+</resources>
