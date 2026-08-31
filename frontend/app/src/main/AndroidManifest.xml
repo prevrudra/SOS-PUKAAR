@@ -22,6 +22,8 @@
     <!-- Contacts (minimal trusted-contact selection) -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
 
+    <!-- Opens SMS composer via smsto: intent (user sends from their number) -->
+
     <!-- High-priority alerts -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.VIBRATE" />

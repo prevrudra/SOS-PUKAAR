@@ -11,4 +11,8 @@ public interface TrustedContactRepository extends JpaRepository<TrustedContactEn
     List<TrustedContactEntity> findByOwnerUserIdAndContactRoleInAndActiveTrue(UUID ownerUserId, List<ContactRole> roles);
     long countByOwnerUserIdAndActiveTrue(UUID ownerUserId);
     boolean existsByOwnerUserIdAndPhoneE164AndActiveTrue(UUID ownerUserId, String phoneE164);
+    java.util.Optional<TrustedContactEntity> findByOwnerUserIdAndPhoneE164AndContactRoleAndActiveTrue(
+            UUID ownerUserId, String phoneE164, ContactRole role);
+    java.util.Optional<TrustedContactEntity> findByOwnerUserIdAndPhoneE164AndContactRole(
+            UUID ownerUserId, String phoneE164, ContactRole role);
 }

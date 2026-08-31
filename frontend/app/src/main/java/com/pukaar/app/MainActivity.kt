@@ -9,7 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import com.pukaar.app.ui.navigation.PukaarNavHost
+import com.pukaar.app.integration.PukaarAppNavHost
 import com.pukaar.app.ui.theme.PukaarTheme
 
 class MainActivity : ComponentActivity() {
@@ -22,7 +22,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             PukaarTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = Color.Black) {
-                    PukaarNavHost()
+                    PukaarAppNavHost()
                 }
             }
         }

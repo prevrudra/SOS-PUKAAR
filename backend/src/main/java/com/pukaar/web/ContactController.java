@@ -27,12 +27,31 @@ public class ContactController {
     @PostMapping
     public Map<String, Object> add(@RequestBody ContactRequest req) {
         UUID ownerId = SecurityUtils.currentUserId();
+        String phone = normalize(req.getPhone());
+        ContactRole role = req.getRole() == null ? ContactRole.SOS_TRUSTED : req.getRole();
+
+        var existingActive = contactRepo.findByOwnerUserIdAndPhoneE164AndContactRoleAndActiveTrue(ownerId, phone, role);
+        if (existingActive.isPresent()) {
+            TrustedContactEntity c = existingActive.get();
+            if (req.getName() != null) c.setName(req.getName());
+            if (req.getRelationship() != null) c.setRelationship(req.getRelationship());
+            if (req.getPriorityOrder() != null) c.setPriorityOrder(req.getPriorityOrder());
+            return toDto(contactRepo.save(c));
+        }
+
+        var inactive = contactRepo.findByOwnerUserIdAndPhoneE164AndContactRole(ownerId, phone, role)
+                .filter(c -> !c.isActive());
+        if (inactive.isPresent()) {
+            TrustedContactEntity c = inactive.get();
+            c.setActive(true);
+            c.setVerified(false);
+            if (req.getName() != null) c.setName(req.getName());
+            if (req.getRelationship() != null) c.setRelationship(req.getRelationship());
+            return toDto(contactRepo.save(c));
+        }
+
         if (contactRepo.countByOwnerUserIdAndActiveTrue(ownerId) >= 3) {
             throw new ApiException("CONTACT_LIMIT", "Maximum 3 trusted contacts allowed");
-        }
-        String phone = normalize(req.getPhone());
-        if (contactRepo.existsByOwnerUserIdAndPhoneE164AndActiveTrue(ownerId, phone)) {
-            throw new ApiException("CONTACT_EXISTS", "This phone number is already in your trusted contacts");
         }
         TrustedContactEntity c = TrustedContactEntity.builder()
                 .ownerUserId(ownerId)
