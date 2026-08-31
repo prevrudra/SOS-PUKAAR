@@ -26,14 +26,29 @@ public class ContactController {
 
     @PostMapping
     public Map<String, Object> add(@RequestBody ContactRequest req) {
+        UUID ownerId = SecurityUtils.currentUserId();
+        if (contactRepo.countByOwnerUserIdAndActiveTrue(ownerId) >= 3) {
+            throw new ApiException("CONTACT_LIMIT", "Maximum 3 trusted contacts allowed");
+        }
+        String phone = normalize(req.getPhone());
+        if (contactRepo.existsByOwnerUserIdAndPhoneE164AndActiveTrue(ownerId, phone)) {
+            throw new ApiException("CONTACT_EXISTS", "This phone number is already in your trusted contacts");
+        }
         TrustedContactEntity c = TrustedContactEntity.builder()
-                .ownerUserId(SecurityUtils.currentUserId())
+                .ownerUserId(ownerId)
                 .name(req.getName())
                 .phoneE164(normalize(req.getPhone()))
                 .contactRole(req.getRole() == null ? ContactRole.SOS_TRUSTED : req.getRole())
                 .relationship(req.getRelationship())
                 .priorityOrder(req.getPriorityOrder() == null ? 1 : req.getPriorityOrder())
                 .build();
+        return toDto(contactRepo.save(c));
+    }
+
+    @PostMapping("/{id}/verify")
+    public Map<String, Object> verify(@PathVariable UUID id, @RequestBody(required = false) VerifyRequest req) {
+        TrustedContactEntity c = owned(id);
+        c.setVerified(true);
         return toDto(contactRepo.save(c));
     }
 
@@ -89,5 +104,10 @@ public class ContactController {
         private ContactRole role;
         private String relationship;
         private Integer priorityOrder;
+    }
+
+    @Data
+    public static class VerifyRequest {
+        private String code;
     }
 }

@@ -77,3 +77,16 @@ Manifest and runtime helpers intentionally request / guide:
 ## Disclaimer
 
 PUKAAR alerts trusted people and attempts emergency pathways. It does **not** replace police, ambulance, or government response, and does not guarantee network, GPS, or device availability.
+
+## Production deploy
+
+Server: `43.248.56.240:8080` (API)
+
+```bash
+# On the server (Ubuntu), from repo root:
+bash deploy/install-docker.sh          # one-time
+cp deploy/.env.example deploy/.env     # set POSTGRES_PASSWORD + JWT_SECRET
+bash deploy/deploy.sh
+```
+
+Android debug/release builds point at `http://43.248.56.240:8080/` via `BuildConfig.API_BASE_URL`.

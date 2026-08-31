@@ -3,6 +3,8 @@ package com.pukaar.app.ui.screens.onboarding
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,13 +21,29 @@ import com.pukaar.app.ui.theme.PukaarMuted
 import com.pukaar.app.ui.theme.SosRed
 import com.pukaar.app.util.userMessage
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
+private val languageCodes = mapOf(
+    "English" to "en",
+    "हिन्दी" to "hi",
+    "मराठी" to "mr",
+    "தமிழ்" to "ta",
+    "తెలుగు" to "te",
+    "বাংলা" to "bn"
+)
+
 @Composable
-fun SplashScreen(onDone: () -> Unit) {
+fun SplashScreen(onDone: (hasToken: Boolean, onboardingComplete: Boolean) -> Unit) {
+    val session = PukaarApp.instance.sessionStore
     LaunchedEffect(Unit) {
         delay(1200)
-        onDone()
+        val token = session.token()
+        if (token != null) {
+            runCatching { PukaarApp.instance.repository.syncSession() }
+        }
+        val onboarding = session.onboardingComplete.first()
+        onDone(token != null, onboarding)
     }
     Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -62,8 +80,8 @@ fun WelcomeScreen(onNext: () -> Unit) {
 }
 
 @Composable
-fun LanguageScreen(onNext: () -> Unit) {
-    val langs = listOf("English", "हिन्दी", "मराठी", "தமிழ்", "తెలుగు", "বাংলা")
+fun LanguageScreen(onNext: (String) -> Unit) {
+    val langs = languageCodes.keys.toList()
     var selected by remember { mutableStateOf("English") }
     Column(Modifier.fillMaxSize().background(Color.Black).padding(24.dp)) {
         Text("Language", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
@@ -79,58 +97,11 @@ fun LanguageScreen(onNext: () -> Unit) {
             ) { Text(lang) }
         }
         Spacer(Modifier.weight(1f))
-        Button(onClick = onNext, modifier = Modifier.fillMaxWidth().height(56.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = SosRed)) {
-            Text("Next")
-        }
-    }
-}
-
-@Composable
-fun ConsentScreen(onNext: () -> Unit) {
-    var terms by remember { mutableStateOf(false) }
-    var location by remember { mutableStateOf(false) }
-    var audio by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
-    Column(Modifier.fillMaxSize().background(Color.Black).padding(24.dp)) {
-        Text("Consent", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(12.dp))
-        Text(
-            "Emergency location and audio recording activate only during an emergency workflow. Uploaded evidence is cloud-safe only after successful upload.",
-            color = PukaarMuted
-        )
-        Spacer(Modifier.height(16.dp))
-        ConsentCheck("I accept Terms & Privacy", terms) { terms = it }
-        ConsentCheck("I consent to emergency location sharing", location) { location = it }
-        ConsentCheck("I consent to emergency audio evidence", audio) { audio = it }
-        Spacer(Modifier.weight(1f))
         Button(
-            onClick = {
-                scope.launch {
-                    runCatching {
-                        PukaarApp.instance.repository.updateProfile(
-                            ProfileUpdateRequest(
-                                consentTerms = terms,
-                                consentLocation = location,
-                                consentAudio = audio
-                            )
-                        )
-                    }
-                    onNext()
-                }
-            },
-            enabled = terms && location && audio,
+            onClick = { onNext(languageCodes[selected] ?: "en") },
             modifier = Modifier.fillMaxWidth().height(56.dp),
             colors = ButtonDefaults.buttonColors(containerColor = SosRed)
-        ) { Text("Agree & Continue") }
-    }
-}
-
-@Composable
-private fun ConsentCheck(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 6.dp)) {
-        Checkbox(checked = checked, onCheckedChange = onChange, colors = CheckboxDefaults.colors(checkedColor = SosRed))
-        Text(label, color = Color.White)
+        ) { Text("Next") }
     }
 }
 
@@ -188,8 +159,62 @@ fun OtpScreen(onNext: () -> Unit) {
 }
 
 @Composable
-fun ProfileScreen(onNext: () -> Unit) {
+fun ConsentScreen(onNext: () -> Unit) {
+    var terms by remember { mutableStateOf(false) }
+    var location by remember { mutableStateOf(false) }
+    var audio by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    Column(Modifier.fillMaxSize().background(Color.Black).padding(24.dp)) {
+        Text("Consent", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(12.dp))
+        Text(
+            "Emergency location and audio recording activate only during an emergency workflow. Uploaded evidence is cloud-safe only after successful upload.",
+            color = PukaarMuted
+        )
+        Spacer(Modifier.height(16.dp))
+        ConsentCheck("I accept Terms & Privacy", terms) { terms = it }
+        ConsentCheck("I consent to emergency location sharing", location) { location = it }
+        ConsentCheck("I consent to emergency audio evidence", audio) { audio = it }
+        error?.let { Text(it, color = SosRed) }
+        Spacer(Modifier.weight(1f))
+        Button(
+            onClick = {
+                scope.launch {
+                    error = null
+                    try {
+                        PukaarApp.instance.repository.updateProfile(
+                            ProfileUpdateRequest(
+                                consentTerms = terms,
+                                consentLocation = location,
+                                consentAudio = audio
+                            )
+                        )
+                        onNext()
+                    } catch (e: Exception) {
+                        error = e.userMessage()
+                    }
+                }
+            },
+            enabled = terms && location && audio,
+            modifier = Modifier.fillMaxWidth().height(56.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = SosRed)
+        ) { Text("Agree & Continue") }
+    }
+}
+
+@Composable
+private fun ConsentCheck(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 6.dp)) {
+        Checkbox(checked = checked, onCheckedChange = onChange, colors = CheckboxDefaults.colors(checkedColor = SosRed))
+        Text(label, color = Color.White)
+    }
+}
+
+@Composable
+fun ProfileScreen(languageCode: String, onNext: () -> Unit) {
     var name by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     Column(Modifier.fillMaxSize().background(Color.Black).padding(24.dp)) {
         Text("Your profile", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
@@ -200,14 +225,20 @@ fun ProfileScreen(onNext: () -> Unit) {
             modifier = Modifier.fillMaxWidth(),
             colors = textFieldColors()
         )
+        error?.let { Text(it, color = SosRed) }
         Spacer(Modifier.weight(1f))
         Button(
             onClick = {
                 scope.launch {
-                    runCatching {
-                        PukaarApp.instance.repository.updateProfile(ProfileUpdateRequest(fullName = name))
+                    error = null
+                    try {
+                        PukaarApp.instance.repository.updateProfile(
+                            ProfileUpdateRequest(fullName = name, languageCode = languageCode)
+                        )
+                        onNext()
+                    } catch (e: Exception) {
+                        error = e.userMessage()
                     }
-                    onNext()
                 }
             },
             enabled = name.isNotBlank(),
@@ -313,6 +344,32 @@ fun PermissionsScreen(onNext: () -> Unit) {
         }, modifier = Modifier.fillMaxWidth()) {
             Text("Open OEM autostart / battery settings", color = PukaarMuted)
         }
+    }
+}
+
+@Composable
+fun ProtectionReadyScreen(onNext: () -> Unit) {
+    Column(
+        Modifier.fillMaxSize().background(Color.Black).padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(Icons.Default.CheckCircle, null, tint = Color(0xFF4CAF50), modifier = Modifier.size(96.dp))
+        Spacer(Modifier.height(24.dp))
+        Text("Protection Ready", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Black)
+        Spacer(Modifier.height(12.dp))
+        Text(
+            "Your mock drill passed. Trusted contacts, location, and test alerts are working. Activate your plan to stay protected.",
+            color = PukaarMuted,
+            textAlign = TextAlign.Center,
+            lineHeight = 22.sp
+        )
+        Spacer(Modifier.height(32.dp))
+        Button(
+            onClick = onNext,
+            modifier = Modifier.fillMaxWidth().height(56.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = SosRed)
+        ) { Text("ACTIVATE PROTECTION", fontWeight = FontWeight.Bold) }
     }
 }
 

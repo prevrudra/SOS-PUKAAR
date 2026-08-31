@@ -9,4 +9,6 @@ import java.util.UUID;
 public interface TrustedContactRepository extends JpaRepository<TrustedContactEntity, UUID> {
     List<TrustedContactEntity> findByOwnerUserIdAndActiveTrueOrderByPriorityOrderAsc(UUID ownerUserId);
     List<TrustedContactEntity> findByOwnerUserIdAndContactRoleInAndActiveTrue(UUID ownerUserId, List<ContactRole> roles);
+    long countByOwnerUserIdAndActiveTrue(UUID ownerUserId);
+    boolean existsByOwnerUserIdAndPhoneE164AndActiveTrue(UUID ownerUserId, String phoneE164);
 }

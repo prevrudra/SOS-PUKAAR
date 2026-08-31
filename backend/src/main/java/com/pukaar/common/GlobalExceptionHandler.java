@@ -1,5 +1,6 @@
 package com.pukaar.common;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -23,7 +24,7 @@ public class GlobalExceptionHandler {
             case "UNAUTHORIZED" -> HttpStatus.UNAUTHORIZED;
             case "FORBIDDEN" -> HttpStatus.FORBIDDEN;
             case "NOT_FOUND", "USER_NOT_FOUND", "EVENT_NOT_FOUND", "SEGMENT_NOT_FOUND", "DRILL_NOT_FOUND" -> HttpStatus.NOT_FOUND;
-            case "EMERGENCY_ACTIVE" -> HttpStatus.CONFLICT;
+            case "EMERGENCY_ACTIVE", "CONTACT_EXISTS" -> HttpStatus.CONFLICT;
             default -> HttpStatus.BAD_REQUEST;
         };
         return ResponseEntity.status(status).body(error(ex.getCode(), ex.getMessage()));
@@ -53,6 +54,17 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<Map<String, Object>> handleDenied(AccessDeniedException ex) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error("FORBIDDEN", "Access denied"));
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<Map<String, Object>> handleDuplicate(DataIntegrityViolationException ex) {
+        String msg = ex.getMostSpecificCause().getMessage();
+        if (msg != null && msg.toLowerCase().contains("trusted_contacts")) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(error("CONTACT_EXISTS", "This contact already exists"));
+        }
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(error("CONFLICT", "Data conflict — please refresh and try again"));
     }
 
     @ExceptionHandler(Exception.class)

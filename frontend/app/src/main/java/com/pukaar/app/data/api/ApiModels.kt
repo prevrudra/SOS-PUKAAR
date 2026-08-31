@@ -35,7 +35,8 @@ data class ContactDto(
     val phone: String?,
     val role: String?,
     val relationship: String?,
-    val priorityOrder: Int?
+    val priorityOrder: Int?,
+    val verified: Boolean? = false
 )
 data class ContactRequest(
     val name: String,
@@ -44,6 +45,7 @@ data class ContactRequest(
     val relationship: String? = null,
     val priorityOrder: Int = 1
 )
+data class VerifyContactRequest(val code: String = "123456")
 data class TriggerRequest(
     val triggerType: String,
     val latitude: Double? = null,
@@ -63,12 +65,16 @@ data class EmergencyDto(
     val call112Status: String? = null,
     val deliveries: List<DeliveryDto>? = null,
     val audioSegments: List<AudioSegmentDto>? = null,
-    val policeStation: PoliceDto? = null
+    val policeStation: PoliceDto? = null,
+    val nearestHospital: HospitalDto? = null,
+    val userName: String? = null,
+    val userPhone: String? = null
 )
+data class HospitalDto(val name: String?, val phone: String?, val address: String?)
 data class DrillCompleteRequest(val contactsConfirmed: Boolean = true, val notes: String? = null)
 data class DeliveryDto(val name: String?, val phone: String?, val status: String?)
 data class AudioSegmentDto(val id: String?, val index: Int?, val uploadStatus: String?, val cloudSafe: Boolean?)
-data class PoliceDto(val name: String?, val phone: String?, val phoneVerified: Boolean?, val address: String?)
+data class PoliceDto(val name: String?, val phone: String?, val phoneVerified: Boolean?, val address: String?, val latitude: Double? = null, val longitude: Double? = null)
 data class LocationRequest(val latitude: Double, val longitude: Double, val accuracyM: Double? = null)
 data class SegmentRequest(val index: Int, val checksumSha256: String? = null, val byteSize: Long? = null)
 data class UploadConfirmRequest(val storageKey: String)

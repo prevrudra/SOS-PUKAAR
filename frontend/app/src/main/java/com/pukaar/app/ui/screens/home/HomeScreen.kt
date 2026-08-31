@@ -34,6 +34,7 @@ import com.pukaar.app.ui.theme.HelpOrange
 import com.pukaar.app.ui.theme.PukaarMuted
 import com.pukaar.app.ui.theme.SosRed
 import com.pukaar.app.util.userMessage
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
@@ -48,7 +49,7 @@ fun HomeScreen(onMenu: () -> Unit, onEmergency: (String) -> Unit) {
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { /* continue even if partially granted — emergency engine uses fallbacks */ }
+    ) { }
 
     LaunchedEffect(Unit) {
         val needed = mutableListOf(
@@ -67,6 +68,21 @@ fun HomeScreen(onMenu: () -> Unit, onEmergency: (String) -> Unit) {
         OemBatteryHelper.requestUnrestrictedBattery(context)
     }
 
+    LaunchedEffect(homeMode) {
+        if (homeMode == "HELP") {
+            while (true) {
+                runCatching { PukaarApp.instance.repository.heartbeat() }
+                delay(30 * 60 * 1000L)
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        PukaarApp.instance.hardwareSos.collect {
+            if (!busy) triggerEmergency(context, homeMode != "HELP", scope, onBusy = { busy = it }, onError = { error = it }, onEmergency = onEmergency)
+        }
+    }
+
     val isSos = homeMode != "HELP"
     val accent = if (isSos) SosRed else HelpOrange
     val label = if (isSos) "SOS" else "HELP"
@@ -82,30 +98,7 @@ fun HomeScreen(onMenu: () -> Unit, onEmergency: (String) -> Unit) {
         Button(
             onClick = {
                 if (busy) return@Button
-                busy = true
-                error = null
-                scope.launch {
-                    try {
-                        val loc = currentLocation(context)
-                        val trigger = if (isSos) "APP" else "HELP"
-                        val event = PukaarApp.instance.repository.trigger(
-                            TriggerRequest(
-                                triggerType = trigger,
-                                latitude = loc?.first,
-                                longitude = loc?.second,
-                                accuracyM = loc?.third,
-                                mockDrill = false
-                            )
-                        )
-                        val id = event.id ?: return@launch
-                        EmergencyForegroundService.start(context, id, isSos)
-                        onEmergency(id)
-                    } catch (e: Exception) {
-                        error = e.userMessage()
-                    } finally {
-                        busy = false
-                    }
-                }
+                triggerEmergency(context, isSos, scope, onBusy = { busy = it }, onError = { error = it }, onEmergency = onEmergency)
             },
             modifier = Modifier.size(260.dp),
             shape = CircleShape,
@@ -136,6 +129,40 @@ fun HomeScreen(onMenu: () -> Unit, onEmergency: (String) -> Unit) {
             fontSize = 12.sp,
             textAlign = TextAlign.Center
         )
+    }
+}
+
+private fun triggerEmergency(
+    context: android.content.Context,
+    isSos: Boolean,
+    scope: kotlinx.coroutines.CoroutineScope,
+    onBusy: (Boolean) -> Unit,
+    onError: (String?) -> Unit,
+    onEmergency: (String) -> Unit
+) {
+    onBusy(true)
+    onError(null)
+    scope.launch {
+        try {
+            val loc = currentLocation(context)
+            val trigger = if (isSos) "APP" else "HELP"
+            val event = PukaarApp.instance.repository.trigger(
+                TriggerRequest(
+                    triggerType = trigger,
+                    latitude = loc?.first,
+                    longitude = loc?.second,
+                    accuracyM = loc?.third,
+                    mockDrill = false
+                )
+            )
+            val id = event.id ?: return@launch
+            EmergencyForegroundService.start(context, id, isSos)
+            onEmergency(id)
+        } catch (e: Exception) {
+            onError(e.userMessage())
+        } finally {
+            onBusy(false)
+        }
     }
 }
 
