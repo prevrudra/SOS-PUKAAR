@@ -1,13 +1,280 @@
-<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PUKAAR</string>
-    <string name="tagline">I don\'t have to think when something goes wrong.</string>
-    <string name="sos_instruction">Tap when you are in danger</string>
-    <string name="help_instruction">Tap when you need assistance</string>
-    <string name="menu">MENU</string>
-    <string name="im_safe">I\'M SAFE</string>
-    <string name="im_ok">I\'M OK</string>
+    <string name="app_name">Pukaar</string>
+    <string name="app_tagline">Your Safety, Our Priority.</string>
     <string name="emergency_channel_name">PUKAAR Emergency</string>
-    <string name="emergency_channel_desc">Critical SOS and HELP alerts</string>
-    <string name="disclaimer">PUKAAR attempts to alert trusted people and emergency pathways. It does not guarantee rescue or response.</string>
+    <string name="emergency_channel_desc">High-priority emergency alerts and active SOS sessions</string>
+
+    <!-- Shared UI -->
+    <string name="action_retry">Retry</string>
+    <string name="action_ok">OK</string>
+    <string name="action_save">Save</string>
+    <string name="action_back">Back</string>
+    <string name="action_close">Close</string>
+    <string name="error_generic">Something went wrong. Please try again.</string>
+
+    <!-- Home -->
+    <string name="home_mode_label">Home Mode</string>
+    <string name="menu">Menu</string>
+
+    <!-- Home — SOS mode -->
+    <string name="mode_sos">SOS Mode</string>
+    <string name="sos">SOS</string>
+    <string name="home_sos_headline">Press the button\nin case of emergency</string>
+
+    <!-- Home — Help mode -->
+    <string name="mode_help">Help Mode</string>
+    <string name="help">Help</string>
+    <string name="home_help_headline">I need assistance</string>
+    <string name="home_help_description">For situations where you\nneed help from family\nor trusted contacts.</string>
+
+    <!-- Menu -->
+    <string name="menu_settings">Settings</string>
+    <string name="menu_add_contact">Add Contact</string>
+    <string name="menu_sos_settings">SOS Settings</string>
+    <string name="menu_mock_drill">Mock Drill</string>
+    <string name="menu_view_contacts">View Contacts</string>
+    <string name="menu_elderly_help">Elderly &amp; Inactivity Settings</string>
+    <string name="menu_emergency_info">Emergency Info</string>
+    <string name="menu_payment_referral">Payment &amp; Referral</string>
+    <string name="menu_help_video">Help Video</string>
+    <string name="menu_language">Language</string>
+    <string name="menu_notifications">Notifications</string>
+    <string name="menu_faq">FAQ</string>
+    <string name="menu_about">About PUKAAR</string>
+    <string name="menu_how_pukaar_works">How PUKAAR Works</string>
+    <string name="menu_what_happens_after_sos">What Happens After SOS</string>
+    <string name="menu_home_mode_guide">Home Mode (SOS / HELP)</string>
+    <string name="menu_legal_terms">Legal Terms</string>
+    <string name="menu_privacy_security">Privacy &amp; Security</string>
+    <string name="menu_how_elderly_help_works">How Elderly Help Works</string>
+    <string name="menu_inactivity_feature">Inactivity Feature</string>
+
+    <!-- Add Contact -->
+    <string name="add_contact_title">Contact</string>
+    <string name="add_contact_name">Name</string>
+    <string name="add_contact_name_hint">Enter name</string>
+    <string name="add_contact_mobile">Mobile Number</string>
+    <string name="add_contact_mobile_hint">Enter number</string>
+    <string name="add_contact_country_code">+91</string>
+    <string name="add_contact_relationship">Relationship</string>
+    <string name="add_contact_relationship_hint">Select</string>
+    <string name="add_contact_category">Alert Category</string>
+    <string name="add_contact_category_hint">Pick one — a contact belongs to a single category.</string>
+    <string name="add_contact_save">Save Contact</string>
+    <string name="add_contact_success">Contact Added\nSuccessfully</string>
+
+    <!-- SOS Settings -->
+    <string name="sos_settings_title">SOS Settings</string>
+    <string name="sos_settings_trigger">SOS Trigger</string>
+    <string name="sos_settings_trigger_value">3 Tap / Button / Voice</string>
+    <string name="sos_settings_auto_call">Auto Call 112</string>
+    <string name="sos_settings_location">Location Sharing</string>
+    <string name="sos_settings_audio">Audio Recording</string>
+    <string name="sos_settings_alert_contacts">Alert to Contacts</string>
+    <string name="sos_settings_enabled">Enabled</string>
+    <string name="sos_settings_success">Settings Saved\nSuccessfully</string>
+
+    <!-- Mock Drill -->
+    <string name="mock_drill_title">Mock Drill</string>
+    <string name="mock_drill_page_choose_description">Mock Drill: choose your drill experience — SOS Emergency or HELP, five minutes each.</string>
+    <string name="mock_drill_page_start_description">Start Drill: a 5-minute drill that lets you experience the situation, build confidence and act fearlessly.</string>
+    <string name="mock_drill_page_step1_description">Step 1 of 11, Add Trusted Contacts: add minimum 2 and maximum 3. They receive a verification code and become your trusted contacts once they accept.</string>
+    <string name="mock_drill_page_step2_description">Step 2 of 11, Add Contact: enter their phone number and name, then send the verification code.</string>
+    <string name="mock_drill_page_step3_description">Step 3 of 11, In Case of Emergency: press SOS, or trigger the power button 3 times quickly.</string>
+    <string name="mock_drill_page_step4_description">Step 4 of 11, 5-Second Countdown: after 5 seconds the alert is sent and background recording starts. You can cancel within those 5 seconds.</string>
+    <string name="mock_drill_page_step5_description">Step 5 of 11, Audio Recording Started: every minute is stored on the server as evidence. In the drill it records 30 seconds only and is not stored.</string>
+    <string name="mock_drill_page_step6_description">Step 6 of 11, High Alert Sent: contacts receive an attention-grabbing alert tone rather than a normal ring, which is easily missed.</string>
+    <string name="mock_drill_page_step7_description">Step 7 of 11, What Your Contacts Have Received: your live location, battery and network, the other trusted contacts and 112, and nearby police and hospital details.</string>
+    <string name="mock_drill_page_step8_description">Step 8 of 11, Your Live Location: contacts can tap to follow your location in real time.</string>
+    <string name="mock_drill_page_step9_description">Step 9 of 11, Battery Percentage and Network Status: contacts can see how long your phone may last and whether you are reachable.</string>
+    <string name="mock_drill_page_step10_description">Step 10 of 11, Other Contacts and 112: each trusted contact gets the other contacts’ numbers and 112 to call back.</string>
+    <string name="mock_drill_page_step11_description">Step 11 of 11, Nearby Services Received: the nearest police station, ambulance and hospital near your location, so contacts can act without panicking.</string>
+    <string name="mock_drill_page_complete_description">Drill Complete: you have finished the 5-minute mock drill. You are prepared — stay alert, stay safe.</string>
+    <string name="mock_drill_page_outro_description">Drill today, be ready for any day. Experience gives you confidence; confidence helps you act fearlessly. PUKAAR.</string>
+    <string name="mock_drill_page_completed_description">Drill Completed: Individual plan at 699 rupees, Family up to 3 at 1199 rupees, and the special referral offer.</string>
+    <string name="mock_drill_page_referral_description">Special Referral Offer: invite 2 friends who buy PUKAAR within 7 days and your plan upgrades to Family up to 3 at no extra cost.</string>
+    <string name="help_drill_page_start_description">HELP Mock Drill: a 5-minute drill that lets you experience the situation, build confidence and act fearlessly.</string>
+    <string name="help_drill_page_step1_description">Step 1 of 12, Select Help Contacts: add 1 primary contact, which is required, and up to 2 secondary contacts.</string>
+    <string name="help_drill_page_step2_description">Step 2 of 12, Set Primary and Secondary Contacts: the primary is alerted first; if they do not respond within 1 minute the alert goes to the secondary contacts.</string>
+    <string name="help_drill_page_step3_description">Step 3 of 12, Add Pre-saved Numbers: numbers such as a neighbour, son or daughter that are shared with all your contacts when you ask for help.</string>
+    <string name="help_drill_page_step4_description">Step 4 of 12, Don’t Call the Elderly: when you trigger HELP, let PUKAAR notify your trusted contacts instead.</string>
+    <string name="help_drill_page_step5_description">Step 5 of 12, Trigger HELP: tap HELP, or trigger the power button 3 times quickly.</string>
+    <string name="help_drill_page_step6_description">Step 6 of 12, 5-Second Countdown: after 5 seconds the alert is sent to your primary contact. You can cancel within those 5 seconds.</string>
+    <string name="help_drill_page_step7_description">Step 7 of 12, Alert Sent to Primary Contact: a high alert with a grabbing tone. With no response in 1 minute it goes to your secondary contacts.</string>
+    <string name="help_drill_page_step8_description">Step 8 of 12, Information Shared: your live location, battery and network, pre-saved numbers, 112 and the nearest police station, ambulance and hospital.</string>
+    <string name="help_drill_page_step9_description">Step 9 of 12, Primary Contact No Response: after 1 minute the alert moves to your secondary contacts on its own.</string>
+    <string name="help_drill_page_step10_description">Step 10 of 12, What Your Contacts Have Received: a high alert tone, because a normal ring is easily missed during an emergency.</string>
+    <string name="help_drill_page_step11_description">Step 11 of 12, They Take Action: they call you, then your pre-saved numbers, reach your location, contact the nearest services and act.</string>
+    <string name="help_drill_page_step12_description">Step 12 of 12, Drill Complete: you have finished the HELP mock drill. You are prepared — stay alert, stay safe.</string>
+    <string name="mock_drill_success">Test Alert Sent\nto Your Contacts</string>
+
+    <!-- View Contacts -->
+    <string name="view_contacts_title">Contacts</string>
+    <string name="view_contacts_empty">No emergency contacts yet.</string>
+
+    <!-- Contact types -->
+    <string name="contact_type_sos">SOS</string>
+    <string name="contact_type_help">Help</string>
+    <string name="contact_type_inactivity">Inactivity</string>
+    <string name="contact_type_sos_description">Alerted the moment you press SOS.</string>
+    <string name="contact_type_help_description">Alerted when you ask for assistance.</string>
+    <string name="contact_type_inactivity_description">Alerted if Elderly Help sees no activity.</string>
+    <string name="contact_section_sos">SOS Contacts</string>
+    <string name="contact_section_help">Help Contacts</string>
+    <string name="contact_section_inactivity">Inactivity Contacts</string>
+    <string name="contact_section_empty">Nobody added yet.</string>
+
+    <!-- Elderly Help -->
+    <string name="elderly_help_title">Elderly Help</string>
+    <string name="elderly_help_inactivity">Inactivity Alert</string>
+    <string name="elderly_help_6_hours">6 Hours</string>
+    <string name="elderly_help_10_hours">10 Hours</string>
+    <string name="elderly_help_12_hours">12 Hours</string>
+    <string name="elderly_help_medication">Medication Reminder</string>
+    <string name="elderly_help_success">Elderly Help\nSettings Saved</string>
+
+    <!-- Emergency Info -->
+    <string name="emergency_info_title">Medical Info</string>
+    <string name="emergency_info_subtitle">Add medical details</string>
+    <string name="emergency_info_blood_group">Blood Group</string>
+    <string name="emergency_info_allergies">Allergies</string>
+    <string name="emergency_info_conditions">Conditions</string>
+    <string name="emergency_info_doctor">Doctor Contact</string>
+    <string name="emergency_info_success">Information Saved\nSuccessfully</string>
+
+    <!-- Payment / Plan -->
+    <string name="payment_title">Payment &amp; Referral</string>
+    <string name="payment_current_plan">Current Plan</string>
+    <string name="payment_premium">Premium Plan</string>
+    <string name="payment_valid_till">Valid Till</string>
+    <string name="payment_valid_date">12 May 2026</string>
+    <string name="payment_active">Active</string>
+    <string name="payment_upgrade">Upgrade Plan</string>
+    <string name="payment_history">View History</string>
+    <string name="payment_success">Payment\nSuccessful</string>
+    <string name="referral_title">Referral</string>
+    <string name="referral_description">Share your code. Both of you get a free month.</string>
+    <string name="referral_code_label">Your Code</string>
+    <string name="referral_code">PUKAAR-4821</string>
+    <string name="referral_share">Share Invite</string>
+
+    <!-- Help Video -->
+    <string name="help_video_title">How PUKAAR Works</string>
+    <string name="help_video_play">Play video</string>
+    <string name="help_video_trigger">How to Trigger SOS</string>
+    <string name="help_video_family">For Family Members</string>
+    <string name="help_video_elderly">Elderly Help Guide</string>
+
+    <!-- Language -->
+    <string name="language_title">Choose Language</string>
+    <string name="language_english">English</string>
+    <string name="language_hindi">हिन्दी</string>
+    <string name="language_punjabi">ਪੰਜਾਬੀ</string>
+    <string name="language_marathi">मराठी</string>
+    <string name="language_success">Language Saved\nSuccessfully</string>
+
+    <!-- Notifications -->
+    <string name="notifications_title">Notifications</string>
+    <string name="notifications_alerts">Alert Notifications</string>
+    <string name="notifications_inactivity">Inactivity Alerts</string>
+    <string name="notifications_medication">Medication Reminders</string>
+    <string name="notifications_promotions">Promotions</string>
+    <string name="notifications_success">Preferences Saved\nSuccessfully</string>
+
+    <!-- FAQ -->
+    <string name="faq_title">FAQ</string>
+    <string name="faq_q1">How does PUKAAR work?</string>
+    <string name="faq_q2">How to trigger SOS?</string>
+    <string name="faq_q3">Will 112 be called?</string>
+    <string name="faq_q4">Is my data safe?</string>
+    <string name="faq_q5">More Questions</string>
+
+    <!-- How This Works -->
+    <string name="how_this_works_step1_description">Step 1, Trigger SOS: tap the SOS button, or press the power button 4 to 5 times.</string>
+    <string name="how_this_works_step2_description">Step 2, SOS Triggered: the alert is now live.</string>
+    <string name="how_this_works_step3_description">Step 3: the alert goes to your 3 trusted contacts.</string>
+    <string name="how_this_works_step4_description">Step 4, Grabbing Alert: contacts get a loud, unmissable alert with View and Call.</string>
+    <string name="how_this_works_step5_description">Step 5: recording starts automatically and uploads to the cloud.</string>
+    <string name="how_this_works_step6_description">Step 6: the recording is saved to the cloud every minute, so nothing is lost if the phone is damaged or switched off.</string>
+    <string name="how_this_works_step7_description">Step 7: the message carries your name, number, battery level, live location and active status.</string>
+    <string name="how_this_works_step8_description">Step 8: the nearest police station, ambulance and hospital are one tap away, along with 112.</string>
+    <string name="how_this_works_step9_description">Step 9: all 3 contacts see each other’s details, so they can act together.</string>
+    <string name="how_this_works_step10_description">Step 10: at panic time everything is ready — call, live location, recording, battery, emergency numbers and contact details.</string>
+    <string name="how_this_works_step11_description">Step 11: help reaches faster and lives are safer. PUKAAR — when you need, we notify.</string>
+
+    <!-- What Happens After SOS -->
+    <string name="after_sos_title">What Happens After SOS</string>
+    <string name="after_sos_intro">One press starts all of this at once. You do not have to do anything else.</string>
+    <string name="after_sos_step1_title">Your contacts are alerted</string>
+    <string name="after_sos_step1_body">All three trusted contacts receive the alert at the same moment.</string>
+    <string name="after_sos_step2_title">Recording starts</string>
+    <string name="after_sos_step2_body">Audio begins recording automatically, without opening anything.</string>
+    <string name="after_sos_step3_title">Everything is saved to the cloud</string>
+    <string name="after_sos_step3_body">The recording is uploaded every minute, so it survives losing the phone.</string>
+    <string name="after_sos_step4_title">Your details go with it</string>
+    <string name="after_sos_step4_body">Live location, battery level and your number are shared with the alert.</string>
+    <string name="after_sos_step5_title">Emergency services are one tap away</string>
+    <string name="after_sos_step5_body">Nearest police, ambulance and hospital are listed, along with 112.</string>
+
+    <!-- Home Mode guide -->
+    <string name="home_mode_guide_title">Home Mode (SOS / HELP)</string>
+    <string name="home_mode_guide_intro">The home button does one of two things. Switch between them at the top of the home screen.</string>
+    <string name="home_mode_guide_sos_body">A life-threatening emergency. Alerts your contacts, starts recording and puts emergency services one tap away.</string>
+    <string name="home_mode_guide_help_body">You need a hand, not an ambulance. Reaches family and trusted contacts without escalating to emergency services.</string>
+
+    <!-- Legal Terms -->
+    <string name="legal_title">Legal Terms</string>
+    <string name="legal_intro">The short version. The full terms are available from the website.</string>
+    <string name="legal_service_title">Service</string>
+    <string name="legal_service_body">Pukaar sends alerts to the contacts you choose. It is not an emergency service and does not replace calling 112.</string>
+    <string name="legal_reliability_title">Reliability</string>
+    <string name="legal_reliability_body">Alerts depend on your phone having power and a network connection. Delivery cannot be guaranteed in every situation.</string>
+    <string name="legal_account_title">Your account</string>
+    <string name="legal_account_body">You are responsible for keeping your contacts and medical details accurate and up to date.</string>
+    <string name="legal_payment_title">Payments</string>
+    <string name="legal_payment_body">Plans renew until cancelled. Cancelling stops future charges and keeps access until the current period ends.</string>
+
+    <!-- Privacy &amp; Security -->
+    <string name="privacy_title">Privacy &amp; Security</string>
+    <string name="privacy_intro">Pukaar holds sensitive things. Here is what happens to them.</string>
+    <string name="privacy_location_title">Location</string>
+    <string name="privacy_location_body">Shared only while an alert is active, and only with your chosen contacts.</string>
+    <string name="privacy_recording_title">Recordings</string>
+    <string name="privacy_recording_body">Encrypted before upload and readable only by you and the contacts you alerted.</string>
+    <string name="privacy_medical_title">Medical details</string>
+    <string name="privacy_medical_body">Stored on your device and sent only when an emergency alert is triggered.</string>
+    <string name="privacy_contacts_title">Contacts</string>
+    <string name="privacy_contacts_body">Used to deliver alerts. Never sold, and never used for anything else.</string>
+    <string name="privacy_delete_title">Deleting your data</string>
+    <string name="privacy_delete_body">You can remove recordings and close your account at any time.</string>
+
+    <!-- How Elderly Help Works -->
+    <string name="elderly_works_title">How Elderly Help Works</string>
+    <string name="elderly_works_intro">Elderly Help keeps watch in the background and reaches your contacts if something seems wrong.</string>
+    <string name="elderly_works_step1_title">Turn it on</string>
+    <string name="elderly_works_step1_body">Enable Elderly Help and choose how long a quiet period should last.</string>
+    <string name="elderly_works_step2_title">Pukaar watches quietly</string>
+    <string name="elderly_works_step2_body">Ordinary phone use counts as activity. Nothing is recorded or shared.</string>
+    <string name="elderly_works_step3_title">A check-in is sent</string>
+    <string name="elderly_works_step3_body">After a quiet period the phone asks whether everything is alright.</string>
+    <string name="elderly_works_step4_title">Contacts are alerted</string>
+    <string name="elderly_works_step4_body">If there is no reply, your emergency contacts are notified with your location.</string>
+
+    <!-- Inactivity Feature -->
+    <string name="inactivity_title">Inactivity Feature</string>
+    <string name="inactivity_intro">A quiet phone can be the first sign of trouble. This is what happens when yours goes quiet.</string>
+    <string name="inactivity_step1_title">Choose a window</string>
+    <string name="inactivity_step1_body">Six, ten or twelve hours without activity, set in Elderly Help.</string>
+    <string name="inactivity_step2_title">The timer resets itself</string>
+    <string name="inactivity_step2_body">Unlocking the phone or opening any app starts the count again.</string>
+    <string name="inactivity_step3_title">A reminder comes first</string>
+    <string name="inactivity_step3_body">You are notified before anyone else is contacted.</string>
+    <string name="inactivity_step4_title">Then your contacts</string>
+    <string name="inactivity_step4_body">No response means your emergency contacts receive an alert.</string>
+
+    <!-- About -->
+    <string name="about_title">About PUKAAR</string>
+    <string name="about_version">Version 1.0.0</string>
+    <string name="about_slogan">One Tap.\nMaximum Protection.</string>
+    <string name="about_copyright">© 2026 PUKAAR\nAll rights reserved.</string>
 </resources>
