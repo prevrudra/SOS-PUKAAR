@@ -1,5 +1,6 @@
 package com.pukaar.app
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -17,12 +18,24 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setShowWhenLocked(true)
         setTurnScreenOn(true)
+        handleSosIntent(intent)
         setContent {
             PukaarTheme {
                 Surface(modifier = Modifier.fillMaxSize(), color = Color.Black) {
                     PukaarNavHost()
                 }
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleSosIntent(intent)
+    }
+
+    private fun handleSosIntent(intent: Intent?) {
+        if (intent?.action == PukaarApp.ACTION_SOS) {
+            PukaarApp.instance.signalHardwareSos()
         }
     }
 }

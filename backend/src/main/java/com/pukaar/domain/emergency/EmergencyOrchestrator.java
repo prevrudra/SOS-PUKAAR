@@ -4,6 +4,8 @@ import com.pukaar.common.*;
 import com.pukaar.config.PukaarProperties;
 import com.pukaar.domain.contact.TrustedContactEntity;
 import com.pukaar.domain.contact.TrustedContactRepository;
+import com.pukaar.domain.hospital.HospitalEntity;
+import com.pukaar.domain.hospital.HospitalRepository;
 import com.pukaar.domain.evidence.AudioSegmentEntity;
 import com.pukaar.domain.evidence.AudioSegmentRepository;
 import com.pukaar.domain.notification.NotificationService;
@@ -31,6 +33,7 @@ public class EmergencyOrchestrator {
     private final AudioSegmentRepository audioRepo;
     private final TrustedContactRepository contactRepo;
     private final PoliceStationRepository policeRepo;
+    private final HospitalRepository hospitalRepo;
     private final UserRepository userRepo;
     private final MockDrillRepository mockDrillRepo;
     private final NotificationService notificationService;
@@ -188,8 +191,22 @@ public class EmergencyOrchestrator {
                 : mockDrillRepo.findFirstByUserIdOrderByCreatedAtDesc(userId))
                 .orElseThrow(() -> new ApiException("DRILL_NOT_FOUND", "Mock drill not found"));
         if (!drill.getUserId().equals(userId)) throw new ApiException("FORBIDDEN", "Not your drill");
+
+        List<TrustedContactEntity> contacts = contactRepo.findByOwnerUserIdAndActiveTrueOrderByPriorityOrderAsc(userId);
+        long verifiedCount = contacts.stream().filter(TrustedContactEntity::isVerified).count();
+        boolean contactsOk = contacts.size() >= 2 && contacts.size() <= 3 && verifiedCount >= 2;
+        drill.setContactsOk(contactsOk);
+        if (!contactsOk) {
+            drill.setFailureNotes("Add 2–3 trusted contacts and verify each with the code sent to them.");
+        }
+
         drill.setConfirmedByUser(contactsConfirmed);
-        drill.setFailureNotes(notes);
+        if (notes != null && !notes.isBlank()) {
+            drill.setFailureNotes(notes);
+        }
+        if (!contactsOk) {
+            throw new ApiException("CONTACTS_REQUIRED", "Add and verify at least 2 trusted contacts (max 3) before completing the drill");
+        }
         boolean pass = Boolean.TRUE.equals(drill.getLocationOk())
                 && Boolean.TRUE.equals(drill.getContactsOk())
                 && Boolean.TRUE.equals(drill.getPermissionsOk())
@@ -324,6 +341,10 @@ public class EmergencyOrchestrator {
         m.put("startedAt", event.getStartedAt());
         m.put("closedAt", event.getClosedAt());
         if (includeDetails) {
+            userRepo.findById(event.getUserId()).ifPresent(u -> {
+                m.put("userName", u.getFullName());
+                m.put("userPhone", u.getPhoneE164());
+            });
             m.put("deliveries", deliveryRepo.findByEventId(event.getId()).stream().map(d -> {
                 Map<String, Object> dm = new LinkedHashMap<>();
                 dm.put("name", d.getContactName());
@@ -342,6 +363,15 @@ public class EmergencyOrchestrator {
             }).toList());
             if (event.getPoliceStationId() != null) {
                 policeRepo.findById(event.getPoliceStationId()).ifPresent(p -> m.put("policeStation", toPoliceDto(p)));
+            } else if (event.getLatitude() != null && event.getLongitude() != null) {
+                policeRepo.findNearest(event.getLatitude(), event.getLongitude(), 1).stream()
+                        .findFirst()
+                        .ifPresent(p -> m.put("policeStation", toPoliceDto(p)));
+            }
+            if (event.getLatitude() != null && event.getLongitude() != null) {
+                hospitalRepo.findNearest(event.getLatitude(), event.getLongitude(), 1).stream()
+                        .findFirst()
+                        .ifPresent(h -> m.put("nearestHospital", toHospitalDto(h)));
             }
             m.put("audit", auditRepo.findByEventIdOrderByCreatedAtAsc(event.getId()).stream().map(a -> {
                 Map<String, Object> am = new LinkedHashMap<>();
@@ -366,6 +396,17 @@ public class EmergencyOrchestrator {
         }
         m.put("latitude", p.getLatitude());
         m.put("longitude", p.getLongitude());
+        return m;
+    }
+
+    private Map<String, Object> toHospitalDto(HospitalEntity h) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("id", h.getId());
+        m.put("name", h.getName());
+        m.put("address", h.getAddress());
+        m.put("phone", h.getPhoneE164());
+        m.put("latitude", h.getLatitude());
+        m.put("longitude", h.getLongitude());
         return m;
     }
 }

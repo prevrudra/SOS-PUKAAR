@@ -27,11 +27,17 @@ interface PukaarApi {
     @DELETE("api/v1/contacts/{id}")
     suspend fun deleteContact(@Path("id") id: String): OkResponse
 
+    @POST("api/v1/contacts/{id}/verify")
+    suspend fun verifyContact(@Path("id") id: String, @Body body: VerifyContactRequest): ContactDto
+
     @POST("api/v1/emergencies/trigger")
     suspend fun trigger(@Body body: TriggerRequest): EmergencyDto
 
     @GET("api/v1/emergencies/active")
     suspend fun activeEmergency(): EmergencyDto
+
+    @GET("api/v1/emergencies/{id}")
+    suspend fun getEmergency(@Path("id") id: String): EmergencyDto
 
     @POST("api/v1/emergencies/{id}/location")
     suspend fun updateLocation(@Path("id") id: String, @Body body: LocationRequest): EmergencyDto

@@ -30,7 +30,15 @@ fun EmergencyActiveScreen(eventId: String, onClosed: () -> Unit) {
 
     LaunchedEffect(eventId) {
         while (true) {
-            event = runCatching { PukaarApp.instance.repository.activeEmergency() }.getOrNull()
+            val fetched = runCatching {
+                PukaarApp.instance.repository.getEmergency(eventId)
+            }.getOrNull()
+            if (fetched?.active == false) {
+                EmergencyForegroundService.stop(context)
+                onClosed()
+                break
+            }
+            event = fetched
             delay(3000)
         }
     }
@@ -39,13 +47,16 @@ fun EmergencyActiveScreen(eventId: String, onClosed: () -> Unit) {
     val accent = if (isHelp) HelpOrange else SosRed
     Column(Modifier.fillMaxSize().background(Color.Black).padding(24.dp)) {
         Text(if (isHelp) "HELP ACTIVE" else "SOS ACTIVE", color = accent, fontSize = 28.sp, fontWeight = FontWeight.Black)
+        if (event?.mockDrill == true) {
+            Text("TEST EVENT", color = PukaarMuted, fontWeight = FontWeight.Bold)
+        }
         Spacer(Modifier.height(16.dp))
         StatusRow("Location", if (event?.latitude != null) "ACTIVE" else "ACQUIRING")
-        StatusRow("Audio evidence", "RECORDING")
+        StatusRow("Audio evidence", if ((event?.audioSegments?.size ?: 0) > 0) "RECORDING" else "STARTING")
         val uploaded = event?.audioSegments?.count { it.cloudSafe == true } ?: 0
         val total = event?.audioSegments?.size ?: 0
         StatusRow("Cloud", if (total == 0) "WAITING" else "$uploaded/$total UPLOADED")
-        StatusRow("112", event?.call112Status ?: "INITIATED")
+        StatusRow("112", event?.call112Status ?: if (isHelp) "N/A" else "INITIATED")
         Spacer(Modifier.height(16.dp))
         Text("Trusted contacts", color = Color.White, fontWeight = FontWeight.Bold)
         event?.deliveries.orEmpty().forEach {
@@ -60,10 +71,14 @@ fun EmergencyActiveScreen(eventId: String, onClosed: () -> Unit) {
                 Text("Verified number unavailable — use 112", color = PukaarMuted)
             }
         }
+        event?.nearestHospital?.let { h ->
+            Text("Nearest hospital: ${h.name}", color = Color.White)
+            h.phone?.let { Text(it, color = PukaarMuted) }
+        }
         Spacer(Modifier.weight(1f))
         Button(
             onClick = {
-                val intent = Intent(Intent.ACTION_CALL, Uri.parse("tel:112"))
+                val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:112"))
                 runCatching { context.startActivity(intent) }
             },
             modifier = Modifier.fillMaxWidth().height(52.dp),
@@ -96,22 +111,61 @@ private fun StatusRow(label: String, value: String) {
 @Composable
 fun TrustedAlertScreen(eventId: String, onBack: () -> Unit) {
     val context = LocalContext.current
+    var event by remember { mutableStateOf<EmergencyDto?>(null) }
+
+    LaunchedEffect(eventId) {
+        event = runCatching { PukaarApp.instance.repository.getEmergency(eventId) }.getOrNull()
+    }
+
+    val userName = event?.userName ?: "A trusted person"
+    val userPhone = event?.userPhone
+    val police = event?.policeStation
+    val lat = event?.latitude
+    val lng = event?.longitude
+
     Column(Modifier.fillMaxSize().background(Color.Black).padding(24.dp)) {
-        Text("PUKAAR EMERGENCY ALERT", color = SosRed, fontWeight = FontWeight.Black, fontSize = 22.sp)
+        Text(
+            if (event?.mockDrill == true) "PUKAAR TEST ALERT" else "PUKAAR EMERGENCY ALERT",
+            color = SosRed, fontWeight = FontWeight.Black, fontSize = 22.sp
+        )
         Spacer(Modifier.height(12.dp))
-        Text("A trusted person may be in danger. PUKAAR is sharing location and assistance options.", color = PukaarMuted)
+        Text("$userName may be in danger. PUKAAR is sharing location and assistance options.", color = PukaarMuted)
         Spacer(Modifier.height(20.dp))
-        ActionButton("CALL PERSON") {
-            context.startActivity(Intent(Intent.ACTION_DIAL))
+        ActionButton("CALL $userName") {
+            userPhone?.let {
+                context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$it")))
+            }
         }
-        ActionButton("LIVE LOCATION") {}
+        ActionButton("LIVE LOCATION") {
+            if (lat != null && lng != null) {
+                val uri = Uri.parse("geo:$lat,$lng?q=$lat,$lng")
+                context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+            }
+        }
         ActionButton("CALL 112") {
-            context.startActivity(Intent(Intent.ACTION_CALL, Uri.parse("tel:112")))
+            context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:112")))
         }
-        ActionButton("NEAREST POLICE") {}
+        ActionButton("NEAREST POLICE") {
+            police?.let { p ->
+                if (p.phoneVerified == true && !p.phone.isNullOrBlank()) {
+                    context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:${p.phone}")))
+                } else if (p.latitude != null && p.longitude != null) {
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("geo:${p.latitude},${p.longitude}")))
+                }
+            }
+        }
+        Spacer(Modifier.height(12.dp))
+        Text("Other trusted contacts", color = Color.White, fontWeight = FontWeight.Bold)
+        event?.deliveries.orEmpty().forEach {
+            Text("${it.name} · ${it.phone} — ${it.status}", color = PukaarMuted, fontSize = 13.sp)
+        }
+        police?.let {
+            Spacer(Modifier.height(8.dp))
+            Text("Police: ${it.name}", color = Color.White)
+            if (it.phoneVerified == true) Text("Verified: ${it.phone}", color = PukaarMuted)
+        }
         Spacer(Modifier.weight(1f))
         TextButton(onClick = onBack) { Text("Back", color = PukaarMuted) }
-        Text("Event: $eventId", color = PukaarMuted, fontSize = 12.sp)
     }
 }
 

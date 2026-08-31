@@ -7,12 +7,21 @@ import android.os.Build
 import com.pukaar.app.data.local.SessionStore
 import com.pukaar.app.data.repository.PukaarRepository
 import com.pukaar.app.emergency.OemBatteryHelper
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 
 class PukaarApp : Application() {
     lateinit var sessionStore: SessionStore
         private set
     lateinit var repository: PukaarRepository
         private set
+
+    private val _hardwareSos = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val hardwareSos: SharedFlow<Unit> = _hardwareSos
+
+    fun signalHardwareSos() {
+        _hardwareSos.tryEmit(Unit)
+    }
 
     override fun onCreate() {
         super.onCreate()
@@ -42,6 +51,7 @@ class PukaarApp : Application() {
 
     companion object {
         const val CHANNEL_EMERGENCY = "pukaar_emergency"
+        const val ACTION_SOS = "com.pukaar.app.ACTION_SOS"
         lateinit var instance: PukaarApp
             private set
     }

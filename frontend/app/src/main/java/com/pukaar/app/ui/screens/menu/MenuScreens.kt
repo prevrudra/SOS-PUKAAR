@@ -20,7 +20,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pukaar.app.PukaarApp
 import com.pukaar.app.data.api.SubscriptionStatusResponse
-import com.pukaar.app.data.api.TriggerRequest
 import com.pukaar.app.ui.theme.PukaarMuted
 import com.pukaar.app.ui.theme.SosRed
 import com.pukaar.app.util.userMessage
@@ -114,58 +113,21 @@ fun InfoScreen(title: String, onBack: () -> Unit) {
 }
 
 @Composable
-fun MockDrillScreen(onBack: () -> Unit, onFinished: () -> Unit) {
-    val scope = rememberCoroutineScope()
-    var status by remember { mutableStateOf("Ready to test real delivery paths") }
-    var running by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxSize().background(Color.Black).padding(24.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White)
-            }
-            Text("Mock Drill", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-        }
-        Spacer(Modifier.height(16.dp))
-        Text("This is a TEST event. Trusted contacts should receive a clearly marked test alert.", color = PukaarMuted)
-        Spacer(Modifier.height(24.dp))
-        Text(status, color = Color.White)
-        Spacer(Modifier.weight(1f))
-        Button(
-            onClick = {
-                running = true
-                scope.launch {
-                    try {
-                        val event = PukaarApp.instance.repository.trigger(
-                            TriggerRequest(triggerType = "MOCK_DRILL", mockDrill = true, latitude = 28.6139, longitude = 77.2090)
-                        )
-                        status = "TEST event ${event.id} created. Confirm contacts received the alert."
-                        PukaarApp.instance.repository.completeLatestDrill(true)
-                        PukaarApp.instance.repository.completeOnboarding()
-                        onFinished()
-                    } catch (e: Exception) {
-                        status = e.userMessage()
-                    } finally {
-                        running = false
-                    }
-                }
-            },
-            enabled = !running,
-            modifier = Modifier.fillMaxWidth().height(56.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = SosRed)
-        ) { Text("START MOCK DRILL") }
-    }
-}
-
-@Composable
 fun PaymentScreen(onBack: () -> Unit, onActivated: () -> Unit) {
     val scope = rememberCoroutineScope()
     var message by remember { mutableStateOf("No free plan. Activate protection to stay ready.") }
     var busy by remember { mutableStateOf(false) }
+    var hasSubscription by remember { mutableStateOf(false) }
+    var individualPrice by remember { mutableStateOf(499) }
+    var familyPrice by remember { mutableStateOf(699) }
 
     LaunchedEffect(Unit) {
         runCatching {
             val status: SubscriptionStatusResponse = PukaarApp.instance.repository.subscription()
+            individualPrice = status.plans?.individual ?: 499
+            familyPrice = status.plans?.family ?: 699
             if (status.subscription != null) {
+                hasSubscription = true
                 message = "Protection already active. You can continue to Home."
             }
         }
@@ -179,42 +141,61 @@ fun PaymentScreen(onBack: () -> Unit, onActivated: () -> Unit) {
             Text("Payment / Plan", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.height(24.dp))
-        PlanCard("Individual", "₹499 / year", "Single user protection") {
-            if (busy) return@PlanCard
-            busy = true
-            scope.launch {
-                try {
-                    PukaarApp.instance.repository.activate("INDIVIDUAL")
+        PlanCard("Individual", "₹$individualPrice / year", "Single user protection") {
+            activatePlan("INDIVIDUAL", scope, onBusy = { busy = it }, onError = { message = it }, onSuccess = {
+                hasSubscription = true
+                scope.launch {
+                    runCatching { PukaarApp.instance.repository.completeOnboarding() }
+                    PukaarApp.instance.sessionStore.setProtectionReady(true)
                     onActivated()
-                } catch (e: Exception) {
-                    message = e.userMessage()
-                } finally {
-                    busy = false
                 }
-            }
+            })
         }
         Spacer(Modifier.height(12.dp))
-        PlanCard("Family", "₹699 / year", "Up to 5 members") {
-            if (busy) return@PlanCard
-            busy = true
-            scope.launch {
-                try {
-                    PukaarApp.instance.repository.activate("FAMILY")
+        PlanCard("Family", "₹$familyPrice / year", "Up to 5 members") {
+            activatePlan("FAMILY", scope, onBusy = { busy = it }, onError = { message = it }, onSuccess = {
+                hasSubscription = true
+                scope.launch {
+                    runCatching { PukaarApp.instance.repository.completeOnboarding() }
+                    PukaarApp.instance.sessionStore.setProtectionReady(true)
                     onActivated()
-                } catch (e: Exception) {
-                    message = e.userMessage()
-                } finally {
-                    busy = false
                 }
-            }
+            })
         }
         Spacer(Modifier.height(12.dp))
-        TextButton(onClick = onActivated, modifier = Modifier.fillMaxWidth()) {
-            Text("Continue to Home", color = SosRed, fontWeight = FontWeight.Bold)
+        if (hasSubscription) {
+            TextButton(onClick = {
+                scope.launch {
+                    runCatching { PukaarApp.instance.repository.completeOnboarding() }
+                    onActivated()
+                }
+            }, modifier = Modifier.fillMaxWidth()) {
+                Text("Continue to Home", color = SosRed, fontWeight = FontWeight.Bold)
+            }
         }
         Spacer(Modifier.height(16.dp))
         Text(message, color = PukaarMuted)
         Text("Referral: 3 successful paid activations unlock Family at ₹499.", color = PukaarMuted)
+    }
+}
+
+private fun activatePlan(
+    plan: String,
+    scope: kotlinx.coroutines.CoroutineScope,
+    onBusy: (Boolean) -> Unit,
+    onError: (String) -> Unit,
+    onSuccess: () -> Unit
+) {
+    scope.launch {
+        onBusy(true)
+        try {
+            PukaarApp.instance.repository.activate(plan)
+            onSuccess()
+        } catch (e: Exception) {
+            onError(e.userMessage())
+        } finally {
+            onBusy(false)
+        }
     }
 }
 
