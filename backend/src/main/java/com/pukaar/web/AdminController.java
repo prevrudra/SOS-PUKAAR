@@ -58,18 +58,27 @@ public class AdminController {
     }
 
     @GetMapping("/recordings/{segmentId}/content")
-    public ResponseEntity<Resource> streamRecording(@PathVariable UUID segmentId) {
+    public ResponseEntity<Resource> streamRecording(@PathVariable UUID segmentId) throws java.io.IOException {
         Resource resource = adminService.streamRecording(segmentId);
-        return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType("audio/mp4"))
-                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + segmentId + ".m4a\"")
-                .header(HttpHeaders.CACHE_CONTROL, "private, max-age=3600")
-                .body(resource);
+        return audioResponse(resource, segmentId + ".m4a");
     }
 
     @PatchMapping("/users/{id}/role")
     public Map<String, Object> setRole(@PathVariable UUID id, @RequestBody RoleRequest req) {
         return adminService.setUserRole(id, req.getRole());
+    }
+
+    private static ResponseEntity<Resource> audioResponse(Resource resource, String filename) throws java.io.IOException {
+        long len = resource.contentLength();
+        ResponseEntity.BodyBuilder builder = ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("audio/mp4"))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + filename + "\"")
+                .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                .header(HttpHeaders.CACHE_CONTROL, "private, max-age=3600");
+        if (len >= 0) {
+            builder.contentLength(len);
+        }
+        return builder.body(resource);
     }
 
     @Data

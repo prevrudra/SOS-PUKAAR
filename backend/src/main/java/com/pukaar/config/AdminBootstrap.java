@@ -35,9 +35,14 @@ public class AdminBootstrap implements ApplicationRunner {
 
     public void promoteIfAdminPhone(UserEntity user) {
         if (user.getRole() == UserRole.ADMIN) return;
-        if (adminPhones().contains(user.getPhoneE164())) {
+        if (isAdminPhone(user.getPhoneE164())) {
             promote(user, user.getPhoneE164());
         }
+    }
+
+    public boolean isAdminPhone(String phoneE164) {
+        if (phoneE164 == null || phoneE164.isBlank()) return false;
+        return adminPhones().contains(normalize(phoneE164));
     }
 
     private Set<String> adminPhones() {
