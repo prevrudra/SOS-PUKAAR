@@ -24,5 +24,6 @@ frontend/captures/
 *.keystore
 *.jks
 
-# Evidence / local storage
-**/evidence/
+# Evidence / local storage (data dirs only — not Java source packages)
+backend/data/
+**/files/evidence/
