@@ -9,6 +9,7 @@ import com.pukaar.app.data.repository.PukaarRepository
 import com.pukaar.app.emergency.OemBatteryHelper
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.runBlocking
 
 class PukaarApp : Application() {
     lateinit var sessionStore: SessionStore
@@ -20,8 +21,17 @@ class PukaarApp : Application() {
     val hardwareSos: SharedFlow<Unit> = _hardwareSos
 
     fun signalHardwareSos() {
+        pendingHardwareSos = true
         _hardwareSos.tryEmit(Unit)
     }
+
+    fun consumePendingHardwareSos(): Boolean {
+        if (!pendingHardwareSos) return false
+        pendingHardwareSos = false
+        return true
+    }
+
+    private var pendingHardwareSos = false
 
     override fun onCreate() {
         super.onCreate()
@@ -31,6 +41,11 @@ class PukaarApp : Application() {
         createNotificationChannels()
         OemBatteryHelper.ensureChannel(this)
         com.pukaar.app.emergency.HeartbeatWorker.schedule(this)
+        runBlocking {
+            if (sessionStore.token() != null) {
+                com.pukaar.app.emergency.PukaarGuardService.start(this@PukaarApp)
+            }
+        }
     }
 
     private fun createNotificationChannels() {
@@ -47,6 +62,15 @@ class PukaarApp : Application() {
                 setShowBadge(true)
             }
             nm.createNotificationChannel(emergency)
+            val guard = NotificationChannel(
+                com.pukaar.app.emergency.PukaarGuardService.CHANNEL_GUARD,
+                getString(R.string.guard_channel_name),
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = getString(R.string.guard_channel_desc)
+                setShowBadge(false)
+            }
+            nm.createNotificationChannel(guard)
         }
     }
 

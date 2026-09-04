@@ -3,6 +3,14 @@
     <string name="app_tagline">Your Safety, Our Priority.</string>
     <string name="emergency_channel_name">PUKAAR Emergency</string>
     <string name="emergency_channel_desc">High-priority emergency alerts and active SOS sessions</string>
+    <string name="guard_channel_name">PUKAAR Protection</string>
+    <string name="guard_channel_desc">Keeps volume SOS trigger active in the background</string>
+    <string name="guard_notification_title">PUKAAR protection active</string>
+    <string name="guard_notification_body">Triple-press Volume Up anytime to open PUKAAR</string>
+    <string name="accessibility_volume_sos_summary">Triple Volume Up opens PUKAAR even when the app is closed</string>
+    <string name="accessibility_volume_sos_desc">PUKAAR uses this to detect triple-press Volume Up for emergency access when the app is closed or the screen is locked. No screen content is read or stored.</string>
+    <string name="settings_volume_sos">Volume SOS trigger</string>
+    <string name="settings_volume_sos_hint">Enable so triple Volume Up opens PUKAAR when the app is closed</string>
 
     <!-- Shared UI -->
     <string name="action_retry">Retry</string>

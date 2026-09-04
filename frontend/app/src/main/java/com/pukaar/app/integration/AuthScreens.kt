@@ -1,12 +1,16 @@
 package com.pukaar.app.integration
 
-import androidx.compose.foundation.Image
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,16 +20,18 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.outlined.Backspace
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -40,364 +46,147 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pukaar.app.PukaarApp
-import com.pukaar.app.R
+import com.pukaar.app.ui.component.PremiumPrimaryButton
+import com.pukaar.app.ui.theme.Black
+import com.pukaar.app.ui.theme.PukaarRed
+import com.pukaar.app.ui.theme.PukaarRedBright
+import com.pukaar.app.ui.theme.PukaarRedDark
+import com.pukaar.app.ui.theme.SuccessGreen
+import com.pukaar.app.ui.theme.SurfaceCard
+import com.pukaar.app.ui.theme.TextSecondary
+import com.pukaar.app.ui.theme.TextTertiary
 import com.pukaar.app.util.userMessage
 import kotlinx.coroutines.launch
 
-private object LoginColors {
-    val greenPrimary = Color(0xFF608D3D)
-    val greenBorder = Color(0xFF315D1C)
-    val greenDisabled = Color(0xFFA8B998)
-    val panelBackground = Color(0xFFF2F4F6)
-    val textPrimary = Color(0xFF3E2E2B)
-    val textMuted = Color(0xFF818185)
-    val fieldBackground = Color(0xFFF1F3F7)
-    val fieldBorder = Color(0xFFD8DBE2)
-    val divider = Color(0xFFD1D5DD)
-    val keyBackground = Color(0xFFE6E8EE)
-    val keyText = Color(0xFF34343A)
-    val creamBackground = Color(0xFFF0E3D6)
-}
+private enum class LoginStep { Phone, Otp }
 
 @Composable
 fun OtpLoginScreen(onLoggedIn: () -> Unit) {
     var step by remember { mutableStateOf(LoginStep.Phone) }
     var phoneDigits by remember { mutableStateOf("") }
-    var otp by remember { mutableStateOf("") }
+    var otpDigits by remember { mutableStateOf(List(6) { "" }) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val phoneE164 = remember(phoneDigits) { "+91$phoneDigits" }
+    val otpCode = remember(otpDigits) { otpDigits.joinToString("") }
 
-    LoginShell {
-        when (step) {
-            LoginStep.Phone -> PhoneLoginContent(
-                phoneDigits = phoneDigits,
-                loading = loading,
-                error = error,
-                onDigit = { digit ->
-                    if (phoneDigits.length < 10) phoneDigits += digit
-                    error = null
-                },
-                onBackspace = {
-                    if (phoneDigits.isNotEmpty()) phoneDigits = phoneDigits.dropLast(1)
-                    error = null
-                },
-                onContinue = {
-                    scope.launch {
-                        error = null
-                        loading = true
-                        try {
-                            PukaarApp.instance.repository.requestOtp(phoneE164)
-                            step = LoginStep.Otp
-                            otp = ""
-                        } catch (e: Exception) {
-                            error = e.userMessage()
-                        } finally {
-                            loading = false
-                        }
-                    }
-                }
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    listOf(Color(0xFF1A0508), Black, Color(0xFF120608))
+                )
             )
-
-            LoginStep.Otp -> OtpVerificationContent(
-                phoneDisplay = formatPhoneDigits(phoneDigits),
-                otp = otp,
-                loading = loading,
-                error = error,
-                onOtpChange = {
-                    otp = it.filter { c -> c.isDigit() }.take(6)
-                    error = null
-                },
-                onBack = {
-                    step = LoginStep.Phone
-                    otp = ""
-                    error = null
-                },
-                onVerify = {
-                    scope.launch {
-                        error = null
-                        loading = true
-                        try {
-                            PukaarApp.instance.repository.verifyOtp(phoneE164, otp)
-                            onLoggedIn()
-                        } catch (e: Exception) {
-                            error = e.userMessage()
-                        } finally {
-                            loading = false
-                        }
-                    }
-                }
-            )
-        }
-    }
-}
-
-private enum class LoginStep { Phone, Otp }
-
-@Composable
-private fun LoginShell(content: @Composable () -> Unit) {
-    BoxWithConstraints(Modifier.fillMaxSize()) {
-        val panelTop = maxHeight * 0.41f
-        Image(
-            painter = painterResource(R.drawable.loginpageimage),
-            contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop,
-            alignment = Alignment.TopCenter
-        )
+    ) {
         Box(
             Modifier
                 .fillMaxSize()
-                .background(Color.White.copy(alpha = 0.06f))
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(PukaarRed.copy(alpha = 0.28f), Color.Transparent),
+                        radius = 900f
+                    )
+                )
         )
+
         Column(
             Modifier
-                .fillMaxWidth()
-                .padding(top = panelTop)
                 .fillMaxSize()
-                .clip(RoundedCornerShape(topStart = 36.dp, topEnd = 36.dp))
-                .background(LoginColors.panelBackground)
-                .padding(horizontal = 16.dp, vertical = 18.dp)
+                .padding(horizontal = 24.dp, vertical = 28.dp)
         ) {
-            content()
-        }
-    }
-}
+            LoginBrandHeader()
+            Spacer(Modifier.height(28.dp))
 
-@Composable
-private fun PhoneLoginContent(
-    phoneDigits: String,
-    loading: Boolean,
-    error: String?,
-    onDigit: (String) -> Unit,
-    onBackspace: () -> Unit,
-    onContinue: () -> Unit
-) {
-    val canContinue = phoneDigits.length >= 10
+            AnimatedContent(
+                targetState = step,
+                transitionSpec = {
+                    (slideInHorizontally { it / 3 } + fadeIn()) togetherWith
+                        (slideOutHorizontally { -it / 3 } + fadeOut())
+                },
+                label = "loginStep"
+            ) { current ->
+                when (current) {
+                    LoginStep.Phone -> PhoneStep(
+                        phoneDigits = phoneDigits,
+                        loading = loading,
+                        error = error,
+                        onPhoneChange = { value ->
+                            phoneDigits = value.filter { it.isDigit() }.take(10)
+                            error = null
+                        },
+                        onContinue = {
+                            scope.launch {
+                                error = null
+                                loading = true
+                                try {
+                                    PukaarApp.instance.repository.requestOtp(phoneE164)
+                                    otpDigits = List(6) { "" }
+                                    step = LoginStep.Otp
+                                } catch (e: Exception) {
+                                    error = e.userMessage()
+                                } finally {
+                                    loading = false
+                                }
+                            }
+                        }
+                    )
 
-    Column(Modifier.fillMaxSize()) {
-        Text(
-            "Mobile Number",
-            modifier = Modifier.fillMaxWidth(),
-            textAlign = TextAlign.Center,
-            color = LoginColors.textPrimary,
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold
-        )
-        Spacer(Modifier.height(10.dp))
-        PhoneField(formatted = formatPhoneDigits(phoneDigits))
-        error?.let {
-            Text(it, color = Color(0xFFDA4D20), fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
-        }
-        Spacer(Modifier.height(22.dp))
-        LoginPrimaryButton(
-            text = "Abhi Shuru karo  ->",
-            enabled = canContinue,
-            loading = loading,
-            onClick = onContinue
-        )
-        Spacer(Modifier.weight(1f))
-        NumberPad(onDigit = onDigit, onBackspace = onBackspace)
-    }
-}
-
-@Composable
-private fun OtpVerificationContent(
-    phoneDisplay: String,
-    otp: String,
-    loading: Boolean,
-    error: String?,
-    onOtpChange: (String) -> Unit,
-    onBack: () -> Unit,
-    onVerify: () -> Unit
-) {
-    val focusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) { focusRequester.requestFocus() }
-    LaunchedEffect(otp) {
-        if (otp.length == 6 && !loading) onVerify()
-    }
-
-    Column(Modifier.fillMaxSize()) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack, enabled = !loading) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = LoginColors.textPrimary)
-            }
-            Text(
-                "OTP Verification",
-                modifier = Modifier.weight(1f),
-                textAlign = TextAlign.Center,
-                color = LoginColors.textPrimary,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(Modifier.width(48.dp))
-        }
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "We've sent a 6-digit OTP to\n+91 $phoneDisplay",
-            modifier = Modifier.fillMaxWidth(),
-            textAlign = TextAlign.Center,
-            color = LoginColors.textMuted,
-            fontSize = 14.sp,
-            lineHeight = 20.sp
-        )
-        Spacer(Modifier.height(24.dp))
-        OtpPinRow(otp = otp, onOtpChange = onOtpChange, focusRequester = focusRequester, enabled = !loading)
-        error?.let {
-            Text(it, color = Color(0xFFDA4D20), fontSize = 12.sp, modifier = Modifier.padding(top = 10.dp))
-        }
-        Spacer(Modifier.height(28.dp))
-        LoginPrimaryButton(
-            text = "Verify OTP",
-            enabled = otp.length == 6,
-            loading = loading,
-            onClick = onVerify
-        )
-        Spacer(Modifier.height(16.dp))
-        TextButton(
-            onClick = onBack,
-            enabled = !loading,
-            modifier = Modifier.align(Alignment.CenterHorizontally)
-        ) {
-            Text("Change Phone Number", color = LoginColors.greenPrimary, fontWeight = FontWeight.SemiBold)
-        }
-        Spacer(Modifier.weight(1f))
-    }
-}
-
-@Composable
-private fun PhoneField(formatted: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(64.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .background(LoginColors.fieldBackground)
-            .border(1.dp, LoginColors.fieldBorder, RoundedCornerShape(12.dp))
-            .padding(horizontal = 14.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text("IN", color = LoginColors.textMuted, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-        Spacer(Modifier.width(8.dp))
-        Text("+91", color = LoginColors.textMuted, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-        Spacer(Modifier.width(6.dp))
-        Icon(Icons.Default.KeyboardArrowDown, contentDescription = null, tint = LoginColors.textMuted)
-        Spacer(Modifier.width(12.dp))
-        Box(Modifier.width(1.dp).height(30.dp).background(LoginColors.divider))
-        Spacer(Modifier.width(12.dp))
-        Text(
-            formatted.ifBlank { " " },
-            color = LoginColors.textPrimary,
-            fontSize = 20.sp,
-            letterSpacing = 0.4.sp,
-            modifier = Modifier.weight(1f)
-        )
-    }
-}
-
-@Composable
-private fun OtpPinRow(
-    otp: String,
-    onOtpChange: (String) -> Unit,
-    focusRequester: FocusRequester,
-    enabled: Boolean
-) {
-    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-        BasicTextField(
-            value = otp,
-            onValueChange = onOtpChange,
-            enabled = enabled,
-            modifier = Modifier
-                .size(1.dp)
-                .focusRequester(focusRequester),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-            cursorBrush = SolidColor(Color.Transparent)
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            repeat(6) { index ->
-                val char = otp.getOrNull(index)?.toString() ?: ""
-                val focused = otp.length == index
-                Box(
-                    modifier = Modifier
-                        .size(width = 50.dp, height = 56.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(if (focused) LoginColors.creamBackground else LoginColors.fieldBackground)
-                        .border(
-                            width = if (focused || char.isNotEmpty()) 2.dp else 1.5.dp,
-                            color = if (focused || char.isNotEmpty()) LoginColors.greenPrimary else LoginColors.fieldBorder,
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                        .clickable(enabled = enabled) { focusRequester.requestFocus() },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(char, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = LoginColors.textPrimary)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun LoginPrimaryButton(
-    text: String,
-    enabled: Boolean,
-    loading: Boolean,
-    onClick: () -> Unit
-) {
-    val active = enabled && !loading
-  Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(60.dp)
-            .clip(RoundedCornerShape(14.dp))
-            .background(if (active) LoginColors.greenPrimary else LoginColors.greenDisabled)
-            .border(2.dp, LoginColors.greenBorder, RoundedCornerShape(14.dp))
-            .clickable(enabled = active) { onClick() },
-        contentAlignment = Alignment.Center
-    ) {
-        if (loading) {
-            CircularProgressIndicator(
-                color = Color.White,
-                strokeWidth = 2.5.dp,
-                modifier = Modifier.size(24.dp)
-            )
-        } else {
-            Text(text, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-        }
-    }
-}
-
-@Composable
-private fun NumberPad(onDigit: (String) -> Unit, onBackspace: () -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        NumberPadRow(listOf("1", "2", "3"), onDigit)
-        NumberPadRow(listOf("4", "5", "6"), onDigit)
-        NumberPadRow(listOf("7", "8", "9"), onDigit)
-        Row {
-            Spacer(Modifier.weight(1f))
-            NumberPadKey("0", onClick = { onDigit("0") }, modifier = Modifier.weight(1f))
-            Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                IconButton(onClick = onBackspace) {
-                    Icon(
-                        Icons.AutoMirrored.Outlined.Backspace,
-                        contentDescription = "Backspace",
-                        tint = LoginColors.textPrimary,
-                        modifier = Modifier.size(28.dp)
+                    LoginStep.Otp -> OtpStep(
+                        phoneDisplay = formatIndianPhone(phoneDigits),
+                        otpDigits = otpDigits,
+                        loading = loading,
+                        error = error,
+                        onOtpChange = { index, value ->
+                            val digit = value.filter { it.isDigit() }.takeLast(1)
+                            otpDigits = otpDigits.toMutableList().also { it[index] = digit }
+                            error = null
+                            if (digit.isNotEmpty() && index == 5 && otpDigits.all { it.isNotEmpty() }) {
+                                scope.launch {
+                                    error = null
+                                    loading = true
+                                    try {
+                                        PukaarApp.instance.repository.verifyOtp(phoneE164, otpDigits.joinToString(""))
+                                        onLoggedIn()
+                                    } catch (e: Exception) {
+                                        error = e.userMessage()
+                                    } finally {
+                                        loading = false
+                                    }
+                                }
+                            }
+                        },
+                        onBack = {
+                            step = LoginStep.Phone
+                            otpDigits = List(6) { "" }
+                            error = null
+                        },
+                        onVerify = {
+                            scope.launch {
+                                error = null
+                                loading = true
+                                try {
+                                    PukaarApp.instance.repository.verifyOtp(phoneE164, otpCode)
+                                    onLoggedIn()
+                                } catch (e: Exception) {
+                                    error = e.userMessage()
+                                } finally {
+                                    loading = false
+                                }
+                            }
+                        }
                     )
                 }
             }
@@ -406,32 +195,206 @@ private fun NumberPad(onDigit: (String) -> Unit, onBackspace: () -> Unit) {
 }
 
 @Composable
-private fun NumberPadRow(labels: List<String>, onDigit: (String) -> Unit) {
-    Row {
-        labels.forEach { label ->
-            NumberPadKey(label, onClick = { onDigit(label) }, modifier = Modifier.weight(1f))
+private fun LoginBrandHeader() {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+        Box(
+            Modifier
+                .size(72.dp)
+                .clip(CircleShape)
+                .background(
+                    Brush.linearGradient(listOf(PukaarRedBright, PukaarRedDark))
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Default.Shield, contentDescription = null, tint = Color.White, modifier = Modifier.size(38.dp))
+        }
+        Spacer(Modifier.height(16.dp))
+        Text("PUKAAR", color = Color.White, fontSize = 36.sp, fontWeight = FontWeight.Black, letterSpacing = 4.sp)
+        Text(
+            "Your safety, one tap away",
+            color = TextSecondary,
+            fontSize = 14.sp,
+            modifier = Modifier.padding(top = 4.dp)
+        )
+    }
+}
+
+@Composable
+private fun PhoneStep(
+    phoneDigits: String,
+    loading: Boolean,
+    error: String?,
+    onPhoneChange: (String) -> Unit,
+    onContinue: () -> Unit
+) {
+    LoginCard(title = "Sign in", subtitle = "Enter your mobile number to receive a secure OTP") {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(SurfaceCard)
+                .border(1.dp, PukaarRed.copy(alpha = 0.35f), RoundedCornerShape(14.dp))
+                .padding(horizontal = 14.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("+91", color = PukaarRed, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Spacer(Modifier.width(12.dp))
+            Box(Modifier.width(1.dp).height(28.dp).background(TextTertiary.copy(alpha = 0.5f)))
+            Spacer(Modifier.width(12.dp))
+            OutlinedTextField(
+                value = phoneDigits,
+                onValueChange = onPhoneChange,
+                modifier = Modifier.weight(1f),
+                placeholder = { Text("10-digit mobile", color = TextTertiary) },
+                singleLine = true,
+                enabled = !loading,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone, imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { if (phoneDigits.length == 10) onContinue() }),
+                colors = loginFieldColors(),
+                textStyle = TextStyle(color = Color.White, fontSize = 18.sp, letterSpacing = 1.sp)
+            )
+        }
+        error?.let { Text(it, color = PukaarRedBright, fontSize = 12.sp, modifier = Modifier.padding(top = 10.dp)) }
+        Spacer(Modifier.height(20.dp))
+        PremiumPrimaryButton(
+            text = if (loading) "Sending OTP…" else "Get OTP",
+            loading = loading,
+            enabled = phoneDigits.length == 10,
+            onClick = onContinue
+        )
+        Text(
+            "OTP is sent via SMS. Standard rates may apply.",
+            color = TextTertiary,
+            fontSize = 11.sp,
+            lineHeight = 16.sp,
+            modifier = Modifier.padding(top = 12.dp)
+        )
+    }
+}
+
+@Composable
+private fun OtpStep(
+    phoneDisplay: String,
+    otpDigits: List<String>,
+    loading: Boolean,
+    error: String?,
+    onOtpChange: (Int, String) -> Unit,
+    onBack: () -> Unit,
+    onVerify: () -> Unit
+) {
+    val focusRequesters = remember { List(6) { FocusRequester() } }
+    LaunchedEffect(Unit) { focusRequesters[0].requestFocus() }
+
+    LoginCard(title = "Verify OTP", subtitle = "Enter the 6-digit code sent to +91 $phoneDisplay") {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            otpDigits.forEachIndexed { index, digit ->
+                OtpBox(
+                    value = digit,
+                    focused = otpDigits.take(index).all { it.isNotEmpty() } && digit.isEmpty(),
+                    onValueChange = { onOtpChange(index, it) },
+                    focusRequester = focusRequesters[index],
+                    enabled = !loading,
+                    onFilled = {
+                        if (index < 5) focusRequesters[index + 1].requestFocus()
+                    }
+                )
+            }
+        }
+        error?.let { Text(it, color = PukaarRedBright, fontSize = 12.sp, modifier = Modifier.padding(top = 10.dp)) }
+        Spacer(Modifier.height(20.dp))
+        PremiumPrimaryButton(
+            text = if (loading) "Verifying…" else "Verify & continue",
+            loading = loading,
+            enabled = otpDigits.all { it.isNotEmpty() },
+            onClick = onVerify
+        )
+        TextButton(onClick = onBack, enabled = !loading, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, tint = SuccessGreen, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("Change number", color = SuccessGreen, fontWeight = FontWeight.SemiBold)
         }
     }
 }
 
 @Composable
-private fun NumberPadKey(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier
-            .padding(horizontal = 4.dp)
-            .height(54.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(LoginColors.keyBackground)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center
+private fun LoginCard(
+    title: String,
+    subtitle: String,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(22.dp))
+            .background(SurfaceCard.copy(alpha = 0.94f))
+            .border(1.dp, PukaarRed.copy(alpha = 0.2f), RoundedCornerShape(22.dp))
+            .padding(20.dp)
     ) {
-        Text(label, fontSize = 22.sp, fontWeight = FontWeight.Medium, color = LoginColors.keyText)
+        Text(title, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        Text(subtitle, color = TextSecondary, fontSize = 13.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 6.dp, bottom = 18.dp))
+        content()
     }
 }
 
-private fun formatPhoneDigits(digits: String): String = when {
-    digits.isEmpty() -> ""
-    digits.length <= 4 -> digits
-    digits.length <= 7 -> "${digits.substring(0, 4)}-${digits.substring(4)}"
-    else -> "${digits.substring(0, 4)}-${digits.substring(4, 7)}-${digits.substring(7)}"
+@Composable
+private fun OtpBox(
+    value: String,
+    focused: Boolean,
+    onValueChange: (String) -> Unit,
+    focusRequester: FocusRequester,
+    enabled: Boolean,
+    onFilled: () -> Unit
+) {
+    val borderColor = when {
+        value.isNotEmpty() -> PukaarRed
+        focused -> PukaarRedBright
+        else -> TextTertiary.copy(alpha = 0.5f)
+    }
+    Box(
+        modifier = Modifier
+            .size(width = 46.dp, height = 54.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (value.isNotEmpty()) PukaarRed.copy(alpha = 0.12f) else SurfaceCard)
+            .border(1.5.dp, borderColor, RoundedCornerShape(12.dp)),
+        contentAlignment = Alignment.Center
+    ) {
+        BasicTextField(
+            value = value,
+            onValueChange = { raw ->
+                val digit = raw.filter { it.isDigit() }.takeLast(1)
+                onValueChange(digit)
+                if (digit.isNotEmpty()) onFilled()
+            },
+            enabled = enabled,
+            singleLine = true,
+            modifier = Modifier
+                .focusRequester(focusRequester)
+                .width(28.dp),
+            textStyle = TextStyle(
+                color = Color.White,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            ),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+            cursorBrush = SolidColor(PukaarRed)
+        )
+    }
+}
+
+@Composable
+private fun loginFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedTextColor = Color.White,
+    unfocusedTextColor = Color.White,
+    focusedBorderColor = Color.Transparent,
+    unfocusedBorderColor = Color.Transparent,
+    cursorColor = PukaarRed,
+    focusedContainerColor = Color.Transparent,
+    unfocusedContainerColor = Color.Transparent
+)
+
+private fun formatIndianPhone(digits: String): String = when {
+    digits.length <= 5 -> digits
+    digits.length <= 10 -> "${digits.take(5)} ${digits.drop(5)}"
+    else -> digits
 }
