@@ -12,7 +12,7 @@
     h1 { margin:0 0 4px; font-size:1.5rem; }
     .sub { color:var(--muted); margin-bottom:24px; font-size:.9rem; }
     .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:16px; }
-    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-bottom:16px; }
     .stat .label { color:var(--muted); font-size:.75rem; text-transform:uppercase; }
     .stat .value { font-size:1.6rem; font-weight:700; margin-top:4px; }
     input, button, select { font:inherit; }
@@ -21,7 +21,7 @@
     button.secondary { background:#222; color:var(--text); border:1px solid var(--border); }
     .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
     table { width:100%; border-collapse:collapse; font-size:.85rem; }
-    th, td { text-align:left; padding:8px; border-bottom:1px solid var(--border); }
+    th, td { text-align:left; padding:8px; border-bottom:1px solid var(--border); vertical-align:middle; }
     th { color:var(--muted); font-weight:600; }
     .tabs { display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
     .tabs button { background:#1a1a1a; color:var(--text); border:1px solid var(--border); }
@@ -29,6 +29,8 @@
     .hidden { display:none; }
     .err { color:var(--red); font-size:.85rem; margin-top:8px; }
     .login { max-width:400px; margin:80px auto; }
+    audio { width:220px; height:32px; }
+    .filter { margin-bottom:12px; max-width:280px; }
   </style>
 </head>
 <body>
@@ -60,12 +62,19 @@
 
     <div class="tabs">
       <button class="active" data-tab="users" onclick="switchTab('users')">Users</button>
+      <button data-tab="recordings" onclick="switchTab('recordings')">Recordings</button>
       <button data-tab="subscriptions" onclick="switchTab('subscriptions')">Subscriptions</button>
       <button data-tab="payments" onclick="switchTab('payments')">Payments</button>
     </div>
 
     <div class="card">
       <div id="tableUsers"></div>
+      <div id="tableRecordings" class="hidden">
+        <div class="filter">
+          <input id="recUserFilter" placeholder="Filter by user phone…" oninput="renderRecordings()" />
+        </div>
+        <div id="recordingsBody"></div>
+      </div>
       <div id="tableSubscriptions" class="hidden"></div>
       <div id="tablePayments" class="hidden"></div>
     </div>
@@ -74,9 +83,14 @@
 <script>
 const API = window.location.origin;
 let token = localStorage.getItem('pukaar_admin_token') || '';
+let recordingsCache = [];
 
 function headers() {
   return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token };
+}
+
+function authOnly() {
+  return { 'Authorization': 'Bearer ' + token };
 }
 
 async function api(path, opts = {}) {
@@ -122,7 +136,7 @@ function logout() {
 
 function switchTab(tab) {
   document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-  ['users','subscriptions','payments'].forEach(t => {
+  ['users','recordings','subscriptions','payments'].forEach(t => {
     const el = document.getElementById('table' + t.charAt(0).toUpperCase() + t.slice(1));
     t === tab ? show(el) : hide(el);
   });
@@ -132,6 +146,53 @@ function table(headers, rows) {
   const th = headers.map(h => `<th>${h}</th>`).join('');
   const tr = rows.map(r => `<tr>${r.map(c => `<td>${c ?? '—'}</td>`).join('')}</tr>`).join('');
   return `<table><thead><tr>${th}</tr></thead><tbody>${tr || '<tr><td colspan="99">No data</td></tr>'}</tbody></table>`;
+}
+
+function audioCell(playUrl) {
+  const src = API + playUrl;
+  return `<audio controls preload="none" src="${src}" data-token="1"></audio>`;
+}
+
+function attachAudioAuth() {
+  document.querySelectorAll('audio[data-token]').forEach(audio => {
+    if (audio.dataset.bound) return;
+    audio.dataset.bound = '1';
+    const original = audio.getAttribute('src');
+    audio.removeAttribute('src');
+    audio.addEventListener('play', async (e) => {
+      if (audio.dataset.loaded) return;
+      e.preventDefault();
+      try {
+        const res = await fetch(original, { headers: authOnly() });
+        if (!res.ok) throw new Error('Could not load audio');
+        const blob = await res.blob();
+        audio.src = URL.createObjectURL(blob);
+        audio.dataset.loaded = '1';
+        audio.play();
+      } catch (err) {
+        alert(err.message || 'Playback failed');
+      }
+    }, { once: false });
+  });
+}
+
+function renderRecordings() {
+  const q = (document.getElementById('recUserFilter').value || '').trim().toLowerCase();
+  const items = recordingsCache.filter(r =>
+    !q || (r.userPhone || '').toLowerCase().includes(q) || (r.userName || '').toLowerCase().includes(q)
+  );
+  document.getElementById('recordingsBody').innerHTML = table(
+    ['User', 'Type', 'Segment', 'Duration', 'Uploaded', 'Listen'],
+    items.map(r => [
+      `${r.userName || '—'}<br><span style="color:#888">${r.userPhone || ''}</span>`,
+      `${r.triggerType || '—'}${r.mockDrill ? ' (drill)' : ''}`,
+      `#${(r.index ?? 0) + 1}`,
+      `${r.durationSec || 60}s`,
+      (r.uploadedAt || '').slice(0, 19).replace('T', ' '),
+      audioCell(r.playUrl)
+    ])
+  );
+  attachAudioAuth();
 }
 
 async function loadDashboard(phone) {
@@ -145,14 +206,19 @@ async function loadDashboard(phone) {
     ['Active subs', stats.activeSubscriptions],
     ['Paid orders', stats.paidOrders],
     ['Revenue ₹', stats.revenueInr],
-    ['Emergencies', stats.totalEmergencies]
-  ].map(([l,v]) => `<div class="card stat"><div class="label">${l}</div><div class="value">${v}</div></div>`).join('');
+    ['Emergencies', stats.totalEmergencies],
+    ['Recordings', stats.uploadedRecordings]
+  ].map(([l,v]) => `<div class="card stat"><div class="label">${l}</div><div class="value">${v ?? 0}</div></div>`).join('');
 
   const users = await api('/api/v1/admin/users');
   document.getElementById('tableUsers').innerHTML = table(
     ['Phone','Name','Role','Protection','Created'],
     users.items.map(u => [u.phone, u.fullName, u.role, u.protectionReady, (u.createdAt||'').slice(0,10)])
   );
+
+  const recs = await api('/api/v1/admin/recordings?size=200');
+  recordingsCache = recs.items || [];
+  renderRecordings();
 
   const subs = await api('/api/v1/admin/subscriptions');
   document.getElementById('tableSubscriptions').innerHTML = table(

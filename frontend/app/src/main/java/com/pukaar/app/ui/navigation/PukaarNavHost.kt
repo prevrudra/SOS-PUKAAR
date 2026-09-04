@@ -43,6 +43,7 @@ import com.pukaar.app.ui.screen.menu.MenuScreen
 import com.pukaar.app.ui.screen.mockdrill.MockDrillScreen
 import com.pukaar.app.ui.screen.notifications.NotificationsScreen
 import com.pukaar.app.ui.screen.payment.PaymentReferralScreen
+import com.pukaar.app.ui.screen.recordings.RecordingsScreen
 import com.pukaar.app.ui.screen.privacy.PrivacySecurityScreen
 import com.pukaar.app.ui.screen.notifications.NotificationPreferences
 import com.pukaar.app.ui.screen.sossettings.SosSettingsForm
@@ -259,6 +260,10 @@ fun PukaarNavHost(
                     }
                 )
             }
+        }
+
+        composable(Route.Recordings.path) {
+            RecordingsScreen(onBack = { navController.popBackStack() })
         }
 
         composable(Route.PaymentReferral.path) {

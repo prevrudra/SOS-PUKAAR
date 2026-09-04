@@ -54,6 +54,9 @@ class PukaarRepository(private val sessionStore: SessionStore) {
     suspend fun deleteContact(id: String) = api.deleteContact(id)
     suspend fun verifyContact(id: String, code: String = "123456") =
         api.verifyContact(id, VerifyContactRequest(code))
+    suspend fun emergencyHistory() = api.emergencyHistory()
+    suspend fun downloadAudioSegment(eventId: String, segmentId: String) =
+        api.downloadAudioSegment(eventId, segmentId)
     suspend fun trigger(req: TriggerRequest) = api.trigger(req)
     suspend fun activeEmergency() = api.activeEmergency()
     suspend fun getEmergency(id: String) = api.getEmergency(id)

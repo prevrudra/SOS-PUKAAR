@@ -6,7 +6,10 @@ import com.pukaar.domain.emergency.EmergencyOrchestrator;
 import com.pukaar.security.SecurityUtils;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -39,9 +42,24 @@ public class EmergencyController {
         return orchestrator.getActive(SecurityUtils.currentUserId());
     }
 
+    @GetMapping("/history")
+    public Map<String, Object> history() {
+        return orchestrator.listHistory(SecurityUtils.currentUserId());
+    }
+
     @GetMapping("/{id}")
     public Map<String, Object> get(@PathVariable UUID id) {
         return orchestrator.getEvent(SecurityUtils.currentUserId(), id);
+    }
+
+    @GetMapping("/{id}/audio-segments/{segmentId}/content")
+    public ResponseEntity<Resource> streamAudio(@PathVariable UUID id, @PathVariable UUID segmentId) {
+        Resource resource = orchestrator.streamOwnedAudio(SecurityUtils.currentUserId(), id, segmentId);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("audio/mp4"))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + segmentId + ".m4a\"")
+                .header(HttpHeaders.CACHE_CONTROL, "private, max-age=3600")
+                .body(resource);
     }
 
     @PostMapping("/{id}/location")

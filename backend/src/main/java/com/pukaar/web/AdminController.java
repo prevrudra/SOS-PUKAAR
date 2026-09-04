@@ -4,6 +4,10 @@ import com.pukaar.common.UserRole;
 import com.pukaar.domain.admin.AdminService;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -42,6 +46,25 @@ public class AdminController {
             @RequestParam(defaultValue = "20") int size
     ) {
         return adminService.payments(page, size);
+    }
+
+    @GetMapping("/recordings")
+    public Map<String, Object> recordings(
+            @RequestParam(required = false) UUID userId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "50") int size
+    ) {
+        return adminService.recordings(userId, page, size);
+    }
+
+    @GetMapping("/recordings/{segmentId}/content")
+    public ResponseEntity<Resource> streamRecording(@PathVariable UUID segmentId) {
+        Resource resource = adminService.streamRecording(segmentId);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("audio/mp4"))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + segmentId + ".m4a\"")
+                .header(HttpHeaders.CACHE_CONTROL, "private, max-age=3600")
+                .body(resource);
     }
 
     @PatchMapping("/users/{id}/role")
