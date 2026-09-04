@@ -57,11 +57,16 @@ fun PukaarAppNavHost() {
             OtpLoginScreen {
                 authed = true
                 onboardingDone = false
+                com.pukaar.app.emergency.PukaarGuardService.start(context)
             }
         }
         onboardingDone == false -> PukaarTheme {
             OnboardingConsentScreen {
                 onboardingDone = true
+                com.pukaar.app.emergency.PukaarGuardService.start(context)
+                if (!com.pukaar.app.emergency.AccessibilityHelper.isVolumeSosEnabled(context)) {
+                    com.pukaar.app.emergency.AccessibilityHelper.openAccessibilitySettings(context)
+                }
             }
         }
         else -> PukaarTheme {
@@ -105,6 +110,9 @@ fun PukaarAppNavHost() {
             }
 
             LaunchedEffect(Unit) {
+                if (PukaarApp.instance.consumePendingHardwareSos()) {
+                    countdownMode = HomeMode.SOS
+                }
                 PukaarApp.instance.hardwareSos.collect {
                     countdownMode = HomeMode.SOS
                 }

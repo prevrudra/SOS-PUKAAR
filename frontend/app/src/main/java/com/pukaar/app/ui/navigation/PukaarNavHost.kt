@@ -131,7 +131,8 @@ fun PukaarNavHost(
                 onBack = { navController.popBackStack() },
                 onBatteryOptimization = { com.pukaar.app.emergency.OemBatteryHelper.requestUnrestrictedBattery(context) },
                 onAutostart = { com.pukaar.app.emergency.OemBatteryHelper.openOemAutostartSettings(context) },
-                onOverlayPermission = { com.pukaar.app.emergency.OemBatteryHelper.requestOverlayPermission(context) }
+                onOverlayPermission = { com.pukaar.app.emergency.OemBatteryHelper.requestOverlayPermission(context) },
+                onVolumeSosAccessibility = { com.pukaar.app.emergency.AccessibilityHelper.openAccessibilitySettings(context) }
             )
         }
 

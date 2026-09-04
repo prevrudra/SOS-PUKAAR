@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import com.pukaar.app.emergency.VolumeTriggerController
 import com.pukaar.app.integration.PukaarAppNavHost
 import com.pukaar.app.payment.RazorpayPaymentBridge
 import com.pukaar.app.ui.theme.PukaarTheme
@@ -17,9 +18,6 @@ import com.razorpay.PaymentData
 import com.razorpay.PaymentResultWithDataListener
 
 class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
-
-    private var volumeUpCount = 0
-    private var lastVolumeUpMs = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -44,14 +42,7 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         if (event.action == KeyEvent.ACTION_DOWN && event.keyCode == KeyEvent.KEYCODE_VOLUME_UP) {
-            val now = System.currentTimeMillis()
-            volumeUpCount = if (now - lastVolumeUpMs < 1500) volumeUpCount + 1 else 1
-            lastVolumeUpMs = now
-            if (volumeUpCount >= 3) {
-                volumeUpCount = 0
-                PukaarApp.instance.signalHardwareSos()
-                return true
-            }
+            if (VolumeTriggerController.onVolumeUp(this)) return true
         }
         return super.dispatchKeyEvent(event)
     }

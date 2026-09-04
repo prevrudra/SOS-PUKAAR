@@ -79,7 +79,7 @@ fun OnboardingConsentScreen(onComplete: () -> Unit) {
             }
 
             Text(
-                "Emergency alerts are sent from your phone via SMS to trusted contacts. OTP login uses secure SMS only.",
+                "Emergency alerts are sent from your phone via SMS. After setup, enable Volume SOS in Accessibility so triple-press Volume Up opens PUKAAR even when the app is closed.",
                 color = TextTertiary, fontSize = 11.sp, lineHeight = 16.sp,
                 modifier = Modifier.padding(top = 14.dp)
             )

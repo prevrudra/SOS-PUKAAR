@@ -9,6 +9,7 @@ import androidx.compose.material.icons.filled.BatteryChargingFull
 import androidx.compose.material.icons.filled.Launch
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -29,6 +30,7 @@ fun SettingsScreen(
     onBatteryOptimization: () -> Unit,
     onAutostart: () -> Unit,
     onOverlayPermission: () -> Unit,
+    onVolumeSosAccessibility: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     PukaarScreen(
@@ -65,6 +67,15 @@ fun SettingsScreen(
             )
             RowDivider()
             NavigationRow(
+                title = stringResource(R.string.settings_volume_sos),
+                subtitle = stringResource(R.string.settings_volume_sos_hint),
+                onClick = onVolumeSosAccessibility,
+                leading = {
+                    Icon(Icons.Filled.VolumeUp, null, tint = TextSecondary, modifier = Modifier.size(18.dp))
+                }
+            )
+            RowDivider()
+            NavigationRow(
                 title = stringResource(R.string.settings_permissions),
                 subtitle = stringResource(R.string.settings_permissions_hint),
                 onClick = onBatteryOptimization,
@@ -81,6 +92,6 @@ fun SettingsScreen(
 @Composable
 private fun SettingsScreenPreview() {
     PukaarTheme {
-        SettingsScreen(onBack = {}, onBatteryOptimization = {}, onAutostart = {}, onOverlayPermission = {})
+        SettingsScreen(onBack = {}, onBatteryOptimization = {}, onAutostart = {}, onOverlayPermission = {}, onVolumeSosAccessibility = {})
     }
 }

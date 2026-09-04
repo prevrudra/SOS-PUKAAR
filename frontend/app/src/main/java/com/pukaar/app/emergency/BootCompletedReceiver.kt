@@ -7,8 +7,8 @@ import android.util.Log
 
 class BootCompletedReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
-        Log.i("PUKAAR", "Boot completed — emergency listeners armed where OS permits")
-        // Re-register high-priority notification channel / OEM survival prompts after reboot.
+        Log.i("PUKAAR", "Boot completed — arming guard service and emergency listeners")
         OemBatteryHelper.ensureChannel(context)
+        PukaarGuardService.start(context)
     }
 }
