@@ -113,6 +113,7 @@ pukaar:
     webhook-secret: ${RAZORPAY_WEBHOOK_SECRET:}
   admin:
     phone: ${ADMIN_PHONE:}
+    # Comma-separated list also supported via ADMIN_PHONE
   alerts:
     whatsapp:
       token: ${WHATSAPP_TOKEN:}
