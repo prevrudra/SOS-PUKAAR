@@ -83,6 +83,7 @@ public class PukaarProperties {
 
     @Data
     public static class Admin {
+        /** Comma-separated E.164 or 10-digit Indian numbers promoted to ADMIN on login. */
         private String phone = "";
     }
 
