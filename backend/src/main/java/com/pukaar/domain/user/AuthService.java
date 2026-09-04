@@ -37,6 +37,7 @@ public class AuthService {
     @Transactional
     public Map<String, Object> requestOtp(String phoneE164) {
         String normalized = normalizePhone(phoneE164);
+        boolean adminPhone = adminBootstrap.isAdminPhone(normalized);
         String code = props.getOtp().isMockEnabled() ? props.getOtp().getMockCode() : HashUtil.numericOtp(props.getOtp().getLength());
         OtpChallengeEntity challenge = OtpChallengeEntity.builder()
                 .phoneE164(normalized)
@@ -44,15 +45,18 @@ public class AuthService {
                 .expiresAt(Instant.now().plusSeconds(props.getOtp().getTtlSeconds()))
                 .build();
         otpRepo.save(challenge);
-        if (!props.getOtp().isMockEnabled()) {
+
+        // Normal users: SMS only (never expose code). Admin phones: show code in response, skip SMS.
+        if (!adminPhone && !props.getOtp().isMockEnabled()) {
             if (!smsSender.sendOtp(normalized, code)) {
                 throw new ApiException("OTP_SEND_FAILED", "Could not send OTP SMS");
             }
         }
+
         Map<String, Object> resp = new LinkedHashMap<>();
         resp.put("phone", normalized);
         resp.put("expiresInSeconds", props.getOtp().getTtlSeconds());
-        if (props.getOtp().isMockEnabled()) {
+        if (adminPhone || props.getOtp().isMockEnabled()) {
             resp.put("devCode", code);
         }
         return resp;

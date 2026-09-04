@@ -53,13 +53,18 @@ public class EmergencyController {
     }
 
     @GetMapping("/{id}/audio-segments/{segmentId}/content")
-    public ResponseEntity<Resource> streamAudio(@PathVariable UUID id, @PathVariable UUID segmentId) {
+    public ResponseEntity<Resource> streamAudio(@PathVariable UUID id, @PathVariable UUID segmentId) throws java.io.IOException {
         Resource resource = orchestrator.streamOwnedAudio(SecurityUtils.currentUserId(), id, segmentId);
-        return ResponseEntity.ok()
+        long len = resource.contentLength();
+        ResponseEntity.BodyBuilder builder = ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType("audio/mp4"))
                 .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + segmentId + ".m4a\"")
-                .header(HttpHeaders.CACHE_CONTROL, "private, max-age=3600")
-                .body(resource);
+                .header(HttpHeaders.ACCEPT_RANGES, "bytes")
+                .header(HttpHeaders.CACHE_CONTROL, "private, max-age=3600");
+        if (len >= 0) {
+            builder.contentLength(len);
+        }
+        return builder.body(resource);
     }
 
     @PostMapping("/{id}/location")

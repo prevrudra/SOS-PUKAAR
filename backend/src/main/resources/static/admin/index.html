@@ -107,9 +107,20 @@ function hide(el) { el.classList.add('hidden'); }
 async function requestOtp() {
   document.getElementById('loginErr').textContent = '';
   try {
-    await api('/api/v1/auth/otp/request', { method: 'POST', body: JSON.stringify({ phone: document.getElementById('phone').value }) });
+    const data = await api('/api/v1/auth/otp/request', {
+      method: 'POST',
+      body: JSON.stringify({ phone: document.getElementById('phone').value })
+    });
     show(document.getElementById('otp'));
     show(document.getElementById('verifyBtn'));
+    if (data.devCode) {
+      document.getElementById('otp').value = data.devCode;
+      document.getElementById('loginErr').style.color = '#22c55e';
+      document.getElementById('loginErr').textContent = 'Admin OTP (shown once): ' + data.devCode;
+    } else {
+      document.getElementById('loginErr').style.color = '';
+      document.getElementById('loginErr').textContent = 'OTP sent by SMS. Admin phones show the code here.';
+    }
   } catch (e) { document.getElementById('loginErr').textContent = e.message; }
 }
 
@@ -165,10 +176,12 @@ function attachAudioAuth() {
       try {
         const res = await fetch(original, { headers: authOnly() });
         if (!res.ok) throw new Error('Could not load audio');
-        const blob = await res.blob();
+        const buf = await res.arrayBuffer();
+        const blob = new Blob([buf], { type: 'audio/mp4' });
         audio.src = URL.createObjectURL(blob);
         audio.dataset.loaded = '1';
-        audio.play();
+        audio.load();
+        await audio.play();
       } catch (err) {
         alert(err.message || 'Playback failed');
       }
