@@ -26,13 +26,25 @@ class EmergencyAudioRecorder(private val context: Context) {
             r.setAudioEncodingBitRate(128_000)
             r.setAudioSamplingRate(44_100)
             r.setOutputFile(out.absolutePath)
+            if (durationMs in 1..Int.MAX_VALUE) {
+                r.setMaxDuration(durationMs.toInt())
+            }
             r.prepare()
             r.start()
             delay(durationMs)
-            runCatching { r.stop() }
+            try {
+                r.stop()
+            } catch (_: RuntimeException) {
+                // stop() can throw if already finalized by setMaxDuration
+            }
             r.release()
             recorder = null
-            out
+            if (!out.exists() || out.length() < 1024L) {
+                out.delete()
+                null
+            } else {
+                out
+            }
         } catch (_: Exception) {
             release()
             null

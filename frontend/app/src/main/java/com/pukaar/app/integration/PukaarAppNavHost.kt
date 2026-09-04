@@ -57,16 +57,13 @@ fun PukaarAppNavHost() {
             OtpLoginScreen {
                 authed = true
                 onboardingDone = false
-                com.pukaar.app.emergency.PukaarGuardService.start(context)
+                com.pukaar.app.emergency.PukaarGuardService.start(context, hasSession = true)
             }
         }
         onboardingDone == false -> PukaarTheme {
             OnboardingConsentScreen {
                 onboardingDone = true
-                com.pukaar.app.emergency.PukaarGuardService.start(context)
-                if (!com.pukaar.app.emergency.AccessibilityHelper.isVolumeSosEnabled(context)) {
-                    com.pukaar.app.emergency.AccessibilityHelper.openAccessibilitySettings(context)
-                }
+                com.pukaar.app.emergency.PukaarGuardService.start(context, hasSession = true)
             }
         }
         else -> PukaarTheme {
@@ -224,9 +221,11 @@ private fun EmergencyActiveRoute(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var event by remember { mutableStateOf<EmergencyDto?>(null) }
+    var finishing by remember { mutableStateOf(false) }
 
     LaunchedEffect(eventId) {
         while (true) {
+            if (finishing) break
             val e = runCatching { PukaarApp.instance.repository.getEmergency(eventId) }.getOrNull()
             event = e
             if (e?.active == false && !isMockDrill) {
@@ -242,18 +241,32 @@ private fun EmergencyActiveRoute(
         event = event,
         isMockDrill = isMockDrill,
         onMarkSafe = {
+            if (finishing) return@EmergencyActiveScreen
+            finishing = true
             scope.launch {
-                if (isMockDrill) {
-                    runCatching {
-                        PukaarApp.instance.repository.completeLatestDrill(confirmed = true)
-                        PukaarApp.instance.sessionStore.setMockDrillPassed(true)
-                        PukaarApp.instance.sessionStore.setProtectionReady(true)
+                try {
+                    if (isMockDrill) {
+                        val result = runCatching {
+                            PukaarApp.instance.repository.completeLatestDrill(confirmed = true)
+                        }
+                        if (result.isFailure) {
+                            // Soft-close the drill event so UI never hangs if contacts aren't verified yet
+                            runCatching { PukaarApp.instance.repository.markSafe(eventId) }
+                            android.widget.Toast.makeText(
+                                context,
+                                result.exceptionOrNull()?.message
+                                    ?: "Drill closed. Add & verify 2 contacts, then try again for protection unlock.",
+                                android.widget.Toast.LENGTH_LONG
+                            ).show()
+                        } else {
+                            PukaarApp.instance.sessionStore.setMockDrillPassed(true)
+                            PukaarApp.instance.sessionStore.setProtectionReady(true)
+                        }
+                    } else {
+                        runCatching { PukaarApp.instance.repository.markSafe(eventId) }
                     }
-                    EmergencyForegroundService.stop(context)
-                    onClosed()
-                } else {
-                    runCatching { PukaarApp.instance.repository.markSafe(eventId) }
-                    EmergencyForegroundService.stop(context)
+                } finally {
+                    runCatching { EmergencyForegroundService.stop(context) }
                     onClosed()
                 }
             }

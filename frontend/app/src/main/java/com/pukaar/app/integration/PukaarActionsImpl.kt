@@ -8,7 +8,6 @@ import com.pukaar.app.data.api.ElderlySettingsDto
 import com.pukaar.app.data.api.ProfileUpdateRequest
 import com.pukaar.app.data.api.TriggerRequest
 import com.pukaar.app.emergency.EmergencyForegroundService
-import com.pukaar.app.emergency.OemBatteryHelper
 import com.pukaar.app.payment.RazorpayPaymentBridge
 import com.pukaar.app.ui.navigation.PukaarActions
 import com.pukaar.app.ui.navigation.SubscriptionUi
@@ -81,10 +80,11 @@ class PukaarActionsImpl(
                     )
                 }
 
-                if (settings.alertContacts) {
+                // Never open SMS composer / send bulk SMS during mock drills — that freezes UX.
+                if (!mockDrill && settings.alertContacts) {
                     val smsResult = withContext(Dispatchers.IO) {
                         EmergencyAlertHelper.sendSmsToContactsInBackground(
-                            context, event, isSos, mockDrill
+                            context, event, isSos, isMockDrill = false
                         )
                     }
                     when {
@@ -104,7 +104,9 @@ class PukaarActionsImpl(
                     EmergencyAlertHelper.call112InBackground(context)
                 }
 
-                onEmergency(id, mockDrill)
+                withContext(Dispatchers.Main) {
+                    onEmergency(id, mockDrill)
+                }
             } catch (e: Exception) {
                 onError(e.message ?: "Could not start emergency")
             }
@@ -162,12 +164,12 @@ class PukaarActionsImpl(
 
     override fun openContact(contact: ContactUiModel) {
         val code = SmsHelper.generateVerificationCode()
-        val name = runCatching {
-            kotlinx.coroutines.runBlocking { PukaarApp.instance.repository.me().fullName }
-        }.getOrNull()
-        val message = SmsHelper.buildVerificationMessage(contact.name, code, name)
         scope.launch {
-            SmsHelper.sendSmsInBackground(context, contact.phoneNumber, message)
+            val name = runCatching { PukaarApp.instance.repository.me().fullName }.getOrNull()
+            val message = SmsHelper.buildVerificationMessage(contact.name, code, name)
+            withContext(Dispatchers.IO) {
+                SmsHelper.sendSmsInBackground(context, contact.phoneNumber, message)
+            }
             runCatching { PukaarApp.instance.repository.verifyContact(contact.id, code) }
         }
     }
@@ -358,8 +360,4 @@ class PukaarActionsImpl(
     override fun openFaqEntry(entry: FaqEntry) = Unit
 
     override fun openSettings() = Unit
-
-    init {
-        OemBatteryHelper.requestUnrestrictedBattery(context)
-    }
 }
