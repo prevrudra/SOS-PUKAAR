@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -38,12 +40,18 @@ fun SplashRoute(
 @Composable
 fun SplashScreen(modifier: Modifier = Modifier) {
     PremiumBackground(modifier) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding(),
+            contentAlignment = Alignment.Center
+        ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     text = "PUKAAR",
                     color = Color.White,
-                    fontSize = 48.sp,
+                    fontSize = 44.sp,
                     fontWeight = FontWeight.Black,
                     letterSpacing = 4.sp
                 )
@@ -53,11 +61,11 @@ fun SplashScreen(modifier: Modifier = Modifier) {
                     color = TextSecondary,
                     fontSize = 14.sp
                 )
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(28.dp))
                 Text(
                     text = "●",
                     color = PukaarRed,
-                    fontSize = 24.sp
+                    fontSize = 20.sp
                 )
             }
         }

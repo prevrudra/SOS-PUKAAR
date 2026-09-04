@@ -3,9 +3,11 @@ package com.pukaar.app.ui.component
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -41,7 +43,7 @@ fun PremiumBackground(modifier: Modifier = Modifier, content: @Composable () -> 
                 .fillMaxSize()
                 .background(
                     Brush.radialGradient(
-                        colors = listOf(PukaarRed.copy(alpha = 0.22f), Color.Transparent),
+                        colors = listOf(PukaarRed.copy(alpha = 0.18f), Color.Transparent),
                         radius = 900f
                     )
                 )
@@ -53,18 +55,17 @@ fun PremiumBackground(modifier: Modifier = Modifier, content: @Composable () -> 
 @Composable
 fun PremiumCard(
     modifier: Modifier = Modifier,
-    content: @Composable () -> Unit
+    content: @Composable ColumnScope.() -> Unit
 ) {
-    Box(
+    Column(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
-            .background(SurfaceCard.copy(alpha = 0.92f))
-            .border(1.dp, Outline.copy(alpha = 0.6f), RoundedCornerShape(20.dp))
-            .padding(20.dp)
-    ) {
-        content()
-    }
+            .background(SurfaceCard.copy(alpha = 0.94f))
+            .border(1.dp, Outline.copy(alpha = 0.55f), RoundedCornerShape(20.dp))
+            .padding(18.dp),
+        content = content
+    )
 }
 
 @Composable
@@ -78,9 +79,7 @@ fun PremiumPrimaryButton(
     androidx.compose.material3.Button(
         onClick = onClick,
         enabled = enabled && !loading,
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 2.dp),
+        modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(14.dp),
         colors = androidx.compose.material3.ButtonDefaults.buttonColors(
             containerColor = PukaarRed,
