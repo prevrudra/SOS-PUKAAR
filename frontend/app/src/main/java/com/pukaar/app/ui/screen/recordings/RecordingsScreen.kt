@@ -1,5 +1,7 @@
 package com.pukaar.app.ui.screen.recordings
 
+import android.media.AudioAttributes
+import android.media.MediaMetadataRetriever
 import android.media.MediaPlayer
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -19,11 +21,13 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -49,9 +53,13 @@ import com.pukaar.app.ui.theme.TextSecondary
 import com.pukaar.app.ui.theme.TextTertiary
 import com.pukaar.app.util.userMessage
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.Locale
+import java.util.concurrent.TimeUnit
 
 @Composable
 fun RecordingsScreen(
@@ -63,6 +71,8 @@ fun RecordingsScreen(
     var events by remember { mutableStateOf<List<EmergencyDto>>(emptyList()) }
     var playingKey by remember { mutableStateOf<String?>(null) }
     var bufferingKey by remember { mutableStateOf<String?>(null) }
+    var positionMs by remember { mutableIntStateOf(0) }
+    var durationMs by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val player = remember { MediaPlayer() }
@@ -74,6 +84,17 @@ fun RecordingsScreen(
                 player.reset()
                 player.release()
             }
+        }
+    }
+
+    LaunchedEffect(playingKey) {
+        while (isActive && playingKey != null) {
+            runCatching {
+                positionMs = player.currentPosition.coerceAtLeast(0)
+                val d = player.duration
+                if (d > 0) durationMs = d
+            }
+            delay(200)
         }
     }
 
@@ -99,6 +120,8 @@ fun RecordingsScreen(
         }
         playingKey = null
         bufferingKey = null
+        positionMs = 0
+        durationMs = 0
     }
 
     fun playSegment(eventId: String, segment: AudioSegmentDto) {
@@ -114,19 +137,43 @@ fun RecordingsScreen(
             try {
                 val cacheDir = File(context.cacheDir, "recordings").apply { mkdirs() }
                 val out = File(cacheDir, "$segmentId.m4a")
-                if (!out.exists() || out.length() == 0L) {
+                if (!out.exists() || out.length() < 1024L) {
                     withContext(Dispatchers.IO) {
+                        out.delete()
                         val body = PukaarApp.instance.repository.downloadAudioSegment(eventId, segmentId)
                         body.byteStream().use { input ->
                             out.outputStream().use { output -> input.copyTo(output) }
                         }
                     }
                 }
+                if (!out.exists() || out.length() < 1024L) {
+                    error = "Recording file is empty or incomplete"
+                    bufferingKey = null
+                    return@launch
+                }
+                val metaDuration = withContext(Dispatchers.IO) { readDurationMs(out) }
                 withContext(Dispatchers.Main) {
                     player.reset()
+                    player.setAudioAttributes(
+                        AudioAttributes.Builder()
+                            .setUsage(AudioAttributes.USAGE_MEDIA)
+                            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                            .build()
+                    )
                     player.setDataSource(out.absolutePath)
-                    player.setOnCompletionListener { playingKey = null }
                     player.prepare()
+                    var resolved = player.duration
+                    if (resolved <= 0 && metaDuration > 0) resolved = metaDuration
+                    if (resolved <= 0) {
+                        val fallbackSec = (segment.durationSec ?: 60).coerceAtLeast(1)
+                        resolved = fallbackSec * 1000
+                    }
+                    durationMs = resolved
+                    positionMs = 0
+                    player.setOnCompletionListener {
+                        playingKey = null
+                        positionMs = durationMs
+                    }
                     player.start()
                     playingKey = key
                     bufferingKey = null
@@ -197,11 +244,19 @@ fun RecordingsScreen(
                             )
                             segments.sortedBy { it.index ?: 0 }.forEach { seg ->
                                 val key = "$eventId:${seg.id}"
+                                val isPlaying = playingKey == key
+                                val listedSec = (seg.durationSec ?: 60).coerceAtLeast(1)
+                                val totalMs = if (isPlaying && durationMs > 0) durationMs else listedSec * 1000
+                                val progress = if (isPlaying && totalMs > 0) {
+                                    (positionMs.toFloat() / totalMs.toFloat()).coerceIn(0f, 1f)
+                                } else {
+                                    0f
+                                }
                                 Row(
                                     Modifier
                                         .fillMaxWidth()
                                         .background(SurfaceElevated, RoundedCornerShape(10.dp))
-                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Column(Modifier.weight(1f)) {
@@ -214,10 +269,24 @@ fun RecordingsScreen(
                                             fontSize = 14.sp
                                         )
                                         Text(
-                                            text = "${seg.durationSec ?: 60}s · uploaded",
+                                            text = if (isPlaying) {
+                                                "${formatMmSs(positionMs)} / ${formatMmSs(totalMs)}"
+                                            } else {
+                                                "${formatMmSs(listedSec * 1000)} · uploaded"
+                                            },
                                             color = TextSecondary,
                                             fontSize = 11.sp
                                         )
+                                        if (isPlaying) {
+                                            LinearProgressIndicator(
+                                                progress = { progress },
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(top = 6.dp),
+                                                color = SuccessGreen,
+                                                trackColor = TextTertiary.copy(alpha = 0.3f)
+                                            )
+                                        }
                                     }
                                     when {
                                         bufferingKey == key -> CircularProgressIndicator(
@@ -227,7 +296,7 @@ fun RecordingsScreen(
                                         )
                                         else -> IconButton(onClick = { playSegment(eventId, seg) }) {
                                             Icon(
-                                                imageVector = if (playingKey == key) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                                                imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                                                 contentDescription = null,
                                                 tint = SuccessGreen
                                             )
@@ -242,5 +311,27 @@ fun RecordingsScreen(
                 }
             }
         }
+    }
+}
+
+private fun formatMmSs(ms: Int): String {
+    val totalSec = TimeUnit.MILLISECONDS.toSeconds(ms.coerceAtLeast(0).toLong())
+    val m = totalSec / 60
+    val s = totalSec % 60
+    return String.format(Locale.US, "%d:%02d", m, s)
+}
+
+private fun readDurationMs(file: File): Int {
+    val retriever = MediaMetadataRetriever()
+    return try {
+        retriever.setDataSource(file.absolutePath)
+        retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+            ?.toIntOrNull()
+            ?.coerceAtLeast(0)
+            ?: 0
+    } catch (_: Exception) {
+        0
+    } finally {
+        runCatching { retriever.release() }
     }
 }

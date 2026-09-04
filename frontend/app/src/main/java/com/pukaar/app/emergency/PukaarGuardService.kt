@@ -10,7 +10,10 @@ import androidx.core.app.NotificationCompat
 import com.pukaar.app.MainActivity
 import com.pukaar.app.PukaarApp
 import com.pukaar.app.R
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 /**
  * Keeps PUKAAR alive after boot so hardware SOS intents and emergency workers survive OEM kills.
@@ -53,9 +56,21 @@ class PukaarGuardService : Service() {
         private const val NOTIFICATION_ID = 7001
         const val CHANNEL_GUARD = "pukaar_guard"
 
-        fun start(context: Context) {
+        fun start(context: Context, hasSession: Boolean? = null) {
             val app = context.applicationContext
-            if (!hasSession(app)) return
+            if (hasSession == true) {
+                startForegroundSafe(app)
+                return
+            }
+            if (hasSession == false) return
+            // Boot / task-removed: check session off the main thread
+            CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+                val token = com.pukaar.app.data.local.SessionStore(app).token()
+                if (token != null) startForegroundSafe(app)
+            }
+        }
+
+        private fun startForegroundSafe(app: Context) {
             runCatching {
                 app.startForegroundService(Intent(app, PukaarGuardService::class.java))
             }.onFailure {
@@ -65,12 +80,6 @@ class PukaarGuardService : Service() {
 
         fun stop(context: Context) {
             context.applicationContext.stopService(Intent(context, PukaarGuardService::class.java))
-        }
-
-        private fun hasSession(context: Context): Boolean {
-            return runBlocking {
-                com.pukaar.app.data.local.SessionStore(context).token() != null
-            }
         }
     }
 }

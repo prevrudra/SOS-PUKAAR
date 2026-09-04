@@ -157,7 +157,7 @@ fun OnboardingConsentScreen(onComplete: () -> Unit) {
 
                 Spacer(Modifier.height(16.dp))
                 Text(
-                    text = "Emergency alerts go to your trusted contacts via your phone’s SMS. After setup, enable Volume SOS in Accessibility so triple Volume Up opens PUKAAR even when the app is closed.",
+                    text = "Emergency alerts go to your trusted contacts via your phone’s SMS. Enable Volume SOS later in Settings so triple Volume Up can open PUKAAR when the app is closed.",
                     color = TextTertiary,
                     fontSize = 12.sp,
                     lineHeight = 17.sp
