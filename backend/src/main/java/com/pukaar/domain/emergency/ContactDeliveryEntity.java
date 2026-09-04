@@ -25,6 +25,8 @@ public class ContactDeliveryEntity {
     private String contactPhone;
     @Builder.Default
     private String channel = "PUSH";
+    @Column(name = "channel_used", length = 32)
+    private String channelUsed;
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     @Builder.Default

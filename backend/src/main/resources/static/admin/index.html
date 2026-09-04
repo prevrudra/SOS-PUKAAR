@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PUKAAR Admin</title>
+  <style>
+    :root { --bg:#0a0a0a; --card:#141414; --border:#2a2a2a; --text:#f5f5f5; --muted:#888; --green:#22c55e; --red:#ef4444; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:system-ui,sans-serif; background:var(--bg); color:var(--text); }
+    .wrap { max-width:1100px; margin:0 auto; padding:24px; }
+    h1 { margin:0 0 4px; font-size:1.5rem; }
+    .sub { color:var(--muted); margin-bottom:24px; font-size:.9rem; }
+    .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:16px; margin-bottom:16px; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; }
+    .stat .label { color:var(--muted); font-size:.75rem; text-transform:uppercase; }
+    .stat .value { font-size:1.6rem; font-weight:700; margin-top:4px; }
+    input, button, select { font:inherit; }
+    input { width:100%; padding:10px 12px; border-radius:8px; border:1px solid var(--border); background:#111; color:var(--text); }
+    button { padding:10px 16px; border-radius:8px; border:none; background:var(--green); color:#000; font-weight:600; cursor:pointer; }
+    button.secondary { background:#222; color:var(--text); border:1px solid var(--border); }
+    .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+    table { width:100%; border-collapse:collapse; font-size:.85rem; }
+    th, td { text-align:left; padding:8px; border-bottom:1px solid var(--border); }
+    th { color:var(--muted); font-weight:600; }
+    .tabs { display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
+    .tabs button { background:#1a1a1a; color:var(--text); border:1px solid var(--border); }
+    .tabs button.active { background:var(--green); color:#000; border-color:var(--green); }
+    .hidden { display:none; }
+    .err { color:var(--red); font-size:.85rem; margin-top:8px; }
+    .login { max-width:400px; margin:80px auto; }
+  </style>
+</head>
+<body>
+  <div id="loginView" class="wrap login">
+    <h1>PUKAAR Admin</h1>
+    <p class="sub">Sign in with your admin phone number</p>
+    <div class="card">
+      <label>Phone (+91…)</label>
+      <input id="phone" placeholder="+919876543210" style="margin:8px 0 12px" />
+      <div class="row">
+        <button onclick="requestOtp()">Send OTP</button>
+      </div>
+      <input id="otp" placeholder="OTP" style="margin:12px 0" class="hidden" />
+      <button id="verifyBtn" onclick="verifyOtp()" class="hidden" style="width:100%">Verify & Login</button>
+      <div id="loginErr" class="err"></div>
+    </div>
+  </div>
+
+  <div id="dashView" class="wrap hidden">
+    <div class="row" style="justify-content:space-between;margin-bottom:16px">
+      <div>
+        <h1>PUKAAR Admin</h1>
+        <p class="sub" id="adminPhone"></p>
+      </div>
+      <button class="secondary" onclick="logout()">Logout</button>
+    </div>
+
+    <div class="grid" id="statsGrid"></div>
+
+    <div class="tabs">
+      <button class="active" data-tab="users" onclick="switchTab('users')">Users</button>
+      <button data-tab="subscriptions" onclick="switchTab('subscriptions')">Subscriptions</button>
+      <button data-tab="payments" onclick="switchTab('payments')">Payments</button>
+    </div>
+
+    <div class="card">
+      <div id="tableUsers"></div>
+      <div id="tableSubscriptions" class="hidden"></div>
+      <div id="tablePayments" class="hidden"></div>
+    </div>
+  </div>
+
+<script>
+const API = window.location.origin;
+let token = localStorage.getItem('pukaar_admin_token') || '';
+
+function headers() {
+  return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token };
+}
+
+async function api(path, opts = {}) {
+  const res = await fetch(API + path, { ...opts, headers: { ...headers(), ...(opts.headers || {}) } });
+  if (res.status === 401) { logout(); throw new Error('Session expired'); }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.message || 'Request failed');
+  return data;
+}
+
+function show(el) { el.classList.remove('hidden'); }
+function hide(el) { el.classList.add('hidden'); }
+
+async function requestOtp() {
+  document.getElementById('loginErr').textContent = '';
+  try {
+    await api('/api/v1/auth/otp/request', { method: 'POST', body: JSON.stringify({ phone: document.getElementById('phone').value }) });
+    show(document.getElementById('otp'));
+    show(document.getElementById('verifyBtn'));
+  } catch (e) { document.getElementById('loginErr').textContent = e.message; }
+}
+
+async function verifyOtp() {
+  document.getElementById('loginErr').textContent = '';
+  try {
+    const data = await api('/api/v1/auth/otp/verify', {
+      method: 'POST',
+      body: JSON.stringify({ phone: document.getElementById('phone').value, code: document.getElementById('otp').value, deviceId: 'admin-web' })
+    });
+    if (data.user?.role !== 'ADMIN') throw new Error('This account is not an admin');
+    token = data.accessToken;
+    localStorage.setItem('pukaar_admin_token', token);
+    await loadDashboard(data.user.phone);
+  } catch (e) { document.getElementById('loginErr').textContent = e.message; }
+}
+
+function logout() {
+  token = '';
+  localStorage.removeItem('pukaar_admin_token');
+  hide(document.getElementById('dashView'));
+  show(document.getElementById('loginView'));
+}
+
+function switchTab(tab) {
+  document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  ['users','subscriptions','payments'].forEach(t => {
+    const el = document.getElementById('table' + t.charAt(0).toUpperCase() + t.slice(1));
+    t === tab ? show(el) : hide(el);
+  });
+}
+
+function table(headers, rows) {
+  const th = headers.map(h => `<th>${h}</th>`).join('');
+  const tr = rows.map(r => `<tr>${r.map(c => `<td>${c ?? '—'}</td>`).join('')}</tr>`).join('');
+  return `<table><thead><tr>${th}</tr></thead><tbody>${tr || '<tr><td colspan="99">No data</td></tr>'}</tbody></table>`;
+}
+
+async function loadDashboard(phone) {
+  hide(document.getElementById('loginView'));
+  show(document.getElementById('dashView'));
+  document.getElementById('adminPhone').textContent = phone || '';
+
+  const stats = await api('/api/v1/admin/stats');
+  document.getElementById('statsGrid').innerHTML = [
+    ['Users', stats.totalUsers],
+    ['Active subs', stats.activeSubscriptions],
+    ['Paid orders', stats.paidOrders],
+    ['Revenue ₹', stats.revenueInr],
+    ['Emergencies', stats.totalEmergencies]
+  ].map(([l,v]) => `<div class="card stat"><div class="label">${l}</div><div class="value">${v}</div></div>`).join('');
+
+  const users = await api('/api/v1/admin/users');
+  document.getElementById('tableUsers').innerHTML = table(
+    ['Phone','Name','Role','Protection','Created'],
+    users.items.map(u => [u.phone, u.fullName, u.role, u.protectionReady, (u.createdAt||'').slice(0,10)])
+  );
+
+  const subs = await api('/api/v1/admin/subscriptions');
+  document.getElementById('tableSubscriptions').innerHTML = table(
+    ['Plan','Status','Price','Ends','Platform'],
+    subs.items.map(s => [s.plan, s.status, '₹'+s.priceInr, (s.endsAt||'').slice(0,10), s.storePlatform])
+  );
+
+  const pays = await api('/api/v1/admin/payments');
+  document.getElementById('tablePayments').innerHTML = table(
+    ['Plan','Amount','Status','Order ID','Paid at'],
+    pays.items.map(p => [p.plan, '₹'+p.amountInr, p.status, p.razorpayOrderId, (p.paidAt||'').slice(0,16).replace('T',' ')])
+  );
+}
+
+if (token) {
+  api('/api/v1/me').then(u => {
+    if (u.role !== 'ADMIN') throw new Error('not admin');
+    loadDashboard(u.phone);
+  }).catch(() => logout());
+}
+</script>
+</body>
+</html>

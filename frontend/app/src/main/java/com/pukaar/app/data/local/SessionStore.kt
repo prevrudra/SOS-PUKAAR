@@ -20,6 +20,15 @@ class SessionStore(private val context: Context) {
     private val mockDrillPassedKey = booleanPreferencesKey("mock_drill_passed")
     private val nameKey = stringPreferencesKey("full_name")
     private val phoneKey = stringPreferencesKey("phone")
+    private val sosAutoCallKey = booleanPreferencesKey("sos_auto_call")
+    private val sosLocationKey = booleanPreferencesKey("sos_location")
+    private val sosAudioKey = booleanPreferencesKey("sos_audio")
+    private val sosAlertContactsKey = booleanPreferencesKey("sos_alert_contacts")
+    private val notifEmergencyKey = booleanPreferencesKey("notif_emergency")
+    private val notifDrillKey = booleanPreferencesKey("notif_drill")
+    private val notifMarketingKey = booleanPreferencesKey("notif_marketing")
+    private val doctorPhoneKey = stringPreferencesKey("doctor_phone")
+    private val referralCodeKey = stringPreferencesKey("referral_code")
 
     val accessToken: Flow<String?> = context.dataStore.data.map { it[tokenKey] }
     val homeMode: Flow<String> = context.dataStore.data.map { it[homeModeKey] ?: "SOS" }
@@ -56,6 +65,7 @@ class SessionStore(private val context: Context) {
             it[onboardingKey] = user.onboardingComplete == true
             it[protectionReadyKey] = user.protectionReady == true
             it[mockDrillPassedKey] = user.mockDrillPassed == true
+            user.referralCode?.let { c -> it[referralCodeKey] = c }
         }
     }
 
@@ -78,4 +88,65 @@ class SessionStore(private val context: Context) {
     suspend fun clear() {
         context.dataStore.edit { it.clear() }
     }
+
+    suspend fun saveSosSettings(autoCall: Boolean, location: Boolean, audio: Boolean, alertContacts: Boolean) {
+        context.dataStore.edit {
+            it[sosAutoCallKey] = autoCall
+            it[sosLocationKey] = location
+            it[sosAudioKey] = audio
+            it[sosAlertContactsKey] = alertContacts
+        }
+    }
+
+    suspend fun sosSettings(): SosSettingsPrefs {
+        val prefs = context.dataStore.data.first()
+        return SosSettingsPrefs(
+            autoCall = prefs[sosAutoCallKey] ?: true,
+            location = prefs[sosLocationKey] ?: true,
+            audio = prefs[sosAudioKey] ?: true,
+            alertContacts = prefs[sosAlertContactsKey] ?: true
+        )
+    }
+
+    suspend fun saveNotificationPrefs(emergency: Boolean, drill: Boolean, marketing: Boolean) {
+        context.dataStore.edit {
+            it[notifEmergencyKey] = emergency
+            it[notifDrillKey] = drill
+            it[notifMarketingKey] = marketing
+        }
+    }
+
+    suspend fun notificationPrefs(): NotificationPrefs {
+        val prefs = context.dataStore.data.first()
+        return NotificationPrefs(
+            emergency = prefs[notifEmergencyKey] ?: true,
+            drill = prefs[notifDrillKey] ?: true,
+            marketing = prefs[notifMarketingKey] ?: false
+        )
+    }
+
+    suspend fun saveDoctorPhone(phone: String) {
+        context.dataStore.edit { it[doctorPhoneKey] = phone }
+    }
+
+    suspend fun doctorPhone(): String = context.dataStore.data.first()[doctorPhoneKey] ?: ""
+
+    suspend fun saveReferralCode(code: String) {
+        context.dataStore.edit { it[referralCodeKey] = code }
+    }
+
+    suspend fun referralCode(): String = context.dataStore.data.first()[referralCodeKey] ?: ""
 }
+
+data class SosSettingsPrefs(
+    val autoCall: Boolean,
+    val location: Boolean,
+    val audio: Boolean,
+    val alertContacts: Boolean
+)
+
+data class NotificationPrefs(
+    val emergency: Boolean,
+    val drill: Boolean,
+    val marketing: Boolean
+)

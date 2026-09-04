@@ -1,9 +1,26 @@
 package com.pukaar.app.ui.screen.mockdrill
 
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.pukaar.app.R
+import com.pukaar.app.ui.component.PrimaryButton
+import com.pukaar.app.ui.theme.TextSecondary
+import androidx.compose.ui.tooling.preview.Preview
 import com.pukaar.app.ui.component.ImagePage
 import com.pukaar.app.ui.component.ImagePagerScreen
 import com.pukaar.app.ui.screen.home.HomeMode
@@ -60,13 +77,33 @@ private val HelpDrillPages = listOf(
 fun MockDrillScreen(
     mode: HomeMode,
     onBack: () -> Unit,
+    onStartLiveDrill: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val pages = when (mode) {
         HomeMode.SOS -> SosDrillPages
         HomeMode.HELP -> HelpDrillPages
     }
-    ImagePagerScreen(pages = pages, onBack = onBack, modifier = modifier)
+    Box(modifier = modifier.fillMaxSize()) {
+        ImagePagerScreen(pages = pages, onBack = onBack, modifier = Modifier.fillMaxSize())
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(horizontal = 24.dp, vertical = 56.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.mock_drill_start_hint),
+                color = TextSecondary,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+            PrimaryButton(
+                text = stringResource(R.string.mock_drill_start_live),
+                onClick = onStartLiveDrill
+            )
+        }
+    }
 }
 
 @Preview(name = "SOS drill", showBackground = true, backgroundColor = 0xFF000000, heightDp = 700)

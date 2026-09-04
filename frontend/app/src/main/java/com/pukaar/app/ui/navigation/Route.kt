@@ -11,6 +11,11 @@ sealed class Route(val path: String) {
 
     // Priority menu items
     data object AddContact : Route("add_contact")
+    data object EditContact : Route("edit_contact/{contactId}") {
+        fun pathFor(id: String) = "edit_contact/$id"
+        const val ARG_CONTACT_ID = "contactId"
+    }
+    data object Settings : Route("settings")
     data object SosSettings : Route("sos_settings")
     data object MockDrill : Route("mock_drill")
     data object ViewContacts : Route("view_contacts")

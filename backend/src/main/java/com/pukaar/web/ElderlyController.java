@@ -37,6 +37,10 @@ public class ElderlyController {
         if (req.getAmbulanceNumber() != null) s.setAmbulanceNumber(req.getAmbulanceNumber());
         if (req.getDoctorName() != null) s.setDoctorName(req.getDoctorName());
         if (req.getDoctorPhone() != null) s.setDoctorPhone(req.getDoctorPhone());
+        if (req.getBloodGroup() != null) s.setBloodGroup(req.getBloodGroup());
+        if (req.getAllergies() != null) s.setAllergies(req.getAllergies());
+        if (req.getMedicalConditions() != null) s.setMedicalConditions(req.getMedicalConditions());
+        if (req.getMedicationReminderEnabled() != null) s.setMedicationReminderEnabled(req.getMedicationReminderEnabled());
         return toDto(settingsRepo.save(s));
     }
 
@@ -64,6 +68,10 @@ public class ElderlyController {
         m.put("ambulanceNumber", s.getAmbulanceNumber());
         m.put("doctorName", s.getDoctorName());
         m.put("doctorPhone", s.getDoctorPhone());
+        m.put("bloodGroup", s.getBloodGroup());
+        m.put("allergies", s.getAllergies());
+        m.put("medicalConditions", s.getMedicalConditions());
+        m.put("medicationReminderEnabled", s.isMedicationReminderEnabled());
         return m;
     }
 
@@ -77,5 +85,9 @@ public class ElderlyController {
         private String ambulanceNumber;
         private String doctorName;
         private String doctorPhone;
+        private String bloodGroup;
+        private String allergies;
+        private String medicalConditions;
+        private Boolean medicationReminderEnabled;
     }
 }

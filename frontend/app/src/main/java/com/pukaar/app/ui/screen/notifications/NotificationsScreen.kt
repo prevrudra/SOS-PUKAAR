@@ -25,12 +25,13 @@ import com.pukaar.app.ui.theme.PukaarTheme
 fun NotificationsScreen(
     onBack: () -> Unit,
     onSave: (NotificationPreferences) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    initialPreferences: NotificationPreferences = NotificationPreferences(true, true, true, false)
 ) {
-    var alerts by remember { mutableStateOf(true) }
-    var inactivity by remember { mutableStateOf(true) }
-    var medication by remember { mutableStateOf(true) }
-    var promotions by remember { mutableStateOf(false) }
+    var alerts by remember { mutableStateOf(initialPreferences.alertNotifications) }
+    var inactivity by remember { mutableStateOf(initialPreferences.inactivityAlerts) }
+    var medication by remember { mutableStateOf(initialPreferences.medicationReminders) }
+    var promotions by remember { mutableStateOf(initialPreferences.promotions) }
 
     PukaarScreen(
         title = stringResource(R.string.notifications_title),

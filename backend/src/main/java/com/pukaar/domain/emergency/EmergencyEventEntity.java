@@ -39,6 +39,10 @@ public class EmergencyEventEntity {
     private Call112Status call112Status = Call112Status.NOT_STARTED;
     @Column(name = "police_station_id")
     private UUID policeStationId;
+    @Column(name = "battery_pct")
+    private Integer batteryPct;
+    @Column(name = "network_type", length = 32)
+    private String networkType;
     @Enumerated(EnumType.STRING)
     @Column(name = "closure_reason", length = 30)
     private ClosureReason closureReason;

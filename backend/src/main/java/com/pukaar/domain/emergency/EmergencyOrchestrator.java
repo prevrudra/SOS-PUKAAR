@@ -8,6 +8,7 @@ import com.pukaar.domain.hospital.HospitalEntity;
 import com.pukaar.domain.hospital.HospitalRepository;
 import com.pukaar.domain.evidence.AudioSegmentEntity;
 import com.pukaar.domain.evidence.AudioSegmentRepository;
+import com.pukaar.domain.evidence.EvidenceStorageService;
 import com.pukaar.domain.notification.NotificationService;
 import com.pukaar.domain.police.PoliceStationEntity;
 import com.pukaar.domain.police.PoliceStationRepository;
@@ -18,7 +19,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.Instant;
 import java.util.*;
 import java.util.UUID;
@@ -31,6 +37,7 @@ public class EmergencyOrchestrator {
     private final ContactDeliveryRepository deliveryRepo;
     private final EmergencyAuditRepository auditRepo;
     private final AudioSegmentRepository audioRepo;
+    private final EvidenceStorageService evidenceStorage;
     private final TrustedContactRepository contactRepo;
     private final PoliceStationRepository policeRepo;
     private final HospitalRepository hospitalRepo;
@@ -41,7 +48,7 @@ public class EmergencyOrchestrator {
 
     @Transactional
     public Map<String, Object> trigger(UUID userId, TriggerType triggerType, Double lat, Double lng,
-                                       Double accuracy, boolean mockDrill) {
+                                       Double accuracy, boolean mockDrill, Integer batteryPct, String networkType) {
         var existing = eventRepo.findFirstByUserIdAndClosedAtIsNullOrderByStartedAtDesc(userId);
         if (existing.isPresent()) {
             EmergencyEventEntity active = existing.get();
@@ -74,6 +81,8 @@ public class EmergencyOrchestrator {
                 .triggerType(triggerType)
                 .mockDrill(mockDrill)
                 .status(EmergencyStatus.TRIGGERED)
+                .batteryPct(batteryPct)
+                .networkType(networkType)
                 .build();
         event = eventRepo.save(event);
         audit(event.getId(), userId, "TRIGGERED", Map.of("trigger", triggerType.name(), "mock", mockDrill));
@@ -120,6 +129,15 @@ public class EmergencyOrchestrator {
     }
 
     @Transactional
+    public Map<String, Object> updateTelemetry(UUID userId, UUID eventId, Integer batteryPct, String networkType) {
+        EmergencyEventEntity event = requireOwnedActive(userId, eventId);
+        if (batteryPct != null) event.setBatteryPct(batteryPct);
+        if (networkType != null) event.setNetworkType(networkType);
+        eventRepo.save(event);
+        return toEventDto(event, true);
+    }
+
+    @Transactional
     public Map<String, Object> updateLocation(UUID userId, UUID eventId, double lat, double lng, Double accuracy) {
         EmergencyEventEntity event = requireOwnedActive(userId, eventId);
         applyLocation(event, lat, lng, accuracy);
@@ -161,6 +179,61 @@ public class EmergencyOrchestrator {
         m.put("cloudSafe", false);
         m.put("message", "Segment not cloud-safe until upload succeeds");
         return m;
+    }
+
+    @Transactional
+    public Map<String, Object> uploadAudioSegment(UUID userId, UUID eventId, UUID segmentId, MultipartFile file) {
+        requireOwnedActive(userId, eventId);
+        AudioSegmentEntity segment = audioRepo.findById(segmentId)
+                .orElseThrow(() -> new ApiException("SEGMENT_NOT_FOUND", "Audio segment not found"));
+        if (!segment.getEventId().equals(eventId)) {
+            throw new ApiException("SEGMENT_MISMATCH", "Segment does not belong to event");
+        }
+        if (file == null || file.isEmpty()) {
+            throw new ApiException("EMPTY_FILE", "Audio file is empty");
+        }
+        segment.setUploadStatus(UploadStatus.UPLOADING);
+        audioRepo.save(segment);
+        try {
+            String storageKey = evidenceStorage.store(eventId, segmentId, file);
+            Path stored = Paths.get(evidenceStoragePath()).resolve(storageKey);
+            String checksum = HashUtil.sha256(Files.newInputStream(stored));
+            if (segment.getChecksumSha256() != null
+                    && !segment.getChecksumSha256().equalsIgnoreCase(checksum)) {
+                Files.deleteIfExists(stored);
+                throw new ApiException("CHECKSUM_MISMATCH", "Uploaded file checksum does not match");
+            }
+            segment.setStorageKey(storageKey);
+            segment.setByteSize(Files.size(stored));
+            if (segment.getChecksumSha256() == null) {
+                segment.setChecksumSha256(checksum);
+            }
+            segment.setUploadStatus(UploadStatus.UPLOADED);
+            segment.setUploadedAt(Instant.now());
+            audioRepo.save(segment);
+            audit(eventId, userId, "AUDIO_SEGMENT_UPLOADED", Map.of(
+                    "segmentId", segmentId.toString(),
+                    "storageKey", storageKey
+            ));
+            Map<String, Object> m = new LinkedHashMap<>();
+            m.put("segmentId", segment.getId());
+            m.put("uploadStatus", segment.getUploadStatus());
+            m.put("cloudSafe", true);
+            m.put("message", "Evidence segment stored on server");
+            return m;
+        } catch (ApiException e) {
+            segment.setUploadStatus(UploadStatus.FAILED);
+            audioRepo.save(segment);
+            throw e;
+        } catch (IOException e) {
+            segment.setUploadStatus(UploadStatus.FAILED);
+            audioRepo.save(segment);
+            throw new ApiException("UPLOAD_FAILED", "Could not store audio evidence");
+        }
+    }
+
+    private String evidenceStoragePath() {
+        return props.getStorage().getLocalPath();
     }
 
     @Transactional
@@ -336,6 +409,8 @@ public class EmergencyOrchestrator {
         m.put("mockDrill", event.isMockDrill());
         m.put("latitude", event.getLatitude());
         m.put("longitude", event.getLongitude());
+        m.put("batteryPct", event.getBatteryPct());
+        m.put("networkType", event.getNetworkType());
         m.put("call112Status", event.getCall112Status());
         m.put("closureReason", event.getClosureReason());
         m.put("startedAt", event.getStartedAt());

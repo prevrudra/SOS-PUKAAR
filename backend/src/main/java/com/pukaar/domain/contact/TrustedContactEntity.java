@@ -26,6 +26,8 @@ public class TrustedContactEntity {
     @Builder.Default
     private ContactRole contactRole = ContactRole.SOS_TRUSTED;
     private String relationship;
+    @Column(columnDefinition = "TEXT")
+    private String notes;
     @Column(name = "priority_order", nullable = false)
     @Builder.Default
     private int priorityOrder = 1;

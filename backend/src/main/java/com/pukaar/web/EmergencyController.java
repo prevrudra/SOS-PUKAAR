@@ -6,7 +6,9 @@ import com.pukaar.domain.emergency.EmergencyOrchestrator;
 import com.pukaar.security.SecurityUtils;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.Map;
 import java.util.UUID;
@@ -26,7 +28,9 @@ public class EmergencyController {
                 req.getLatitude(),
                 req.getLongitude(),
                 req.getAccuracyM(),
-                Boolean.TRUE.equals(req.getMockDrill())
+                Boolean.TRUE.equals(req.getMockDrill()),
+                req.getBatteryPct(),
+                req.getNetworkType()
         );
     }
 
@@ -45,6 +49,11 @@ public class EmergencyController {
         return orchestrator.updateLocation(SecurityUtils.currentUserId(), id, req.getLatitude(), req.getLongitude(), req.getAccuracyM());
     }
 
+    @PostMapping("/{id}/telemetry")
+    public Map<String, Object> telemetry(@PathVariable UUID id, @RequestBody TelemetryRequest req) {
+        return orchestrator.updateTelemetry(SecurityUtils.currentUserId(), id, req.getBatteryPct(), req.getNetworkType());
+    }
+
     @PostMapping("/{id}/safe")
     public Map<String, Object> safe(@PathVariable UUID id, @RequestBody(required = false) SafeRequest req) {
         ClosureReason reason = req == null || req.getReason() == null ? ClosureReason.IM_SAFE : req.getReason();
@@ -59,6 +68,15 @@ public class EmergencyController {
     @PostMapping("/{id}/audio-segments/{segmentId}/uploaded")
     public Map<String, Object> uploaded(@PathVariable UUID id, @PathVariable UUID segmentId, @RequestBody UploadConfirmRequest req) {
         return orchestrator.markSegmentUploaded(SecurityUtils.currentUserId(), id, segmentId, req.getStorageKey());
+    }
+
+    @PostMapping(value = "/{id}/audio-segments/{segmentId}/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Map<String, Object> uploadSegment(
+            @PathVariable UUID id,
+            @PathVariable UUID segmentId,
+            @RequestParam("file") MultipartFile file
+    ) {
+        return orchestrator.uploadAudioSegment(SecurityUtils.currentUserId(), id, segmentId, file);
     }
 
     @PostMapping("/mock-drills/{drillId}/complete")
@@ -88,6 +106,8 @@ public class EmergencyController {
         private Double longitude;
         private Double accuracyM;
         private Boolean mockDrill;
+        private Integer batteryPct;
+        private String networkType;
     }
 
     @Data
@@ -95,6 +115,12 @@ public class EmergencyController {
         private double latitude;
         private double longitude;
         private Double accuracyM;
+    }
+
+    @Data
+    public static class TelemetryRequest {
+        private Integer batteryPct;
+        private String networkType;
     }
 
     @Data

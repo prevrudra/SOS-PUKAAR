@@ -80,7 +80,7 @@ pukaar:
   otp:
     length: 6
     ttl-seconds: 300
-    mock-enabled: ${OTP_MOCK_ENABLED:true}
+    mock-enabled: ${OTP_MOCK_ENABLED:false}
     mock-code: "123456"
   subscription:
     individual-price-inr: 499
@@ -107,6 +107,26 @@ pukaar:
     retry-max: 5
     retry-backoff-ms: 2000
     sms-fallback-enabled: ${SMS_FALLBACK:false}
+  razorpay:
+    key-id: ${RAZORPAY_KEY_ID:}
+    key-secret: ${RAZORPAY_KEY_SECRET:}
+    webhook-secret: ${RAZORPAY_WEBHOOK_SECRET:}
+  admin:
+    phone: ${ADMIN_PHONE:}
+  alerts:
+    whatsapp:
+      token: ${WHATSAPP_TOKEN:}
+      phone-number-id: ${WHATSAPP_PHONE_NUMBER_ID:}
+    sms:
+      endpoint: ${YOURBULKSMS_ENDPOINT:https://control.yourbulksms.net/api/sendhttp.php}
+      auth-key: ${YOURBULKSMS_AUTH_KEY:}
+      sender-id: ${YOURBULKSMS_SENDER:AXPONT}
+      route: ${YOURBULKSMS_ROUTE:2}
+      country: ${YOURBULKSMS_COUNTRY:0}
+      dlt-te-id: ${YOURBULKSMS_DLT_TE_ID:}
+      otp-template: ${YOURBULKSMS_OTP_TEMPLATE:Dear user , Your OTP is {#var#}. Use this to verify your Axispoint account within 10 minutes. For your security, do not share this code with anyone.}
+    fcm:
+      server-key: ${FCM_SERVER_KEY:}
 
 logging:
   level:

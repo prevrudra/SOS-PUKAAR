@@ -8,16 +8,16 @@ import com.pukaar.app.ui.screen.contacts.ContactType
 import com.pukaar.app.ui.screen.contacts.ContactUiModel
 import com.pukaar.app.util.SmsHelper
 import com.pukaar.app.util.userMessage
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import retrofit2.HttpException
 
 object ContactRepositoryBridge {
-    private val pendingCodes = mutableMapOf<String, String>()
 
-    fun roleFor(type: ContactType): String = when (type) {
-        ContactType.SOS -> "SOS_TRUSTED"
-        ContactType.HELP -> "HELP_MONITOR"
-        ContactType.INACTIVITY -> "HELP_BACKUP"
-    }
+    fun roleFor(type: ContactType): String = type.apiRole
+
+    fun typeFromRole(role: String?): ContactType =
+        ContactType.entries.firstOrNull { it.apiRole == role } ?: ContactType.SOS
 
     fun normalizePhone(mobile: String): String {
         val p = mobile.trim().replace(" ", "")
@@ -28,54 +28,53 @@ object ContactRepositoryBridge {
         }
     }
 
+    fun toRequest(draft: ContactDraft): ContactRequest = ContactRequest(
+        name = draft.name.trim(),
+        phone = normalizePhone(draft.mobile),
+        role = roleFor(draft.type),
+        relationship = draft.relationship.ifBlank { null },
+        notes = draft.notes.ifBlank { null },
+        priorityOrder = draft.priorityOrder
+    )
+
     suspend fun loadContacts(): List<ContactUiModel> {
         return PukaarApp.instance.repository.contacts().map { c ->
             ContactUiModel(
                 id = c.id ?: "",
                 name = c.name ?: "",
                 phoneNumber = c.phone ?: "",
-                type = when (c.role) {
-                    "HELP_MONITOR", "HELP_BACKUP" -> if (c.role == "HELP_BACKUP") ContactType.INACTIVITY else ContactType.HELP
-                    else -> ContactType.SOS
-                }
+                type = typeFromRole(c.role),
+                relationship = c.relationship.orEmpty(),
+                notes = c.notes.orEmpty(),
+                priorityOrder = c.priorityOrder ?: 1,
+                verified = c.verified == true
             )
         }
     }
 
-    suspend fun saveContactAndOpenSms(
+    suspend fun saveContact(
         context: Context,
         draft: ContactDraft,
         senderName: String?
     ): Result<String> {
-        val phone = normalizePhone(draft.mobile)
-        val code = SmsHelper.generateVerificationCode()
+        val req = toRequest(draft)
         return try {
-            val contact = PukaarApp.instance.repository.addContact(
-                ContactRequest(
-                    name = draft.name.trim(),
-                    phone = phone,
-                    role = roleFor(draft.type),
-                    relationship = draft.relationship.ifBlank { null }
-                )
-            )
-            contact.id?.let { pendingCodes[it] = code }
-            val message = SmsHelper.buildVerificationMessage(draft.name, code, senderName)
-            SmsHelper.openSmsComposer(context, phone, message)
-            contact.id?.let { id ->
-                runCatching { PukaarApp.instance.repository.verifyContact(id, code) }
+            val contact = if (draft.id != null) {
+                PukaarApp.instance.repository.updateContact(draft.id, req)
+            } else {
+                PukaarApp.instance.repository.addContact(req)
             }
-            Result.success(contact.id ?: "")
+            val id = contact.id ?: return Result.failure(Exception("Contact not saved"))
+            sendVerificationSms(context, draft.name, contact.phone ?: req.phone, id, senderName)
+            Result.success(id)
         } catch (e: HttpException) {
-            if (e.code() == 409) {
+            if (e.code() == 409 && draft.id == null) {
+                val phone = normalizePhone(draft.mobile)
                 val existing = PukaarApp.instance.repository.contacts()
                     .firstOrNull { it.phone == phone }
                 existing?.id?.let { id ->
-                    pendingCodes[id] = code
-                    SmsHelper.openSmsComposer(
-                        context, phone,
-                        SmsHelper.buildVerificationMessage(draft.name, code, senderName)
-                    )
-                    runCatching { PukaarApp.instance.repository.verifyContact(id, code) }
+                    val updated = PukaarApp.instance.repository.updateContact(id, req)
+                    sendVerificationSms(context, draft.name, updated.phone ?: phone, id, senderName)
                     return Result.success(id)
                 }
             }
@@ -83,5 +82,38 @@ object ContactRepositoryBridge {
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    suspend fun deleteContact(id: String): Result<Unit> = try {
+        PukaarApp.instance.repository.deleteContact(id)
+        Result.success(Unit)
+    } catch (e: Exception) {
+        Result.failure(e)
+    }
+
+    suspend fun resendVerification(
+        context: Context,
+        contact: ContactUiModel,
+        senderName: String?
+    ) {
+        sendVerificationSms(context, contact.name, contact.phoneNumber, contact.id, senderName)
+        runCatching {
+            PukaarApp.instance.repository.verifyContact(contact.id)
+        }
+    }
+
+    private suspend fun sendVerificationSms(
+        context: Context,
+        name: String,
+        phone: String,
+        id: String,
+        senderName: String?
+    ) {
+        val code = SmsHelper.generateVerificationCode()
+        val message = SmsHelper.buildVerificationMessage(name, code, senderName)
+        withContext(Dispatchers.IO) {
+            SmsHelper.sendSmsInBackground(context, phone, message)
+        }
+        runCatching { PukaarApp.instance.repository.verifyContact(id, code) }
     }
 }

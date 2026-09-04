@@ -30,6 +30,7 @@ class PukaarApp : Application() {
         repository = PukaarRepository(sessionStore)
         createNotificationChannels()
         OemBatteryHelper.ensureChannel(this)
+        com.pukaar.app.emergency.HeartbeatWorker.schedule(this)
     }
 
     private fun createNotificationChannels() {

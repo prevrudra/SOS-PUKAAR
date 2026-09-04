@@ -35,6 +35,7 @@ data class ContactDto(
     val phone: String?,
     val role: String?,
     val relationship: String?,
+    val notes: String? = null,
     val priorityOrder: Int?,
     val verified: Boolean? = false
 )
@@ -43,6 +44,7 @@ data class ContactRequest(
     val phone: String,
     val role: String = "SOS_TRUSTED",
     val relationship: String? = null,
+    val notes: String? = null,
     val priorityOrder: Int = 1
 )
 data class VerifyContactRequest(val code: String = "123456")
@@ -51,8 +53,11 @@ data class TriggerRequest(
     val latitude: Double? = null,
     val longitude: Double? = null,
     val accuracyM: Double? = null,
-    val mockDrill: Boolean = false
+    val mockDrill: Boolean = false,
+    val batteryPct: Int? = null,
+    val networkType: String? = null
 )
+data class TelemetryRequest(val batteryPct: Int? = null, val networkType: String? = null)
 data class EmergencyDto(
     val active: Boolean? = null,
     val id: String? = null,
@@ -62,6 +67,8 @@ data class EmergencyDto(
     val mockDrillId: String? = null,
     val latitude: Double? = null,
     val longitude: Double? = null,
+    val batteryPct: Int? = null,
+    val networkType: String? = null,
     val call112Status: String? = null,
     val deliveries: List<DeliveryDto>? = null,
     val audioSegments: List<AudioSegmentDto>? = null,
@@ -100,7 +107,30 @@ data class SubscriptionStatusResponse(
     val plans: PlansDto? = null,
     val successfulReferrals: Long? = null,
     val eligibleForReferralFamilyPrice: Boolean? = null,
-    val subscription: SubscriptionDto? = null
+    val subscription: SubscriptionDto? = null,
+    val razorpayEnabled: Boolean? = null
+)
+data class PaymentConfigResponse(val enabled: Boolean? = null, val keyId: String? = null)
+data class PaymentOrderDto(
+    val orderId: String?,
+    val amount: Int?,
+    val amountInr: Int?,
+    val currency: String?,
+    val keyId: String?,
+    val plan: String?,
+    val userName: String?,
+    val userPhone: String?,
+    val description: String?
+)
+data class CreatePaymentOrderRequest(val plan: String)
+data class VerifyPaymentRequest(val orderId: String, val paymentId: String, val signature: String)
+data class PaymentVerifyResponse(
+    val status: String?,
+    val orderId: String?,
+    val paymentId: String?,
+    val plan: String?,
+    val amountInr: Int?,
+    val message: String?
 )
 data class OkResponse(val ok: Boolean? = true, val deleted: Boolean? = null, val lastActivityAt: String? = null)
 data class ElderlySettingsDto(
@@ -111,10 +141,20 @@ data class ElderlySettingsDto(
     val inactivityMonitoringEnabled: Boolean? = null,
     val ambulanceNumber: String? = null,
     val doctorName: String? = null,
-    val doctorPhone: String? = null
+    val doctorPhone: String? = null,
+    val bloodGroup: String? = null,
+    val allergies: String? = null,
+    val medicalConditions: String? = null,
+    val medicationReminderEnabled: Boolean? = null
 )
 data class DrillCompleteResponse(
     val result: String? = null,
     val protectionReady: Boolean? = null,
     val failureNotes: String? = null
+)
+
+data class ReferralsResponse(
+    val count: Long? = null,
+    val successfulPaid: Long? = null,
+    val items: List<Map<String, Any?>>? = null
 )

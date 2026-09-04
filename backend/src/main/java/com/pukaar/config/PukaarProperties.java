@@ -15,6 +15,9 @@ public class PukaarProperties {
     private Elderly elderly = new Elderly();
     private Storage storage = new Storage();
     private Notification notification = new Notification();
+    private Razorpay razorpay = new Razorpay();
+    private Admin admin = new Admin();
+    private Alerts alerts = new Alerts();
 
     @Data
     public static class Jwt {
@@ -27,7 +30,7 @@ public class PukaarProperties {
     public static class Otp {
         private int length = 6;
         private int ttlSeconds = 300;
-        private boolean mockEnabled = true;
+        private boolean mockEnabled = false;
         private String mockCode = "123456";
     }
 
@@ -69,5 +72,46 @@ public class PukaarProperties {
         private int retryMax = 5;
         private long retryBackoffMs = 2000;
         private boolean smsFallbackEnabled = false;
+    }
+
+    @Data
+    public static class Razorpay {
+        private String keyId = "";
+        private String keySecret = "";
+        private String webhookSecret = "";
+    }
+
+    @Data
+    public static class Admin {
+        private String phone = "";
+    }
+
+    @Data
+    public static class Alerts {
+        private Whatsapp whatsapp = new Whatsapp();
+        private Sms sms = new Sms();
+        private Fcm fcm = new Fcm();
+
+        @Data
+        public static class Whatsapp {
+            private String token = "";
+            private String phoneNumberId = "";
+        }
+
+        @Data
+        public static class Sms {
+            private String endpoint = "https://control.yourbulksms.net/api/sendhttp.php";
+            private String authKey = "";
+            private String senderId = "AXPONT";
+            private String route = "2";
+            private String country = "0";
+            private String dltTeId = "";
+            private String otpTemplate = "Dear user , Your OTP is {#var#}. Use this to verify your Axispoint account within 10 minutes. For your security, do not share this code with anyone.";
+        }
+
+        @Data
+        public static class Fcm {
+            private String serverKey = "";
+        }
     }
 }

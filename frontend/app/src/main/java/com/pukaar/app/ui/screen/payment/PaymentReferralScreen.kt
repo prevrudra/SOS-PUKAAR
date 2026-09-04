@@ -36,8 +36,12 @@ fun PaymentReferralScreen(
     validTill: String,
     referralCode: String,
     isActive: Boolean,
+    individualPrice: Int,
+    familyPrice: Int,
+    referralCount: Long,
     onBack: () -> Unit,
-    onUpgradePlan: () -> Unit,
+    onUpgradeIndividual: () -> Unit,
+    onUpgradeFamily: () -> Unit,
     onViewHistory: () -> Unit,
     onShareReferral: () -> Unit,
     modifier: Modifier = Modifier
@@ -49,8 +53,12 @@ fun PaymentReferralScreen(
         bottomBar = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 SuccessButton(
-                    text = stringResource(R.string.payment_upgrade),
-                    onClick = onUpgradePlan
+                    text = stringResource(R.string.payment_individual) + " — ₹$individualPrice/yr",
+                    onClick = onUpgradeIndividual
+                )
+                SuccessButton(
+                    text = stringResource(R.string.payment_family) + " — ₹$familyPrice/yr",
+                    onClick = onUpgradeFamily
                 )
                 SecondaryButton(
                     text = stringResource(R.string.payment_history),
@@ -98,13 +106,18 @@ fun PaymentReferralScreen(
             }
         }
 
-        ReferralCard(code = referralCode, onShare = onShareReferral)
+        ReferralCard(
+            code = referralCode,
+            referralCount = referralCount,
+            onShare = onShareReferral
+        )
     }
 }
 
 @Composable
 private fun ReferralCard(
     code: String,
+    referralCount: Long,
     onShare: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -114,6 +127,12 @@ private fun ReferralCard(
             color = TextPrimary,
             fontSize = 14.sp,
             fontWeight = FontWeight.SemiBold
+        )
+        Text(
+            text = stringResource(R.string.payment_referrals_count, referralCount),
+            color = TextTertiary,
+            fontSize = 11.sp,
+            modifier = Modifier.padding(top = 2.dp)
         )
         Text(
             text = stringResource(R.string.referral_description),
@@ -173,8 +192,12 @@ private fun PaymentReferralScreenPreview() {
             validTill = stringResource(R.string.payment_valid_date),
             referralCode = stringResource(R.string.referral_code),
             isActive = true,
+            individualPrice = 499,
+            familyPrice = 699,
+            referralCount = 0,
             onBack = {},
-            onUpgradePlan = {},
+            onUpgradeIndividual = {},
+            onUpgradeFamily = {},
             onViewHistory = {},
             onShareReferral = {}
         )

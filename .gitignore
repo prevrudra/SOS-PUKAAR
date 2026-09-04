@@ -16,6 +16,7 @@ backend/.mvn/wrapper/maven-wrapper.jar
 frontend/.gradle/
 frontend/build/
 frontend/app/build/
+frontend/highalert/build/
 frontend/local.properties
 frontend/captures/
 *.apk
