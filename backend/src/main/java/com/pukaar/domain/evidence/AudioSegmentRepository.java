@@ -9,4 +9,5 @@ import java.util.UUID;
 public interface AudioSegmentRepository extends JpaRepository<AudioSegmentEntity, UUID> {
     List<AudioSegmentEntity> findByEventIdOrderBySegmentIndexAsc(UUID eventId);
     List<AudioSegmentEntity> findByUploadStatusIn(List<UploadStatus> statuses);
+    List<AudioSegmentEntity> findByUploadStatusOrderByUploadedAtDesc(UploadStatus status);
 }

@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MedicalServices
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.PhoneInTalk
@@ -55,6 +56,7 @@ enum class MenuItem(
     VIEW_CONTACTS(R.string.menu_view_contacts, Icons.Filled.Groups, TextPrimary, Route.ViewContacts),
     ELDERLY_HELP(R.string.menu_elderly_help, Icons.Outlined.Elderly, AccentOrange, Route.ElderlyHelp),
     EMERGENCY_INFO(R.string.menu_emergency_info, Icons.Filled.MedicalServices, PukaarRed, Route.EmergencyInfo),
+    RECORDINGS(R.string.menu_recordings, Icons.Filled.Mic, AccentPurple, Route.Recordings),
     PAYMENT_REFERRAL(R.string.menu_payment_referral, Icons.Filled.Wallet, SuccessGreen, Route.PaymentReferral),
     HELP_VIDEO(R.string.menu_help_video, Icons.Filled.PlayCircleFilled, AccentPurple, Route.HelpVideo),
 
@@ -118,7 +120,8 @@ enum class MenuItem(
             listOf(PAYMENT_REFERRAL),
             listOf(ADD_CONTACT, VIEW_CONTACTS),
             listOf(SOS_SETTINGS, ELDERLY_HELP),
-            listOf(EMERGENCY_INFO, FAQ),
+            listOf(EMERGENCY_INFO, RECORDINGS),
+            listOf(FAQ),
             listOf(HELP_VIDEO, HOME_MODE_GUIDE),
             listOf(LANGUAGE, NOTIFICATIONS),
             listOf(LEGAL_TERMS, PRIVACY_SECURITY),

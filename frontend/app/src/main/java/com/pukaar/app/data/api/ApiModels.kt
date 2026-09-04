@@ -58,6 +58,10 @@ data class TriggerRequest(
     val networkType: String? = null
 )
 data class TelemetryRequest(val batteryPct: Int? = null, val networkType: String? = null)
+data class EmergencyHistoryResponse(
+    val items: List<EmergencyDto>? = null,
+    val total: Int? = null
+)
 data class EmergencyDto(
     val active: Boolean? = null,
     val id: String? = null,
@@ -70,6 +74,8 @@ data class EmergencyDto(
     val batteryPct: Int? = null,
     val networkType: String? = null,
     val call112Status: String? = null,
+    val startedAt: String? = null,
+    val closedAt: String? = null,
     val deliveries: List<DeliveryDto>? = null,
     val audioSegments: List<AudioSegmentDto>? = null,
     val policeStation: PoliceDto? = null,
@@ -80,7 +86,17 @@ data class EmergencyDto(
 data class HospitalDto(val name: String?, val phone: String?, val address: String?)
 data class DrillCompleteRequest(val contactsConfirmed: Boolean = true, val notes: String? = null)
 data class DeliveryDto(val name: String?, val phone: String?, val status: String?)
-data class AudioSegmentDto(val id: String?, val index: Int?, val uploadStatus: String?, val cloudSafe: Boolean?)
+data class AudioSegmentDto(
+    val id: String?,
+    val index: Int?,
+    val uploadStatus: String?,
+    val cloudSafe: Boolean?,
+    val durationSec: Int? = null,
+    val byteSize: Long? = null,
+    val contentType: String? = null,
+    val uploadedAt: String? = null,
+    val playUrl: String? = null
+)
 data class PoliceDto(val name: String?, val phone: String?, val phoneVerified: Boolean?, val address: String?, val latitude: Double? = null, val longitude: Double? = null)
 data class LocationRequest(val latitude: Double, val longitude: Double, val accuracyM: Double? = null)
 data class SegmentRequest(val index: Int, val checksumSha256: String? = null, val byteSize: Long? = null)

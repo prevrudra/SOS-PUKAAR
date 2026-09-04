@@ -324,6 +324,31 @@ public class EmergencyOrchestrator {
         return toEventDto(event, true);
     }
 
+    public Map<String, Object> listHistory(UUID userId) {
+        List<EmergencyEventEntity> events = eventRepo.findByUserIdOrderByStartedAtDesc(userId);
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("items", events.stream().map(e -> toEventDto(e, true)).toList());
+        m.put("total", events.size());
+        return m;
+    }
+
+    public org.springframework.core.io.Resource streamOwnedAudio(UUID userId, UUID eventId, UUID segmentId) {
+        EmergencyEventEntity event = eventRepo.findById(eventId)
+                .orElseThrow(() -> new ApiException("EVENT_NOT_FOUND", "Emergency not found"));
+        if (!event.getUserId().equals(userId)) {
+            throw new ApiException("FORBIDDEN", "Not your event");
+        }
+        AudioSegmentEntity segment = audioRepo.findById(segmentId)
+                .orElseThrow(() -> new ApiException("SEGMENT_NOT_FOUND", "Audio segment not found"));
+        if (!segment.getEventId().equals(eventId)) {
+            throw new ApiException("SEGMENT_MISMATCH", "Segment does not belong to event");
+        }
+        if (segment.getUploadStatus() != UploadStatus.UPLOADED || segment.getStorageKey() == null) {
+            throw new ApiException("NOT_UPLOADED", "Recording is not available yet");
+        }
+        return evidenceStorage.asResource(segment.getStorageKey());
+    }
+
     private void applyLocation(EmergencyEventEntity event, double lat, double lng, Double accuracy) {
         event.setLatitude(lat);
         event.setLongitude(lng);
@@ -434,6 +459,13 @@ public class EmergencyOrchestrator {
                 sm.put("index", s.getSegmentIndex());
                 sm.put("uploadStatus", s.getUploadStatus());
                 sm.put("cloudSafe", s.getUploadStatus() == UploadStatus.UPLOADED);
+                sm.put("durationSec", s.getDurationSec());
+                sm.put("byteSize", s.getByteSize());
+                sm.put("contentType", s.getContentType());
+                sm.put("uploadedAt", s.getUploadedAt());
+                if (s.getUploadStatus() == UploadStatus.UPLOADED && s.getStorageKey() != null) {
+                    sm.put("playUrl", "/api/v1/emergencies/" + event.getId() + "/audio-segments/" + s.getId() + "/content");
+                }
                 return sm;
             }).toList());
             if (event.getPoliceStationId() != null) {

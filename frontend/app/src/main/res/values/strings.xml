@@ -70,6 +70,13 @@
     <string name="menu_view_contacts">View Contacts</string>
     <string name="menu_elderly_help">Elderly &amp; Inactivity Settings</string>
     <string name="menu_emergency_info">Emergency Info</string>
+    <string name="menu_recordings">My Recordings</string>
+    <string name="recordings_title">My Recordings</string>
+    <string name="recordings_empty">No uploaded SOS recordings yet. Audio evidence appears here after an SOS session uploads to the server.</string>
+    <string name="recordings_type_sos">SOS emergency</string>
+    <string name="recordings_type_help">HELP request</string>
+    <string name="recordings_type_drill">Mock drill</string>
+    <string name="recordings_segment">Segment %1$d</string>
     <string name="menu_payment_referral">Payment &amp; Referral</string>
     <string name="menu_help_video">Help Video</string>
     <string name="menu_language">Language</string>

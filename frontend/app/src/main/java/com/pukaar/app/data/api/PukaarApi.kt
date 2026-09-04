@@ -37,11 +37,21 @@ interface PukaarApi {
     @POST("api/v1/emergencies/trigger")
     suspend fun trigger(@Body body: TriggerRequest): EmergencyDto
 
+    @GET("api/v1/emergencies/history")
+    suspend fun emergencyHistory(): EmergencyHistoryResponse
+
     @GET("api/v1/emergencies/active")
     suspend fun activeEmergency(): EmergencyDto
 
     @GET("api/v1/emergencies/{id}")
     suspend fun getEmergency(@Path("id") id: String): EmergencyDto
+
+    @Streaming
+    @GET("api/v1/emergencies/{id}/audio-segments/{segmentId}/content")
+    suspend fun downloadAudioSegment(
+        @Path("id") id: String,
+        @Path("segmentId") segmentId: String
+    ): okhttp3.ResponseBody
 
     @POST("api/v1/emergencies/{id}/location")
     suspend fun updateLocation(@Path("id") id: String, @Body body: LocationRequest): EmergencyDto

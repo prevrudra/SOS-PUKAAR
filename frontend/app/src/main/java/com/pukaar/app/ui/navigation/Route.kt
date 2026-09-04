@@ -23,6 +23,7 @@ sealed class Route(val path: String) {
     data object EmergencyInfo : Route("emergency_info")
     data object PaymentReferral : Route("payment_referral")
     data object HelpVideo : Route("help_video")
+    data object Recordings : Route("recordings")
 
     // Non-priority menu items
     data object Language : Route("language")
