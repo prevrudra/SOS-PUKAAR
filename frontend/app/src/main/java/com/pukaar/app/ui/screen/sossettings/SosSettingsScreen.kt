@@ -27,12 +27,13 @@ import com.pukaar.app.ui.theme.PukaarTheme
 fun SosSettingsScreen(
     onBack: () -> Unit,
     onSave: (SosSettingsForm) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    initialForm: SosSettingsForm = SosSettingsForm(true, true, true, true)
 ) {
-    var autoCall by remember { mutableStateOf(true) }
-    var locationSharing by remember { mutableStateOf(true) }
-    var audioRecording by remember { mutableStateOf(true) }
-    var alertContacts by remember { mutableStateOf(true) }
+    var autoCall by remember { mutableStateOf(initialForm.autoCallEmergencyNumber) }
+    var locationSharing by remember { mutableStateOf(initialForm.shareLocation) }
+    var audioRecording by remember { mutableStateOf(initialForm.recordAudio) }
+    var alertContacts by remember { mutableStateOf(initialForm.alertContacts) }
 
     PukaarScreen(
         title = stringResource(R.string.sos_settings_title),

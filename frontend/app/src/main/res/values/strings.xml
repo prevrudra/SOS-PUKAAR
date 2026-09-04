@@ -21,6 +21,33 @@
     <string name="sos">SOS</string>
     <string name="home_sos_headline">Press the button\nin case of emergency</string>
 
+    <!-- SOS countdown -->
+    <string name="countdown_sos_title">Sending SOS Alert</string>
+    <string name="countdown_help_title">Sending Help Alert</string>
+    <string name="countdown_message">Alert will be sent in a few seconds.\nTap Cancel to stop.</string>
+    <string name="countdown_cancel">Cancel Alert</string>
+
+    <!-- Emergency active -->
+    <string name="emergency_sos_active">SOS Active</string>
+    <string name="emergency_help_active">Help Active</string>
+    <string name="emergency_mock_drill_active">Mock Drill Active</string>
+    <string name="emergency_location">Live Location</string>
+    <string name="emergency_contacts_notified">Contacts Notified</string>
+    <string name="emergency_police">Nearest Police Station</string>
+    <string name="emergency_hospital">Nearest Hospital</string>
+    <string name="emergency_112">112 Pathway</string>
+    <string name="emergency_audio">Audio Recording</string>
+    <string name="emergency_audio_segments">%1$d segment(s) recorded</string>
+    <string name="emergency_audio_starting">Recording active — saving 60s segments</string>
+    <string name="emergency_audio_segments_detail">Recording active — %1$d segment(s), %2$d uploaded to server</string>
+    <string name="emergency_device_status">Device Status</string>
+    <string name="emergency_call_112">Call 112</string>
+    <string name="emergency_im_safe">I\'m Safe</string>
+    <string name="emergency_finish_drill">Finish Drill</string>
+    <string name="emergency_disclaimer">PUKAAR does not guarantee rescue.</string>
+    <string name="mock_drill_start_live">Run Live Drill</string>
+    <string name="mock_drill_start_hint">Sends a test alert to your contacts</string>
+
     <!-- Home — Help mode -->
     <string name="mode_help">Help Mode</string>
     <string name="help">Help</string>
@@ -62,6 +89,25 @@
     <string name="add_contact_category_hint">Pick one — a contact belongs to a single category.</string>
     <string name="add_contact_save">Save Contact</string>
     <string name="add_contact_success">Contact Added\nSuccessfully</string>
+    <string name="edit_contact_title">Edit Contact</string>
+    <string name="edit_contact_save">Update Contact</string>
+    <string name="edit_contact_success">Contact Updated\nSuccessfully</string>
+    <string name="contact_notes">Notes</string>
+    <string name="contact_notes_hint">Address, medical info, alternate number, etc.</string>
+    <string name="contact_priority">Alert Priority</string>
+    <string name="contact_priority_level">Priority %1$d — contacted first</string>
+    <string name="contact_delete">Delete Contact</string>
+    <string name="contact_delete_confirm_title">Delete this contact?</string>
+    <string name="contact_delete_confirm_body">They will no longer receive alerts from PUKAAR.</string>
+    <string name="contact_deleted_success">Contact Deleted</string>
+    <string name="contact_resend_verification">Resend Verification SMS</string>
+    <string name="contact_verified">Verified</string>
+    <string name="contact_type_doctor">Doctor</string>
+    <string name="contact_type_neighbour">Neighbour</string>
+    <string name="contact_type_doctor_description">Medical professional for emergencies.</string>
+    <string name="contact_type_neighbour_description">Nearby neighbour who can respond quickly.</string>
+    <string name="contact_section_doctor">Doctor Contacts</string>
+    <string name="contact_section_neighbour">Neighbour Contacts</string>
 
     <!-- SOS Settings -->
     <string name="sos_settings_title">SOS Settings</string>
@@ -110,7 +156,8 @@
 
     <!-- View Contacts -->
     <string name="view_contacts_title">Contacts</string>
-    <string name="view_contacts_empty">No emergency contacts yet.</string>
+    <string name="view_contacts_subtitle">Tap any contact to edit name, number, type, notes or delete. Use + to add new.</string>
+    <string name="view_contacts_empty">No emergency contacts yet. Tap + to add.</string>
 
     <!-- Contact types -->
     <string name="contact_type_sos">SOS</string>
@@ -188,6 +235,27 @@
     <string name="faq_q3">Will 112 be called?</string>
     <string name="faq_q4">Is my data safe?</string>
     <string name="faq_q5">More Questions</string>
+    <string name="faq_a1">PUKAAR sends SOS alerts to your trusted contacts with live location, records audio evidence, and opens the 112 pathway when enabled.</string>
+    <string name="faq_a2">Tap the SOS button and wait 5 seconds, press Volume Up 3 times quickly, or use the hardware trigger on supported devices.</string>
+    <string name="faq_a3">If Auto-call 112 is enabled in SOS Settings, PUKAAR dials 112 automatically during SOS. You can also call 112 from the emergency screen.</string>
+    <string name="faq_a4">Your data is encrypted and shared only with contacts you choose during an active alert. We never sell your data.</string>
+    <string name="faq_a5">Visit Menu → How PUKAAR Works for the full walkthrough, or run a Mock Drill to test everything safely.</string>
+
+    <string name="settings_title">App Settings</string>
+    <string name="settings_battery">Battery Optimization</string>
+    <string name="settings_battery_hint">Allow PUKAAR to run unrestricted in background</string>
+    <string name="settings_autostart">Autostart / OEM Settings</string>
+    <string name="settings_autostart_hint">Enable autostart on Xiaomi, Samsung, Oppo, etc.</string>
+    <string name="settings_overlay">Display Over Apps</string>
+    <string name="settings_overlay_hint">Required for emergency overlay on some devices</string>
+    <string name="settings_permissions">Permissions</string>
+    <string name="settings_permissions_hint">SMS, location, microphone, phone</string>
+
+    <string name="emergency_info_allergies_hint">e.g. Penicillin, nuts</string>
+    <string name="emergency_info_conditions_hint">e.g. Diabetes, asthma</string>
+    <string name="payment_individual">Individual Plan</string>
+    <string name="payment_family">Family Plan</string>
+    <string name="payment_referrals_count">Referrals: %1$d successful</string>
 
     <!-- How This Works -->
     <string name="how_this_works_step1_description">Step 1, Trigger SOS: tap the SOS button, or press the power button 4 to 5 times.</string>

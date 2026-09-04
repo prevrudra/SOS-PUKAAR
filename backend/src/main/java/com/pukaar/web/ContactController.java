@@ -35,6 +35,7 @@ public class ContactController {
             TrustedContactEntity c = existingActive.get();
             if (req.getName() != null) c.setName(req.getName());
             if (req.getRelationship() != null) c.setRelationship(req.getRelationship());
+            if (req.getNotes() != null) c.setNotes(req.getNotes());
             if (req.getPriorityOrder() != null) c.setPriorityOrder(req.getPriorityOrder());
             return toDto(contactRepo.save(c));
         }
@@ -47,11 +48,13 @@ public class ContactController {
             c.setVerified(false);
             if (req.getName() != null) c.setName(req.getName());
             if (req.getRelationship() != null) c.setRelationship(req.getRelationship());
+            if (req.getNotes() != null) c.setNotes(req.getNotes());
+            if (req.getPriorityOrder() != null) c.setPriorityOrder(req.getPriorityOrder());
             return toDto(contactRepo.save(c));
         }
 
-        if (contactRepo.countByOwnerUserIdAndActiveTrue(ownerId) >= 3) {
-            throw new ApiException("CONTACT_LIMIT", "Maximum 3 trusted contacts allowed");
+        if (contactRepo.countByOwnerUserIdAndActiveTrue(ownerId) >= 10) {
+            throw new ApiException("CONTACT_LIMIT", "Maximum 10 trusted contacts allowed");
         }
         TrustedContactEntity c = TrustedContactEntity.builder()
                 .ownerUserId(ownerId)
@@ -59,6 +62,7 @@ public class ContactController {
                 .phoneE164(normalize(req.getPhone()))
                 .contactRole(req.getRole() == null ? ContactRole.SOS_TRUSTED : req.getRole())
                 .relationship(req.getRelationship())
+                .notes(req.getNotes())
                 .priorityOrder(req.getPriorityOrder() == null ? 1 : req.getPriorityOrder())
                 .build();
         return toDto(contactRepo.save(c));
@@ -78,6 +82,7 @@ public class ContactController {
         if (req.getPhone() != null) c.setPhoneE164(normalize(req.getPhone()));
         if (req.getRole() != null) c.setContactRole(req.getRole());
         if (req.getRelationship() != null) c.setRelationship(req.getRelationship());
+        if (req.getNotes() != null) c.setNotes(req.getNotes());
         if (req.getPriorityOrder() != null) c.setPriorityOrder(req.getPriorityOrder());
         return toDto(contactRepo.save(c));
     }
@@ -105,6 +110,7 @@ public class ContactController {
         m.put("phone", c.getPhoneE164());
         m.put("role", c.getContactRole());
         m.put("relationship", c.getRelationship());
+        m.put("notes", c.getNotes());
         m.put("priorityOrder", c.getPriorityOrder());
         m.put("verified", c.isVerified());
         return m;
@@ -122,6 +128,7 @@ public class ContactController {
         @NotBlank private String phone;
         private ContactRole role;
         private String relationship;
+        private String notes;
         private Integer priorityOrder;
     }
 

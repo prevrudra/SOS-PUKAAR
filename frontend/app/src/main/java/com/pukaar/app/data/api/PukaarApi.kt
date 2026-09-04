@@ -1,5 +1,6 @@
 package com.pukaar.app.data.api
 
+import okhttp3.MultipartBody
 import retrofit2.http.*
 
 interface PukaarApi {
@@ -24,6 +25,9 @@ interface PukaarApi {
     @POST("api/v1/contacts")
     suspend fun addContact(@Body body: ContactRequest): ContactDto
 
+    @PUT("api/v1/contacts/{id}")
+    suspend fun updateContact(@Path("id") id: String, @Body body: ContactRequest): ContactDto
+
     @DELETE("api/v1/contacts/{id}")
     suspend fun deleteContact(@Path("id") id: String): OkResponse
 
@@ -42,6 +46,9 @@ interface PukaarApi {
     @POST("api/v1/emergencies/{id}/location")
     suspend fun updateLocation(@Path("id") id: String, @Body body: LocationRequest): EmergencyDto
 
+    @POST("api/v1/emergencies/{id}/telemetry")
+    suspend fun updateTelemetry(@Path("id") id: String, @Body body: TelemetryRequest): EmergencyDto
+
     @POST("api/v1/emergencies/{id}/safe")
     suspend fun markSafe(@Path("id") id: String, @Body body: SafeRequest = SafeRequest()): EmergencyDto
 
@@ -55,11 +62,28 @@ interface PukaarApi {
         @Body body: UploadConfirmRequest
     ): SegmentResponse
 
+    @Multipart
+    @POST("api/v1/emergencies/{id}/audio-segments/{segmentId}/upload")
+    suspend fun uploadSegment(
+        @Path("id") id: String,
+        @Path("segmentId") segmentId: String,
+        @Part file: MultipartBody.Part
+    ): SegmentResponse
+
     @GET("api/v1/subscription")
     suspend fun subscription(): SubscriptionStatusResponse
 
     @POST("api/v1/subscription/activate")
     suspend fun activate(@Body body: ActivateRequest): SubscriptionDto
+
+    @GET("api/v1/payments/config")
+    suspend fun paymentConfig(): PaymentConfigResponse
+
+    @POST("api/v1/payments/orders")
+    suspend fun createPaymentOrder(@Body body: CreatePaymentOrderRequest): PaymentOrderDto
+
+    @POST("api/v1/payments/verify")
+    suspend fun verifyPayment(@Body body: VerifyPaymentRequest): PaymentVerifyResponse
 
     @GET("api/v1/elderly/settings")
     suspend fun elderlySettings(): ElderlySettingsDto

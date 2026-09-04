@@ -11,6 +11,8 @@ import com.pukaar.app.R
  */
 enum class SuccessType(@StringRes val messageRes: Int) {
     CONTACT_ADDED(R.string.add_contact_success),
+    CONTACT_UPDATED(R.string.edit_contact_success),
+    CONTACT_DELETED(R.string.contact_deleted_success),
     SOS_SETTINGS_SAVED(R.string.sos_settings_success),
     DRILL_SENT(R.string.mock_drill_success),
     ELDERLY_HELP_SAVED(R.string.elderly_help_success),

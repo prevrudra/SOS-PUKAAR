@@ -3,6 +3,10 @@ package com.pukaar.app.data.repository
 import android.os.Build
 import com.pukaar.app.data.api.*
 import com.pukaar.app.data.local.SessionStore
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.asRequestBody
+import java.io.File
 
 class PukaarRepository(private val sessionStore: SessionStore) {
     private val api = NetworkModule.api(sessionStore)
@@ -23,6 +27,7 @@ class PukaarRepository(private val sessionStore: SessionStore) {
                 protectionReady = user.protectionReady == true,
                 mockDrillPassed = user.mockDrillPassed == true
             )
+            user.referralCode?.let { sessionStore.saveReferralCode(it) }
         }
         return resp
     }
@@ -45,6 +50,7 @@ class PukaarRepository(private val sessionStore: SessionStore) {
     suspend fun me() = api.me()
     suspend fun contacts() = api.contacts()
     suspend fun addContact(req: ContactRequest) = api.addContact(req)
+    suspend fun updateContact(id: String, req: ContactRequest) = api.updateContact(id, req)
     suspend fun deleteContact(id: String) = api.deleteContact(id)
     suspend fun verifyContact(id: String, code: String = "123456") =
         api.verifyContact(id, VerifyContactRequest(code))
@@ -53,11 +59,25 @@ class PukaarRepository(private val sessionStore: SessionStore) {
     suspend fun getEmergency(id: String) = api.getEmergency(id)
     suspend fun updateLocation(id: String, lat: Double, lng: Double, acc: Double?) =
         api.updateLocation(id, LocationRequest(lat, lng, acc))
+    suspend fun updateTelemetry(id: String, batteryPct: Int?, networkType: String?) =
+        api.updateTelemetry(id, TelemetryRequest(batteryPct, networkType))
     suspend fun markSafe(id: String) = api.markSafe(id)
-    suspend fun createSegment(id: String, index: Int) = api.createSegment(id, SegmentRequest(index))
+    suspend fun createSegment(id: String, index: Int, checksum: String? = null, byteSize: Long? = null) =
+        api.createSegment(id, SegmentRequest(index, checksum, byteSize))
+
+    suspend fun uploadSegment(id: String, segmentId: String, file: File): SegmentResponse {
+        val body = file.asRequestBody("audio/mp4".toMediaType())
+        val part = MultipartBody.Part.createFormData("file", file.name, body)
+        return api.uploadSegment(id, segmentId, part)
+    }
+
     suspend fun markUploaded(id: String, segmentId: String, key: String) =
         api.markUploaded(id, segmentId, UploadConfirmRequest(key))
     suspend fun activate(plan: String): SubscriptionDto = api.activate(ActivateRequest(plan))
+    suspend fun paymentConfig() = api.paymentConfig()
+    suspend fun createPaymentOrder(plan: String) = api.createPaymentOrder(CreatePaymentOrderRequest(plan))
+    suspend fun verifyPayment(orderId: String, paymentId: String, signature: String) =
+        api.verifyPayment(VerifyPaymentRequest(orderId, paymentId, signature))
     suspend fun subscription(): SubscriptionStatusResponse = api.subscription()
     suspend fun elderlySettings() = api.elderlySettings()
     suspend fun updateElderlySettings(settings: ElderlySettingsDto) = api.updateElderlySettings(settings)

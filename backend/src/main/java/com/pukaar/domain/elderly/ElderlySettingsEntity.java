@@ -36,6 +36,15 @@ public class ElderlySettingsEntity {
     private String doctorName;
     @Column(name = "doctor_phone")
     private String doctorPhone;
+    @Column(name = "blood_group", length = 10)
+    private String bloodGroup;
+    @Column(columnDefinition = "TEXT")
+    private String allergies;
+    @Column(name = "medical_conditions", columnDefinition = "TEXT")
+    private String medicalConditions;
+    @Column(name = "medication_reminder_enabled", nullable = false)
+    @Builder.Default
+    private boolean medicationReminderEnabled = true;
     @UpdateTimestamp @Column(name = "updated_at")
     private Instant updatedAt;
 }

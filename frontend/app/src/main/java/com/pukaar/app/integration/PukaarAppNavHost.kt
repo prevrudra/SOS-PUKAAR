@@ -1,30 +1,36 @@
 package com.pukaar.app.integration
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
 import com.pukaar.app.PukaarApp
+import com.pukaar.app.data.api.EmergencyDto
 import com.pukaar.app.emergency.EmergencyForegroundService
 import com.pukaar.app.ui.navigation.PukaarNavHost
 import com.pukaar.app.ui.navigation.Route
 import com.pukaar.app.ui.screen.contacts.ContactDraft
 import com.pukaar.app.ui.screen.contacts.ContactUiModel
-import com.pukaar.app.ui.theme.Black
-import com.pukaar.app.ui.theme.PukaarOrange
-import com.pukaar.app.ui.theme.PukaarRed
+import com.pukaar.app.ui.screen.emergency.EmergencyActiveScreen
+import com.pukaar.app.ui.screen.onboarding.OnboardingConsentScreen
+import com.pukaar.app.ui.screen.home.HomeMode
+import com.pukaar.app.ui.screen.home.SosCountdownOverlay
+import com.pukaar.app.ui.screen.splash.SplashScreen
 import com.pukaar.app.ui.theme.PukaarTheme
-import com.pukaar.app.ui.theme.TextSecondary
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 @Composable
@@ -32,25 +38,64 @@ fun PukaarAppNavHost() {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var authed by remember { mutableStateOf<Boolean?>(null) }
+    var onboardingDone by remember { mutableStateOf<Boolean?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+  var countdownMode by remember { mutableStateOf<HomeMode?>(null) }
     val emergencyNav = rememberNavController()
 
     LaunchedEffect(Unit) {
         authed = PukaarApp.instance.sessionStore.token() != null
+        if (authed == true) {
+            runCatching { PukaarApp.instance.repository.syncSession() }
+            onboardingDone = PukaarApp.instance.sessionStore.onboardingComplete.first()
+        }
     }
 
-    when (authed) {
-        null -> Box(Modifier.fillMaxSize().background(Black))
-        false -> PukaarTheme {
-            OtpLoginScreen { authed = true }
+    when {
+        authed == null || (authed == true && onboardingDone == null) -> SplashScreen()
+        authed == false -> PukaarTheme {
+            OtpLoginScreen {
+                authed = true
+                onboardingDone = false
+            }
         }
-        true -> PukaarTheme {
+        onboardingDone == false -> PukaarTheme {
+            OnboardingConsentScreen {
+                onboardingDone = true
+            }
+        }
+        else -> PukaarTheme {
+            val permissionLauncher = rememberLauncherForActivityResult(
+                ActivityResultContracts.RequestMultiplePermissions()
+            ) { }
+
+            LaunchedEffect(Unit) {
+                val needed = buildList {
+                    add(Manifest.permission.ACCESS_FINE_LOCATION)
+                    add(Manifest.permission.RECORD_AUDIO)
+                    add(Manifest.permission.CALL_PHONE)
+                    add(Manifest.permission.SEND_SMS)
+                    if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
+                }.filter {
+                    ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
+                }
+                if (needed.isNotEmpty()) permissionLauncher.launch(needed.toTypedArray())
+            }
+
             var contacts by remember { mutableStateOf<List<ContactUiModel>>(emptyList()) }
             val actions = remember {
                 PukaarActionsImpl(
                     context = context,
                     scope = scope,
-                    onEmergency = { id -> emergencyNav.navigate("emergency/$id") },
+                    onEmergency = { id, isMock ->
+                        runCatching {
+                            emergencyNav.navigate("emergency/$id?mock=$isMock") {
+                                launchSingleTop = true
+                            }
+                        }.onFailure {
+                            error = "Could not open emergency screen"
+                        }
+                    },
                     onError = { error = it }
                 )
             }
@@ -61,7 +106,15 @@ fun PukaarAppNavHost() {
 
             LaunchedEffect(Unit) {
                 PukaarApp.instance.hardwareSos.collect {
-                    actions.triggerSos()
+                    countdownMode = HomeMode.SOS
+                }
+            }
+
+            LaunchedEffect(Unit) {
+                val active = runCatching { PukaarApp.instance.repository.activeEmergency() }.getOrNull()
+                if (active?.active == true && active.id != null) {
+                    val mock = active.mockDrill == true
+                    emergencyNav.navigate("emergency/${active.id}?mock=$mock")
                 }
             }
 
@@ -72,36 +125,81 @@ fun PukaarAppNavHost() {
                 }
             }
 
-            NavHost(
-                navController = emergencyNav,
-                startDestination = "main"
-            ) {
-                composable("main") {
-                    PukaarNavHost(
-                        actions = actions,
-                        contacts = contacts,
-                        onSaveContact = { draft, onDone ->
-                            scope.launch {
-                                val name = runCatching { PukaarApp.instance.repository.me().fullName }.getOrNull()
-                                ContactRepositoryBridge.saveContactAndOpenSms(context, draft, name)
-                                    .onSuccess {
-                                        contacts = ContactRepositoryBridge.loadContacts()
-                                        onDone()
-                                    }
-                                    .onFailure { error = it.message }
+            Box(Modifier.fillMaxSize()) {
+                NavHost(
+                    navController = emergencyNav,
+                    startDestination = "main"
+                ) {
+                    composable("main") {
+                        PukaarNavHost(
+                            actions = actions,
+                            contacts = contacts,
+                            onSaveContact = { draft, onDone ->
+                                scope.launch {
+                                    val name = runCatching { PukaarApp.instance.repository.me().fullName }.getOrNull()
+                                    ContactRepositoryBridge.saveContact(context, draft, name)
+                                        .onSuccess {
+                                            contacts = ContactRepositoryBridge.loadContacts()
+                                            onDone()
+                                        }
+                                        .onFailure { error = it.message }
+                                }
+                            },
+                            onDeleteContact = { id, onDone ->
+                                scope.launch {
+                                    ContactRepositoryBridge.deleteContact(id)
+                                        .onSuccess {
+                                            contacts = ContactRepositoryBridge.loadContacts()
+                                            onDone()
+                                        }
+                                        .onFailure { error = it.message }
+                                }
+                            },
+                            onResendVerification = { contact ->
+                                scope.launch {
+                                    val name = runCatching { PukaarApp.instance.repository.me().fullName }.getOrNull()
+                                    ContactRepositoryBridge.resendVerification(context, contact, name)
+                                }
+                            },
+                            onContactsRefresh = {
+                                scope.launch { contacts = ContactRepositoryBridge.loadContacts() }
+                            },
+                            onRequestEmergency = { mode -> countdownMode = mode },
+                            onRequestMockDrill = { mode ->
+                                actions.startMockDrill(mode == HomeMode.SOS)
+                            }
+                        )
+                    }
+                    composable(
+                        route = "emergency/{eventId}?mock={mock}",
+                        arguments = listOf(
+                            navArgument("eventId") { type = NavType.StringType },
+                            navArgument("mock") { type = NavType.BoolType; defaultValue = false }
+                        )
+                    ) { entry ->
+                        val eventId = entry.arguments?.getString("eventId") ?: ""
+                        val isMock = entry.arguments?.getBoolean("mock") ?: false
+                        EmergencyActiveRoute(
+                            eventId = eventId,
+                            isMockDrill = isMock,
+                            onClosed = {
+                                emergencyNav.popBackStack("main", inclusive = false)
+                            }
+                        )
+                    }
+                }
+
+                countdownMode?.let { mode ->
+                    SosCountdownOverlay(
+                        mode = mode,
+                        onComplete = {
+                            countdownMode = null
+                            when (mode) {
+                                HomeMode.SOS -> actions.triggerSos()
+                                HomeMode.HELP -> actions.triggerHelp()
                             }
                         },
-                        onContactsRefresh = {
-                            scope.launch { contacts = ContactRepositoryBridge.loadContacts() }
-                        }
-                    )
-                }
-                composable("emergency/{eventId}") { entry ->
-                    EmergencyActiveRoute(
-                        eventId = entry.arguments?.getString("eventId") ?: "",
-                        onClosed = {
-                            emergencyNav.popBackStack(Route.Home.path, inclusive = false)
-                        }
+                        onCancel = { countdownMode = null }
                     )
                 }
             }
@@ -110,44 +208,47 @@ fun PukaarAppNavHost() {
 }
 
 @Composable
-private fun EmergencyActiveRoute(eventId: String, onClosed: () -> Unit) {
+private fun EmergencyActiveRoute(
+    eventId: String,
+    isMockDrill: Boolean,
+    onClosed: () -> Unit
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var status by remember { mutableStateOf("ACTIVE") }
+    var event by remember { mutableStateOf<EmergencyDto?>(null) }
 
     LaunchedEffect(eventId) {
         while (true) {
             val e = runCatching { PukaarApp.instance.repository.getEmergency(eventId) }.getOrNull()
-            if (e?.active == false) {
+            event = e
+            if (e?.active == false && !isMockDrill) {
                 EmergencyForegroundService.stop(context)
                 onClosed()
                 break
             }
-            status = e?.status ?: "ACTIVE"
             kotlinx.coroutines.delay(3000)
         }
     }
 
-    Column(
-        Modifier.fillMaxSize().background(Black).padding(24.dp)
-    ) {
-        Text("EMERGENCY ACTIVE", color = PukaarRed, fontSize = 28.sp, fontWeight = FontWeight.Black)
-        Spacer(Modifier.height(12.dp))
-        Text("Status: $status", color = Color.White)
-        Spacer(Modifier.weight(1f))
-        Button(
-            onClick = {
-                scope.launch {
+    EmergencyActiveScreen(
+        event = event,
+        isMockDrill = isMockDrill,
+        onMarkSafe = {
+            scope.launch {
+                if (isMockDrill) {
+                    runCatching {
+                        PukaarApp.instance.repository.completeLatestDrill(confirmed = true)
+                        PukaarApp.instance.sessionStore.setMockDrillPassed(true)
+                        PukaarApp.instance.sessionStore.setProtectionReady(true)
+                    }
+                    EmergencyForegroundService.stop(context)
+                    onClosed()
+                } else {
                     runCatching { PukaarApp.instance.repository.markSafe(eventId) }
                     EmergencyForegroundService.stop(context)
                     onClosed()
                 }
-            },
-            modifier = Modifier.fillMaxWidth().height(60.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = PukaarOrange),
-            shape = RoundedCornerShape(14.dp)
-        ) { Text("I'M SAFE", fontWeight = FontWeight.Black, fontSize = 20.sp) }
-        Spacer(Modifier.height(8.dp))
-        Text("PUKAAR does not guarantee rescue.", color = TextSecondary, fontSize = 12.sp)
-    }
+            }
+        }
+    )
 }

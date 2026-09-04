@@ -3,7 +3,9 @@ package com.pukaar.domain.user;
 import com.pukaar.common.ApiException;
 import com.pukaar.common.HashUtil;
 import com.pukaar.common.HomeMode;
+import com.pukaar.config.AdminBootstrap;
 import com.pukaar.config.PukaarProperties;
+import com.pukaar.domain.alert.YourBulkSmsSender;
 import com.pukaar.domain.elderly.ElderlySettingsEntity;
 import com.pukaar.domain.elderly.ElderlySettingsRepository;
 import com.pukaar.domain.referral.ReferralEntity;
@@ -29,6 +31,8 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final PukaarProperties props;
+    private final AdminBootstrap adminBootstrap;
+    private final YourBulkSmsSender smsSender;
 
     @Transactional
     public Map<String, Object> requestOtp(String phoneE164) {
@@ -40,6 +44,11 @@ public class AuthService {
                 .expiresAt(Instant.now().plusSeconds(props.getOtp().getTtlSeconds()))
                 .build();
         otpRepo.save(challenge);
+        if (!props.getOtp().isMockEnabled()) {
+            if (!smsSender.sendOtp(normalized, code)) {
+                throw new ApiException("OTP_SEND_FAILED", "Could not send OTP SMS");
+            }
+        }
         Map<String, Object> resp = new LinkedHashMap<>();
         resp.put("phone", normalized);
         resp.put("expiresInSeconds", props.getOtp().getTtlSeconds());
@@ -73,6 +82,7 @@ public class AuthService {
             user.setDeviceId(deviceId);
         }
         user.setLastActivityAt(Instant.now());
+        adminBootstrap.promoteIfAdminPhone(user);
         userRepo.save(user);
 
         String access = jwtService.createAccessToken(user.getId(), user.getRole().name());
@@ -154,6 +164,7 @@ public class AuthService {
         m.put("referralCode", user.getReferralCode());
         m.put("consentLocation", user.isConsentLocation());
         m.put("consentAudio", user.isConsentAudio());
+        m.put("role", user.getRole());
         return m;
     }
 

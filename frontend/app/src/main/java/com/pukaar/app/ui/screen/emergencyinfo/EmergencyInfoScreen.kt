@@ -19,7 +19,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pukaar.app.R
 import com.pukaar.app.ui.component.LabeledTextField
-import com.pukaar.app.ui.component.NavigationRow
 import com.pukaar.app.ui.component.PrimaryButton
 import com.pukaar.app.ui.component.PukaarScreen
 import com.pukaar.app.ui.component.RowDivider
@@ -28,17 +27,24 @@ import com.pukaar.app.ui.theme.PukaarTheme
 import com.pukaar.app.ui.theme.TextPrimary
 import com.pukaar.app.ui.theme.TextTertiary
 
-/** Menu item 6. The details a paramedic would want, kept on the lock screen side. */
+data class EmergencyInfoForm(
+    val bloodGroup: String = "",
+    val allergies: String = "",
+    val conditions: String = "",
+    val doctorPhone: String = ""
+)
+
 @Composable
 fun EmergencyInfoScreen(
     onBack: () -> Unit,
-    onBloodGroupClick: () -> Unit,
-    onAllergiesClick: () -> Unit,
-    onConditionsClick: () -> Unit,
-    onSave: (doctorContact: String) -> Unit,
-    modifier: Modifier = Modifier
+    onSave: (EmergencyInfoForm) -> Unit,
+    modifier: Modifier = Modifier,
+    initial: EmergencyInfoForm = EmergencyInfoForm()
 ) {
-    var doctorContact by remember { mutableStateOf("") }
+    var bloodGroup by remember { mutableStateOf(initial.bloodGroup) }
+    var allergies by remember { mutableStateOf(initial.allergies) }
+    var conditions by remember { mutableStateOf(initial.conditions) }
+    var doctorContact by remember { mutableStateOf(initial.doctorPhone) }
 
     PukaarScreen(
         title = null,
@@ -47,7 +53,16 @@ fun EmergencyInfoScreen(
         bottomBar = {
             PrimaryButton(
                 text = stringResource(R.string.action_save),
-                onClick = { onSave(doctorContact) }
+                onClick = {
+                    onSave(
+                        EmergencyInfoForm(
+                            bloodGroup = bloodGroup,
+                            allergies = allergies,
+                            conditions = conditions,
+                            doctorPhone = doctorContact
+                        )
+                    )
+                }
             )
         }
     ) {
@@ -65,24 +80,29 @@ fun EmergencyInfoScreen(
                 modifier = Modifier.padding(top = 2.dp, bottom = 6.dp)
             )
             RowDivider()
+            Spacer(modifier = Modifier.height(10.dp))
 
-            NavigationRow(
-                title = stringResource(R.string.emergency_info_blood_group),
-                onClick = onBloodGroupClick
+            LabeledTextField(
+                label = stringResource(R.string.emergency_info_blood_group),
+                value = bloodGroup,
+                onValueChange = { bloodGroup = it },
+                placeholder = "e.g. B+"
             )
-            RowDivider()
-            NavigationRow(
-                title = stringResource(R.string.emergency_info_allergies),
-                onClick = onAllergiesClick
+            Spacer(modifier = Modifier.height(12.dp))
+            LabeledTextField(
+                label = stringResource(R.string.emergency_info_allergies),
+                value = allergies,
+                onValueChange = { allergies = it },
+                placeholder = stringResource(R.string.emergency_info_allergies_hint)
             )
-            RowDivider()
-            NavigationRow(
-                title = stringResource(R.string.emergency_info_conditions),
-                onClick = onConditionsClick
+            Spacer(modifier = Modifier.height(12.dp))
+            LabeledTextField(
+                label = stringResource(R.string.emergency_info_conditions),
+                value = conditions,
+                onValueChange = { conditions = it },
+                placeholder = stringResource(R.string.emergency_info_conditions_hint)
             )
-            RowDivider()
-
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(12.dp))
             LabeledTextField(
                 label = stringResource(R.string.emergency_info_doctor),
                 value = doctorContact,
@@ -99,12 +119,6 @@ fun EmergencyInfoScreen(
 @Composable
 private fun EmergencyInfoScreenPreview() {
     PukaarTheme {
-        EmergencyInfoScreen(
-            onBack = {},
-            onBloodGroupClick = {},
-            onAllergiesClick = {},
-            onConditionsClick = {},
-            onSave = {}
-        )
+        EmergencyInfoScreen(onBack = {}, onSave = {})
     }
 }

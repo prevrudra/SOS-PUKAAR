@@ -23,6 +23,7 @@
     <uses-permission android:name="android.permission.READ_CONTACTS" />
 
     <!-- Opens SMS composer via smsto: intent (user sends from their number) -->
+    <uses-permission android:name="android.permission.SEND_SMS" />
 
     <!-- High-priority alerts -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -50,6 +51,26 @@
     <uses-feature android:name="android.hardware.telephony" android:required="false" />
     <uses-feature android:name="android.hardware.microphone" android:required="true" />
     <uses-feature android:name="android.hardware.location.gps" android:required="true" />
+
+    <!-- Android 11+ package visibility: required to find SMS apps on device -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.SENDTO" />
+            <data android:scheme="smsto" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="sms" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="text/plain" />
+        </intent>
+        <package android:name="com.google.android.apps.messaging" />
+        <package android:name="com.samsung.android.messaging" />
+        <package android:name="com.android.mms" />
+        <package android:name="com.android.messaging" />
+    </queries>
 
     <!-- Override OEM / Play packaging restrictions where legally allowed for personal-safety apps -->
     <uses-permission

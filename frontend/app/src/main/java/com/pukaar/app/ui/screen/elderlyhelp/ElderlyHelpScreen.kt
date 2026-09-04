@@ -39,10 +39,12 @@ enum class InactivityWindow(val hours: Int) {
 fun ElderlyHelpScreen(
     onBack: () -> Unit,
     onSave: (window: InactivityWindow, medicationReminder: Boolean) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    initialWindow: InactivityWindow = InactivityWindow.TEN,
+    initialMedicationReminder: Boolean = true
 ) {
-    var window by remember { mutableStateOf(InactivityWindow.TEN) }
-    var medicationReminder by remember { mutableStateOf(true) }
+    var window by remember { mutableStateOf(initialWindow) }
+    var medicationReminder by remember { mutableStateOf(initialMedicationReminder) }
 
     PukaarScreen(
         title = stringResource(R.string.elderly_help_title),
