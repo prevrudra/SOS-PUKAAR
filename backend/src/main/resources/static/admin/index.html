@@ -116,10 +116,10 @@ async function requestOtp() {
     if (data.devCode) {
       document.getElementById('otp').value = data.devCode;
       document.getElementById('loginErr').style.color = '#22c55e';
-      document.getElementById('loginErr').textContent = 'Admin OTP (shown once): ' + data.devCode;
+      document.getElementById('loginErr').textContent = 'OTP also sent by SMS. Admin code: ' + data.devCode;
     } else {
       document.getElementById('loginErr').style.color = '';
-      document.getElementById('loginErr').textContent = 'OTP sent by SMS. Admin phones show the code here.';
+      document.getElementById('loginErr').textContent = 'OTP sent by SMS to your phone.';
     }
   } catch (e) { document.getElementById('loginErr').textContent = e.message; }
 }
