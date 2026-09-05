@@ -29,8 +29,20 @@
     .hidden { display:none; }
     .err { color:var(--red); font-size:.85rem; margin-top:8px; }
     .login { max-width:400px; margin:80px auto; }
-    audio { width:220px; height:32px; }
     .filter { margin-bottom:12px; max-width:280px; }
+    .player {
+      display:flex; align-items:center; gap:10px; min-width:260px;
+      background:#111; border:1px solid var(--border); border-radius:999px; padding:6px 10px 6px 6px;
+    }
+    .player button.playBtn {
+      width:34px; height:34px; border-radius:50%; padding:0; flex:none;
+      background:var(--green); color:#000; font-size:13px; line-height:34px;
+    }
+    .player .meta { flex:1; min-width:0; }
+    .player .time { display:block; color:var(--muted); font-size:11px; margin-bottom:4px; }
+    .player .bar { height:4px; background:#2a2a2a; border-radius:999px; overflow:hidden; }
+    .player .fill { height:100%; width:0%; background:var(--green); }
+    .player.loading .time { color:var(--green); }
   </style>
 </head>
 <body>
@@ -159,37 +171,129 @@ function table(headers, rows) {
   return `<table><thead><tr>${th}</tr></thead><tbody>${tr || '<tr><td colspan="99">No data</td></tr>'}</tbody></table>`;
 }
 
-function audioCell(playUrl) {
+function formatTime(sec) {
+  const s = Math.max(0, Math.floor(Number(sec) || 0));
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return m + ':' + String(r).padStart(2, '0');
+}
+
+let activePlayer = null;
+
+function stopActivePlayer() {
+  if (!activePlayer) return;
+  try { activePlayer.audio.pause(); } catch (_) {}
+  if (activePlayer.timer) clearInterval(activePlayer.timer);
+  if (activePlayer.el) {
+    activePlayer.el.classList.remove('loading');
+    activePlayer.el.querySelector('.playBtn').textContent = '▶';
+    activePlayer.el.querySelector('.fill').style.width = '0%';
+    const dur = Number(activePlayer.el.dataset.dur || 60);
+    activePlayer.el.querySelector('.time').textContent = '0:00 / ' + formatTime(dur);
+  }
+  activePlayer = null;
+}
+
+function audioCell(playUrl, durationSec) {
+  const dur = durationSec || 60;
   const src = API + playUrl;
-  return `<audio controls preload="none" src="${src}" data-token="1"></audio>`;
+  return `<div class="player" data-url="${src}" data-dur="${dur}">
+    <button type="button" class="playBtn" title="Play">▶</button>
+    <div class="meta">
+      <span class="time">0:00 / ${formatTime(dur)}</span>
+      <div class="bar"><div class="fill"></div></div>
+    </div>
+  </div>`;
 }
 
 function attachAudioAuth() {
-  document.querySelectorAll('audio[data-token]').forEach(audio => {
-    if (audio.dataset.bound) return;
-    audio.dataset.bound = '1';
-    const original = audio.getAttribute('src');
-    audio.removeAttribute('src');
-    audio.addEventListener('play', async (e) => {
-      if (audio.dataset.loaded) return;
-      e.preventDefault();
+  document.querySelectorAll('.player').forEach(el => {
+    if (el.dataset.bound) return;
+    el.dataset.bound = '1';
+    const btn = el.querySelector('.playBtn');
+    const timeEl = el.querySelector('.time');
+    const fill = el.querySelector('.fill');
+    const url = el.dataset.url;
+    const fallbackDur = Number(el.dataset.dur || 60);
+    let audio = null;
+    let objectUrl = null;
+
+    btn.addEventListener('click', async () => {
+      if (activePlayer && activePlayer.el === el && audio && !audio.paused) {
+        stopActivePlayer();
+        return;
+      }
+      stopActivePlayer();
+      el.classList.add('loading');
+      timeEl.textContent = 'Loading… / ' + formatTime(fallbackDur);
+      btn.textContent = '…';
       try {
-        const res = await fetch(original, { headers: authOnly() });
-        if (!res.ok) throw new Error('Could not load audio');
+        const res = await fetch(url, { headers: authOnly() });
+        if (!res.ok) throw new Error('Could not load audio (' + res.status + ')');
         const buf = await res.arrayBuffer();
+        if (!buf.byteLength) throw new Error('Empty recording file');
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+        // Use MPEG-4 MIME so Chrome can parse AAC-in-MP4 duration.
         const blob = new Blob([buf], { type: 'audio/mp4' });
-        audio.src = URL.createObjectURL(blob);
-        audio.dataset.loaded = '1';
-        audio.load();
+        objectUrl = URL.createObjectURL(blob);
+        audio = new Audio();
+        audio.preload = 'auto';
+        audio.src = objectUrl;
+
+        await new Promise((resolve, reject) => {
+          const onReady = () => { cleanup(); resolve(); };
+          const onErr = () => { cleanup(); reject(new Error('Browser could not decode this recording')); };
+          const cleanup = () => {
+            audio.removeEventListener('loadedmetadata', onReady);
+            audio.removeEventListener('canplay', onReady);
+            audio.removeEventListener('error', onErr);
+          };
+          audio.addEventListener('loadedmetadata', onReady);
+          audio.addEventListener('canplay', onReady);
+          audio.addEventListener('error', onErr);
+          audio.load();
+        });
+
+        const total = (audio.duration && isFinite(audio.duration) && audio.duration > 0)
+          ? audio.duration
+          : fallbackDur;
+
         await audio.play();
+        btn.textContent = '❚❚';
+        el.classList.remove('loading');
+
+        const timer = setInterval(() => {
+          if (!audio) return;
+          const pos = audio.currentTime || 0;
+          const pct = Math.min(100, (pos / total) * 100);
+          fill.style.width = pct + '%';
+          timeEl.textContent = formatTime(pos) + ' / ' + formatTime(total);
+          if (audio.ended || audio.paused) {
+            // keep UI until stopActivePlayer for pause; ended handled below
+          }
+        }, 200);
+
+        audio.onended = () => {
+          fill.style.width = '100%';
+          timeEl.textContent = formatTime(total) + ' / ' + formatTime(total);
+          btn.textContent = '▶';
+          if (activePlayer && activePlayer.timer) clearInterval(activePlayer.timer);
+          activePlayer = null;
+        };
+
+        activePlayer = { el, audio, timer };
       } catch (err) {
+        el.classList.remove('loading');
+        btn.textContent = '▶';
+        timeEl.textContent = '0:00 / ' + formatTime(fallbackDur);
         alert(err.message || 'Playback failed');
       }
-    }, { once: false });
+    });
   });
 }
 
 function renderRecordings() {
+  stopActivePlayer();
   const q = (document.getElementById('recUserFilter').value || '').trim().toLowerCase();
   const items = recordingsCache.filter(r =>
     !q || (r.userPhone || '').toLowerCase().includes(q) || (r.userName || '').toLowerCase().includes(q)
@@ -202,7 +306,7 @@ function renderRecordings() {
       `#${(r.index ?? 0) + 1}`,
       `${r.durationSec || 60}s`,
       (r.uploadedAt || '').slice(0, 19).replace('T', ' '),
-      audioCell(r.playUrl)
+      audioCell(r.playUrl, r.durationSec)
     ])
   );
   attachAudioAuth();
