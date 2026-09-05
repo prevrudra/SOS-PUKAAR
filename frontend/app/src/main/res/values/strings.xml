@@ -97,7 +97,7 @@
     <string name="add_contact_name_hint">Enter name</string>
     <string name="add_contact_mobile">Mobile Number</string>
     <string name="add_contact_mobile_hint">Enter number</string>
-    <string name="add_contact_country_code">+91</string>
+    <string name="add_contact_country_code">Country</string>
     <string name="add_contact_relationship">Relationship</string>
     <string name="add_contact_relationship_hint">Select</string>
     <string name="add_contact_category">Alert Category</string>

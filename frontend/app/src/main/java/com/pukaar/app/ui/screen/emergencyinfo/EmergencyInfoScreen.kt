@@ -18,6 +18,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pukaar.app.R
+import com.pukaar.app.ui.component.InternationalPhoneField
 import com.pukaar.app.ui.component.LabeledTextField
 import com.pukaar.app.ui.component.PrimaryButton
 import com.pukaar.app.ui.component.PukaarScreen
@@ -26,6 +27,7 @@ import com.pukaar.app.ui.component.SectionCard
 import com.pukaar.app.ui.theme.PukaarTheme
 import com.pukaar.app.ui.theme.TextPrimary
 import com.pukaar.app.ui.theme.TextTertiary
+import com.pukaar.app.util.PhoneNumbers
 
 data class EmergencyInfoForm(
     val bloodGroup: String = "",
@@ -44,7 +46,12 @@ fun EmergencyInfoScreen(
     var bloodGroup by remember { mutableStateOf(initial.bloodGroup) }
     var allergies by remember { mutableStateOf(initial.allergies) }
     var conditions by remember { mutableStateOf(initial.conditions) }
-    var doctorContact by remember { mutableStateOf(initial.doctorPhone) }
+    val initialDoctor = remember(initial.doctorPhone) {
+        if (initial.doctorPhone.isBlank()) "+91" to ""
+        else PhoneNumbers.splitE164(initial.doctorPhone)
+    }
+    var doctorDial by remember { mutableStateOf(initialDoctor.first) }
+    var doctorNational by remember { mutableStateOf(initialDoctor.second) }
 
     PukaarScreen(
         title = null,
@@ -54,12 +61,18 @@ fun EmergencyInfoScreen(
             PrimaryButton(
                 text = stringResource(R.string.action_save),
                 onClick = {
+                    val doctorPhone = if (doctorNational.isBlank()) {
+                        ""
+                    } else {
+                        runCatching { PhoneNumbers.fromParts(doctorDial, doctorNational) }
+                            .getOrDefault(doctorNational)
+                    }
                     onSave(
                         EmergencyInfoForm(
                             bloodGroup = bloodGroup,
                             allergies = allergies,
                             conditions = conditions,
-                            doctorPhone = doctorContact
+                            doctorPhone = doctorPhone
                         )
                     )
                 }
@@ -103,13 +116,13 @@ fun EmergencyInfoScreen(
                 placeholder = stringResource(R.string.emergency_info_conditions_hint)
             )
             Spacer(modifier = Modifier.height(12.dp))
-            LabeledTextField(
+            InternationalPhoneField(
                 label = stringResource(R.string.emergency_info_doctor),
-                value = doctorContact,
-                onValueChange = { doctorContact = it },
-                placeholder = stringResource(R.string.add_contact_mobile_hint),
-                keyboardType = KeyboardType.Phone,
-                prefix = stringResource(R.string.add_contact_country_code)
+                dialCode = doctorDial,
+                nationalNumber = doctorNational,
+                onDialCodeChange = { doctorDial = it },
+                onNationalChange = { doctorNational = it },
+                placeholder = stringResource(R.string.add_contact_mobile_hint)
             )
         }
     }

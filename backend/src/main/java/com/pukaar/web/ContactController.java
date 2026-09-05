@@ -2,6 +2,7 @@ package com.pukaar.web;
 
 import com.pukaar.common.ApiException;
 import com.pukaar.common.ContactRole;
+import com.pukaar.common.PhoneNumbers;
 import com.pukaar.domain.contact.TrustedContactEntity;
 import com.pukaar.domain.contact.TrustedContactRepository;
 import com.pukaar.security.SecurityUtils;
@@ -117,9 +118,7 @@ public class ContactController {
     }
 
     private String normalize(String phone) {
-        String p = phone.trim().replace(" ", "");
-        if (!p.startsWith("+")) p = p.length() == 10 ? "+91" + p : "+" + p;
-        return p;
+        return PhoneNumbers.toE164(phone);
     }
 
     @Data

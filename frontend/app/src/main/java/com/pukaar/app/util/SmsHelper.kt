@@ -93,13 +93,12 @@ object SmsHelper {
         sendSmsInBackground(context, listOf(phone), message)
 
     fun normalizeSmsNumber(phone: String): String {
-        val digits = phone.filter { it.isDigit() }
-        return when {
-            digits.length == 10 -> "+91$digits"
-            digits.length == 12 && digits.startsWith("91") -> "+$digits"
-            phone.contains('+') -> phone.filter { it.isDigit() || it == '+' }
-            digits.isNotEmpty() -> "+$digits"
-            else -> phone.trim()
+        return runCatching { PhoneNumbers.toE164(phone) }.getOrElse {
+            val digits = phone.filter { it.isDigit() }
+            when {
+                digits.isNotEmpty() -> "+$digits"
+                else -> phone.trim()
+            }
         }
     }
 

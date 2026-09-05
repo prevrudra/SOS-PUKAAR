@@ -63,12 +63,6 @@ public class AdminBootstrap implements ApplicationRunner {
     }
 
     private String normalize(String phone) {
-        String p = phone.trim().replace(" ", "").replace("-", "");
-        if (p.startsWith("00")) p = "+" + p.substring(2);
-        if (!p.startsWith("+")) {
-            if (p.length() == 10) p = "+91" + p;
-            else p = "+" + p;
-        }
-        return p;
+        return com.pukaar.common.PhoneNumbers.toE164(phone);
     }
 }

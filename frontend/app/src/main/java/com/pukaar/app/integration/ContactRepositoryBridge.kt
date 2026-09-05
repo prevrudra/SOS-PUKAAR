@@ -6,6 +6,7 @@ import com.pukaar.app.data.api.ContactRequest
 import com.pukaar.app.ui.screen.contacts.ContactDraft
 import com.pukaar.app.ui.screen.contacts.ContactType
 import com.pukaar.app.ui.screen.contacts.ContactUiModel
+import com.pukaar.app.util.PhoneNumbers
 import com.pukaar.app.util.SmsHelper
 import com.pukaar.app.util.userMessage
 import kotlinx.coroutines.Dispatchers
@@ -19,18 +20,12 @@ object ContactRepositoryBridge {
     fun typeFromRole(role: String?): ContactType =
         ContactType.entries.firstOrNull { it.apiRole == role } ?: ContactType.SOS
 
-    fun normalizePhone(mobile: String): String {
-        val p = mobile.trim().replace(" ", "")
-        return when {
-            p.startsWith("+") -> p
-            p.length == 10 -> "+91$p"
-            else -> "+$p"
-        }
-    }
+    fun normalizePhone(mobile: String, dialCode: String = "+91"): String =
+        PhoneNumbers.fromParts(dialCode, mobile)
 
     fun toRequest(draft: ContactDraft): ContactRequest = ContactRequest(
         name = draft.name.trim(),
-        phone = normalizePhone(draft.mobile),
+        phone = normalizePhone(draft.mobile, draft.dialCode),
         role = roleFor(draft.type),
         relationship = draft.relationship.ifBlank { null },
         notes = draft.notes.ifBlank { null },

@@ -3,6 +3,7 @@ package com.pukaar.domain.user;
 import com.pukaar.common.ApiException;
 import com.pukaar.common.HashUtil;
 import com.pukaar.common.HomeMode;
+import com.pukaar.common.PhoneNumbers;
 import com.pukaar.config.AdminBootstrap;
 import com.pukaar.config.PukaarProperties;
 import com.pukaar.domain.alert.YourBulkSmsSender;
@@ -182,12 +183,6 @@ public class AuthService {
     }
 
     private String normalizePhone(String phone) {
-        String p = phone == null ? "" : phone.trim().replace(" ", "");
-        if (!p.startsWith("+")) {
-            if (p.length() == 10) p = "+91" + p;
-            else p = "+" + p;
-        }
-        if (p.length() < 10) throw new ApiException("INVALID_PHONE", "Invalid phone number");
-        return p;
+        return PhoneNumbers.toE164(phone);
     }
 }
