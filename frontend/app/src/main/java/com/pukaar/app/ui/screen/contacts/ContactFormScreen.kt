@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pukaar.app.R
 import com.pukaar.app.ui.component.FieldLabel
+import com.pukaar.app.ui.component.InternationalPhoneField
 import com.pukaar.app.ui.component.LabeledTextField
 import com.pukaar.app.ui.component.PrimaryButton
 import com.pukaar.app.ui.component.PukaarScreen
@@ -55,6 +56,7 @@ fun ContactFormScreen(
 ) {
     val isEdit = initial?.id != null
     var name by remember { mutableStateOf(initial?.name.orEmpty()) }
+    var dialCode by remember { mutableStateOf(initial?.dialCode ?: "+91") }
     var mobile by remember { mutableStateOf(initial?.mobile.orEmpty()) }
     var relationship by remember { mutableStateOf(initial?.relationship.orEmpty()) }
     var notes by remember { mutableStateOf(initial?.notes.orEmpty()) }
@@ -76,6 +78,7 @@ fun ContactFormScreen(
                                 id = initial?.id,
                                 name = name.trim(),
                                 mobile = mobile.trim(),
+                                dialCode = dialCode,
                                 relationship = relationship.trim(),
                                 notes = notes.trim(),
                                 type = type,
@@ -109,13 +112,13 @@ fun ContactFormScreen(
                 placeholder = stringResource(R.string.add_contact_name_hint)
             )
             Spacer(modifier = Modifier.height(14.dp))
-            LabeledTextField(
+            InternationalPhoneField(
                 label = stringResource(R.string.add_contact_mobile),
-                value = mobile,
-                onValueChange = { mobile = it },
-                placeholder = stringResource(R.string.add_contact_mobile_hint),
-                keyboardType = KeyboardType.Phone,
-                prefix = stringResource(R.string.add_contact_country_code)
+                dialCode = dialCode,
+                nationalNumber = mobile,
+                onDialCodeChange = { dialCode = it },
+                onNationalChange = { mobile = it },
+                placeholder = stringResource(R.string.add_contact_mobile_hint)
             )
             Spacer(modifier = Modifier.height(14.dp))
             LabeledTextField(

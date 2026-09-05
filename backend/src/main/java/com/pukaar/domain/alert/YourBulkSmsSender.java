@@ -64,12 +64,10 @@ public class YourBulkSmsSender {
     }
 
     private String formatMobile(String phoneE164) {
-        String digits = phoneE164.replace("+", "").trim();
+        String digits = phoneE164.replace("+", "").replaceAll("\\D", "");
+        // Existing India DLT route expects 10-digit local numbers.
         if (digits.startsWith("91") && digits.length() == 12) {
             return digits.substring(2);
-        }
-        if (digits.length() == 10) {
-            return digits;
         }
         return digits;
     }

@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pukaar.app.R
 import com.pukaar.app.ui.component.FieldLabel
+import com.pukaar.app.ui.component.InternationalPhoneField
 import com.pukaar.app.ui.component.LabeledDropdownField
 import com.pukaar.app.ui.component.LabeledTextField
 import com.pukaar.app.ui.component.PrimaryButton
@@ -43,6 +44,7 @@ fun AddContactScreen(
     modifier: Modifier = Modifier
 ) {
     var name by remember { mutableStateOf("") }
+    var dialCode by remember { mutableStateOf("+91") }
     var mobile by remember { mutableStateOf("") }
     var relationship by remember { mutableStateOf("") }
     // SOS is preselected so a contact can never be saved reaching nobody.
@@ -60,6 +62,7 @@ fun AddContactScreen(
                         ContactDraft(
                             name = name,
                             mobile = mobile,
+                            dialCode = dialCode,
                             relationship = relationship,
                             type = type
                         )
@@ -76,13 +79,13 @@ fun AddContactScreen(
                 placeholder = stringResource(R.string.add_contact_name_hint)
             )
             Spacer(modifier = Modifier.height(14.dp))
-            LabeledTextField(
+            InternationalPhoneField(
                 label = stringResource(R.string.add_contact_mobile),
-                value = mobile,
-                onValueChange = { mobile = it },
-                placeholder = stringResource(R.string.add_contact_mobile_hint),
-                keyboardType = KeyboardType.Phone,
-                prefix = stringResource(R.string.add_contact_country_code)
+                dialCode = dialCode,
+                nationalNumber = mobile,
+                onDialCodeChange = { dialCode = it },
+                onNationalChange = { mobile = it },
+                placeholder = stringResource(R.string.add_contact_mobile_hint)
             )
             Spacer(modifier = Modifier.height(14.dp))
             LabeledDropdownField(

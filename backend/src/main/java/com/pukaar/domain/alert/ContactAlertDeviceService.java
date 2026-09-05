@@ -65,12 +65,6 @@ public class ContactAlertDeviceService {
     }
 
     private String normalize(String phone) {
-        String p = phone == null ? "" : phone.trim().replace(" ", "");
-        if (!p.startsWith("+")) {
-            if (p.length() == 10) p = "+91" + p;
-            else p = "+" + p;
-        }
-        if (p.length() < 10) throw new ApiException("INVALID_PHONE", "Invalid phone number");
-        return p;
+        return com.pukaar.common.PhoneNumbers.toE164(phone);
     }
 }

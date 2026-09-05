@@ -68,20 +68,37 @@ import com.pukaar.app.ui.theme.SuccessGreen
 import com.pukaar.app.ui.theme.SurfaceCard
 import com.pukaar.app.ui.theme.TextSecondary
 import com.pukaar.app.ui.theme.TextTertiary
+import com.pukaar.app.util.PhoneNumbers
 import com.pukaar.app.util.userMessage
 import kotlinx.coroutines.launch
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.unit.dp
 
 private enum class LoginStep { Phone, Otp }
 
 @Composable
 fun OtpLoginScreen(onLoggedIn: () -> Unit) {
     var step by remember { mutableStateOf(LoginStep.Phone) }
+    var country by remember { mutableStateOf(PhoneNumbers.defaultCountry()) }
     var phoneDigits by remember { mutableStateOf("") }
     var otpDigits by remember { mutableStateOf(List(6) { "" }) }
     var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
-    val phoneE164 = remember(phoneDigits) { "+91$phoneDigits" }
+    val phoneE164 = remember(country, phoneDigits) {
+        runCatching { PhoneNumbers.fromParts(country.dialCode, phoneDigits) }.getOrDefault("")
+    }
+    val phoneValid = remember(country, phoneDigits) {
+        PhoneNumbers.isValidNational(country, phoneDigits)
+    }
     val otpCode = remember(otpDigits) { otpDigits.joinToString("") }
     val scroll = rememberScrollState()
 
@@ -126,14 +143,22 @@ fun OtpLoginScreen(onLoggedIn: () -> Unit) {
             ) { current ->
                 when (current) {
                     LoginStep.Phone -> PhoneStep(
+                        country = country,
                         phoneDigits = phoneDigits,
+                        phoneValid = phoneValid,
                         loading = loading,
                         error = error,
+                        onCountryChange = {
+                            country = it
+                            phoneDigits = phoneDigits.take(it.nationalLength.last)
+                            error = null
+                        },
                         onPhoneChange = { value ->
-                            phoneDigits = value.filter { it.isDigit() }.take(10)
+                            phoneDigits = value.filter { it.isDigit() }.take(country.nationalLength.last)
                             error = null
                         },
                         onContinue = {
+                            if (!phoneValid || phoneE164.isBlank()) return@PhoneStep
                             scope.launch {
                                 error = null
                                 loading = true
@@ -151,7 +176,7 @@ fun OtpLoginScreen(onLoggedIn: () -> Unit) {
                     )
 
                     LoginStep.Otp -> OtpStep(
-                        phoneDisplay = formatIndianPhone(phoneDigits),
+                        phoneDisplay = "${country.dialCode} ${formatPhone(phoneDigits)}",
                         otpDigits = otpDigits,
                         loading = loading,
                         error = error,
@@ -229,13 +254,17 @@ private fun LoginBrandHeader() {
 
 @Composable
 private fun PhoneStep(
+    country: PhoneNumbers.Country,
     phoneDigits: String,
+    phoneValid: Boolean,
     loading: Boolean,
     error: String?,
+    onCountryChange: (PhoneNumbers.Country) -> Unit,
     onPhoneChange: (String) -> Unit,
     onContinue: () -> Unit
 ) {
-    LoginCard(title = "Sign in", subtitle = "Enter your mobile number to receive a secure OTP") {
+    var menuOpen by remember { mutableStateOf(false) }
+    LoginCard(title = "Sign in", subtitle = "Enter your mobile number with country code") {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -243,11 +272,31 @@ private fun PhoneStep(
                 .clip(RoundedCornerShape(14.dp))
                 .background(Color.Black.copy(alpha = 0.35f))
                 .border(1.dp, PukaarRed.copy(alpha = 0.4f), RoundedCornerShape(14.dp))
-                .padding(horizontal = 14.dp),
+                .padding(horizontal = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("+91", color = PukaarRed, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-            Spacer(Modifier.width(10.dp))
+            Box {
+                Row(
+                    Modifier
+                        .clickable(enabled = !loading) { menuOpen = true }
+                        .padding(end = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(country.dialCode, color = PukaarRed, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Icon(Icons.Filled.ArrowDropDown, contentDescription = null, tint = TextSecondary, modifier = Modifier.width(20.dp))
+                }
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    PhoneNumbers.countries.forEach { c ->
+                        DropdownMenuItem(
+                            text = { Text("${c.dialCode}  ${c.name}", color = Color.White, fontSize = 13.sp) },
+                            onClick = {
+                                onCountryChange(c)
+                                menuOpen = false
+                            }
+                        )
+                    }
+                }
+            }
             Box(Modifier.width(1.dp).height(22.dp).background(TextTertiary.copy(alpha = 0.45f)))
             Spacer(Modifier.width(10.dp))
             BasicTextField(
@@ -256,13 +305,13 @@ private fun PhoneStep(
                 enabled = !loading,
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone, imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { if (phoneDigits.length == 10) onContinue() }),
+                keyboardActions = KeyboardActions(onDone = { if (phoneValid) onContinue() }),
                 cursorBrush = SolidColor(PukaarRed),
                 textStyle = TextStyle(color = Color.White, fontSize = 18.sp, letterSpacing = 1.2.sp),
                 modifier = Modifier.weight(1f),
                 decorationBox = { inner ->
                     if (phoneDigits.isEmpty()) {
-                        Text("10-digit mobile", color = TextTertiary, fontSize = 16.sp)
+                        Text("Mobile number", color = TextTertiary, fontSize = 16.sp)
                     }
                     inner()
                 }
@@ -275,7 +324,7 @@ private fun PhoneStep(
         PremiumPrimaryButton(
             text = if (loading) "Sending OTP…" else "Get OTP",
             loading = loading,
-            enabled = phoneDigits.length == 10,
+            enabled = phoneValid,
             onClick = onContinue
         )
         Text(
@@ -301,7 +350,7 @@ private fun OtpStep(
     val focusRequesters = remember { List(6) { FocusRequester() } }
     LaunchedEffect(Unit) { focusRequesters[0].requestFocus() }
 
-    LoginCard(title = "Verify OTP", subtitle = "Enter the 6-digit code sent to +91 $phoneDisplay") {
+    LoginCard(title = "Verify OTP", subtitle = "Enter the 6-digit code sent to $phoneDisplay") {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -432,7 +481,7 @@ private fun OtpBox(
     }
 }
 
-private fun formatIndianPhone(digits: String): String = when {
+private fun formatPhone(digits: String): String = when {
     digits.length <= 5 -> digits
     digits.length <= 10 -> "${digits.take(5)} ${digits.drop(5)}"
     else -> digits

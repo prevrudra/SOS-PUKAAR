@@ -14,6 +14,7 @@ import com.pukaar.app.ui.theme.AccentBlue
 import com.pukaar.app.ui.theme.PukaarOrange
 import com.pukaar.app.ui.theme.PukaarRed
 import com.pukaar.app.ui.theme.SuccessGreen
+import com.pukaar.app.util.PhoneNumbers
 
 enum class ContactType(
     @StringRes val labelRes: Int,
@@ -80,6 +81,7 @@ data class ContactDraft(
     val id: String? = null,
     val name: String,
     val mobile: String,
+    val dialCode: String = "+91",
     val relationship: String,
     val notes: String = "",
     val type: ContactType,
@@ -89,12 +91,16 @@ data class ContactDraft(
 fun List<ContactUiModel>.filterByType(type: ContactType?): List<ContactUiModel> =
     if (type == null) this else filter { it.type == type }
 
-fun ContactUiModel.toDraft(): ContactDraft = ContactDraft(
-    id = id,
-    name = name,
-    mobile = phoneNumber.removePrefix("+91 ").removePrefix("+91"),
-    relationship = relationship,
-    notes = notes,
-    type = type,
-    priorityOrder = priorityOrder
-)
+fun ContactUiModel.toDraft(): ContactDraft {
+    val (dial, national) = PhoneNumbers.splitE164(phoneNumber)
+    return ContactDraft(
+        id = id,
+        name = name,
+        mobile = national,
+        dialCode = dial,
+        relationship = relationship,
+        notes = notes,
+        type = type,
+        priorityOrder = priorityOrder
+    )
+}
