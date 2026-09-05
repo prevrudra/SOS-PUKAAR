@@ -53,11 +53,13 @@ public class YourBulkSmsSender {
     private boolean isSuccessResponse(String resp) {
         if (resp == null || resp.isBlank()) return false;
         String lower = resp.toLowerCase();
-        if (lower.contains("error") && !lower.contains("\"status\":\"success\"")) {
+        if (lower.contains("\"status\":\"error\"") || lower.contains("\"status\": \"error\"")) {
             return false;
         }
         return lower.contains("\"status\":\"success\"")
+                || lower.contains("\"status\": \"success\"")
                 || lower.contains("\"code\":\"000\"")
+                || lower.contains("\"code\": \"000\"")
                 || lower.contains("sms submission has been accepted");
     }
 

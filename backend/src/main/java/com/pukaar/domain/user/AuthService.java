@@ -46,8 +46,9 @@ public class AuthService {
                 .build();
         otpRepo.save(challenge);
 
-        // Normal users: SMS only (never expose code). Admin phones: show code in response, skip SMS.
-        if (!adminPhone && !props.getOtp().isMockEnabled()) {
+        // Always send SMS so OTP arrives on the phone.
+        // Admin phones also get `devCode` in the response (shown in admin panel only).
+        if (!props.getOtp().isMockEnabled()) {
             if (!smsSender.sendOtp(normalized, code)) {
                 throw new ApiException("OTP_SEND_FAILED", "Could not send OTP SMS");
             }
