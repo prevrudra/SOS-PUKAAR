@@ -21,6 +21,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class EmergencyController {
     private final EmergencyOrchestrator orchestrator;
+    private final com.pukaar.domain.alert.DeliveryStatusService deliveryStatusService;
 
     @PostMapping("/trigger")
     public Map<String, Object> trigger(@RequestBody TriggerRequest req) {
@@ -81,6 +82,15 @@ public class EmergencyController {
     public Map<String, Object> safe(@PathVariable UUID id, @RequestBody(required = false) SafeRequest req) {
         ClosureReason reason = req == null || req.getReason() == null ? ClosureReason.IM_SAFE : req.getReason();
         return orchestrator.markSafe(SecurityUtils.currentUserId(), id, reason);
+    }
+
+    @PostMapping("/{id}/deliveries/status")
+    public Map<String, Object> updateDeliveryStatus(@PathVariable UUID id, @RequestBody DeliveryStatusBatchRequest req) {
+        var updates = (req.getUpdates() == null ? java.util.List.<DeliveryStatusItem>of() : req.getUpdates())
+                .stream()
+                .map(u -> new com.pukaar.domain.alert.DeliveryStatusService.StatusUpdate(u.getPhone(), u.getStatus()))
+                .toList();
+        return deliveryStatusService.updateStatuses(SecurityUtils.currentUserId(), id, updates);
     }
 
     @PostMapping("/{id}/audio-segments")
@@ -167,5 +177,16 @@ public class EmergencyController {
     public static class DrillCompleteRequest {
         private Boolean contactsConfirmed;
         private String notes;
+    }
+
+    @Data
+    public static class DeliveryStatusBatchRequest {
+        private java.util.List<DeliveryStatusItem> updates;
+    }
+
+    @Data
+    public static class DeliveryStatusItem {
+        private String phone;
+        private String status;
     }
 }

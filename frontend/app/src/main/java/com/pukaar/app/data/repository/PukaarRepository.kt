@@ -65,6 +65,14 @@ class PukaarRepository(private val sessionStore: SessionStore) {
     suspend fun updateTelemetry(id: String, batteryPct: Int?, networkType: String?) =
         api.updateTelemetry(id, TelemetryRequest(batteryPct, networkType))
     suspend fun markSafe(id: String) = api.markSafe(id)
+
+    suspend fun updateDeliveryStatuses(eventId: String, phones: List<String>, status: String) =
+        api.updateDeliveryStatuses(
+            eventId,
+            DeliveryStatusBatchRequest(phones.map { DeliveryStatusItem(it, status) })
+        )
+
+    suspend fun nearby(lat: Double, lng: Double, limit: Int = 5) = api.nearby(lat, lng, limit)
     suspend fun createSegment(id: String, index: Int, checksum: String? = null, byteSize: Long? = null) =
         api.createSegment(id, SegmentRequest(index, checksum, byteSize))
 

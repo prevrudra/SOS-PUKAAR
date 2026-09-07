@@ -78,6 +78,15 @@ class PukaarActionsImpl(
                     EmergencyForegroundService.start(
                         context, id, isSos = isSos, recordAudio = isSos && settings.audio
                     )
+                    if (isSos && settings.audio) {
+                        withContext(Dispatchers.Main) {
+                            android.widget.Toast.makeText(
+                                context,
+                                context.getString(com.pukaar.app.R.string.emergency_recording_started),
+                                android.widget.Toast.LENGTH_LONG
+                            ).show()
+                        }
+                    }
                 }
 
                 // Never open SMS composer / send bulk SMS during mock drills — that freezes UX.
@@ -90,6 +99,13 @@ class PukaarActionsImpl(
                     when {
                         smsResult.success -> {
                             android.util.Log.i("PUKAAR", "Emergency SMS sent to ${smsResult.sent} contact(s)")
+                            runCatching {
+                                PukaarApp.instance.repository.updateDeliveryStatuses(
+                                    id,
+                                    smsResult.numbers,
+                                    "SENT"
+                                )
+                            }
                         }
                         !SmsHelper.hasSendSmsPermission(context) -> {
                             onError("SMS permission blocked — confirm send in your SMS app when it opens")

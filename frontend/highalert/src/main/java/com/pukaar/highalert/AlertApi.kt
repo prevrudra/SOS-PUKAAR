@@ -15,6 +15,9 @@ interface AlertApi {
 
     @GET("api/v1/alert-devices/pending")
     suspend fun pendingAlert(): PendingAlertResponse
+
+    @POST("api/v1/alert-devices/acknowledge")
+    suspend fun acknowledge(@Body body: AcknowledgeRequest): Map<String, Any?>
 }
 
 @JsonClass(generateAdapter = true)
@@ -28,6 +31,9 @@ data class AuthResponse(val accessToken: String?, val user: Map<String, Any?>? =
 
 @JsonClass(generateAdapter = true)
 data class RegisterDeviceRequest(val phone: String, val fcmToken: String? = null, val deviceId: String, val platform: String = "ANDROID")
+
+@JsonClass(generateAdapter = true)
+data class AcknowledgeRequest(val eventId: String, val status: String = "READ")
 
 @JsonClass(generateAdapter = true)
 data class PendingAlertResponse(

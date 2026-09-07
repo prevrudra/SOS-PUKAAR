@@ -1,6 +1,7 @@
 package com.pukaar.domain.notification;
 
 import com.pukaar.domain.alert.AlertDeliveryService;
+import com.pukaar.domain.alert.DeliveryStatusService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Async;
@@ -13,6 +14,7 @@ import java.util.UUID;
 @Slf4j
 public class NotificationService {
     private final AlertDeliveryService alertDeliveryService;
+    private final DeliveryStatusService deliveryStatusService;
 
     @Async
     public void enqueueEmergencyAlert(UUID userId, UUID eventId, UUID deliveryId) {
@@ -21,6 +23,7 @@ public class NotificationService {
 
     @Async
     public void notifyEmergencyClosed(UUID eventId) {
-        log.info("Emergency {} closed", eventId);
+        log.info("Emergency {} closed — notifying contacts user is safe", eventId);
+        deliveryStatusService.notifyContactsUserSafe(eventId);
     }
 }
