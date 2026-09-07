@@ -62,6 +62,19 @@ interface PukaarApi {
     @POST("api/v1/emergencies/{id}/safe")
     suspend fun markSafe(@Path("id") id: String, @Body body: SafeRequest = SafeRequest()): EmergencyDto
 
+    @POST("api/v1/emergencies/{id}/deliveries/status")
+    suspend fun updateDeliveryStatuses(
+        @Path("id") id: String,
+        @Body body: DeliveryStatusBatchRequest
+    ): Map<String, Any?>
+
+    @GET("api/v1/nearby")
+    suspend fun nearby(
+        @Query("lat") lat: Double,
+        @Query("lng") lng: Double,
+        @Query("limit") limit: Int = 5
+    ): NearbyResponse
+
     @POST("api/v1/emergencies/{id}/audio-segments")
     suspend fun createSegment(@Path("id") id: String, @Body body: SegmentRequest): SegmentResponse
 
@@ -109,3 +122,23 @@ interface PukaarApi {
 }
 
 data class SafeRequest(val reason: String? = "IM_SAFE")
+
+data class DeliveryStatusBatchRequest(val updates: List<DeliveryStatusItem>)
+data class DeliveryStatusItem(val phone: String, val status: String)
+
+data class NearbyResponse(
+    val police: List<NearbyPlaceDto>? = null,
+    val hospitals: List<NearbyPlaceDto>? = null,
+    val ambulance: List<NearbyPlaceDto>? = null,
+    val source: String? = null
+)
+
+data class NearbyPlaceDto(
+    val name: String? = null,
+    val phone: String? = null,
+    val address: String? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val type: String? = null,
+    val source: String? = null
+)

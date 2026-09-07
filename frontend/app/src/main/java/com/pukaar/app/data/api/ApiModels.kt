@@ -85,7 +85,12 @@ data class EmergencyDto(
 )
 data class HospitalDto(val name: String?, val phone: String?, val address: String?)
 data class DrillCompleteRequest(val contactsConfirmed: Boolean = true, val notes: String? = null)
-data class DeliveryDto(val name: String?, val phone: String?, val status: String?)
+data class DeliveryDto(
+    val name: String?,
+    val phone: String?,
+    val status: String?,
+    val acknowledgedAt: String? = null
+)
 data class AudioSegmentDto(
     val id: String?,
     val index: Int?,

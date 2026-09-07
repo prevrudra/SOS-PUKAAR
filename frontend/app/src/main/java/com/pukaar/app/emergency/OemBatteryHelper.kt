@@ -38,6 +38,11 @@ object OemBatteryHelper {
 
     fun openOemAutostartSettings(context: Context) {
         val candidates = listOf(
+            Intent().setComponent(ComponentName("com.motorola.ccc", "com.motorola.ccc.ui.MotoCareActivity")),
+            Intent().setComponent(ComponentName("com.motorola.moto", "com.motorola.moto.BatteryManagerActivity")),
+            Intent().setComponent(ComponentName("com.lenovo.securitycenter", "com.lenovo.securitycenter.MainActivity")),
+            Intent("com.motorola.intent.action.POWER_SAVER_SETTINGS"),
+            Intent("com.motorola.intent.action.BATTERY_OPTIMIZATION"),
             Intent().setComponent(ComponentName("com.miui.securitycenter", "com.miui.permcenter.autostart.AutoStartManagementActivity")),
             Intent().setComponent(ComponentName("com.letv.android.letvsafe", "com.letv.android.letvsafe.AutobootManageActivity")),
             Intent().setComponent(ComponentName("com.huawei.systemmanager", "com.huawei.systemmanager.startupmgr.ui.StartupNormalAppListActivity")),

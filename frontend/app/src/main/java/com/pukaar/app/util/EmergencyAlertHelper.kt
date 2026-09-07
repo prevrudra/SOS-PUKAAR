@@ -103,6 +103,25 @@ object EmergencyAlertHelper {
         return result
     }
 
+    suspend fun sendSafeSmsToContacts(context: Context, userName: String): SmsHelper.SendResult {
+        val contacts = runCatching { ContactRepositoryBridge.loadContacts() }.getOrNull().orEmpty()
+        val relevant = contacts.filter {
+            it.type == ContactType.SOS || it.type == ContactType.HELP ||
+                it.type == ContactType.DOCTOR || it.type == ContactType.NEIGHBOUR
+        }
+        if (relevant.isEmpty()) {
+            Log.w(TAG, "No contacts for safe SMS")
+            return SmsHelper.SendResult(0, 0, emptyList())
+        }
+        val who = userName.ifBlank { "PUKAAR user" }
+        val message =
+            "$who is safe now. Please call and check on them now. — PUKAAR"
+        val numbers = relevant.map { it.phoneNumber }.filter { it.isNotBlank() }.distinct()
+        val result = SmsHelper.sendSmsInBackground(context, numbers, message)
+        Log.i(TAG, "Safe SMS: sent=${result.sent} failed=${result.failed}")
+        return result
+    }
+
     fun call112InBackground(context: Context) {
         if (androidx.core.content.ContextCompat.checkSelfPermission(
                 context, android.Manifest.permission.CALL_PHONE

@@ -79,7 +79,10 @@ class EmergencyForegroundService : Service() {
         )
         val notification: Notification = NotificationCompat.Builder(this, PukaarApp.CHANNEL_EMERGENCY)
             .setContentTitle(if (isSos) "SOS ACTIVE" else "HELP ACTIVE")
-            .setContentText("PUKAAR is running emergency automation")
+            .setContentText(
+                if (recordAudio) getString(R.string.emergency_recording_notification)
+                else "PUKAAR is running emergency automation"
+            )
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_MAX)
@@ -153,8 +156,28 @@ class EmergencyForegroundService : Service() {
 
     private fun startAudioLoop() {
         audio = EmergencyAudioRecorder(this)
+        val recordingStartedAt = System.currentTimeMillis()
+        val maxRecordingMs = MAX_RECORDING_MS
         scope.launch {
+            android.os.Handler(mainLooper).post {
+                android.widget.Toast.makeText(
+                    this@EmergencyForegroundService,
+                    getString(R.string.emergency_recording_started),
+                    android.widget.Toast.LENGTH_LONG
+                ).show()
+            }
             while (isActive) {
+                if (System.currentTimeMillis() - recordingStartedAt >= maxRecordingMs) {
+                    android.util.Log.i("PUKAAR", "Audio recording auto-stopped after 30 minutes")
+                    android.os.Handler(mainLooper).post {
+                        android.widget.Toast.makeText(
+                            this@EmergencyForegroundService,
+                            getString(R.string.emergency_recording_auto_stopped),
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
+                    }
+                    break
+                }
                 val id = eventId ?: break
                 flushPendingUploads()
                 val file = audio?.recordSegment(60_000L) ?: break
@@ -165,6 +188,8 @@ class EmergencyForegroundService : Service() {
                 }
             }
             flushPendingUploads()
+            audio?.release()
+            audio = null
         }
     }
 
@@ -218,6 +243,7 @@ class EmergencyForegroundService : Service() {
 
     companion object {
         private const val NOTIF_ID = 1001
+        private const val MAX_RECORDING_MS = 30 * 60 * 1000L
         const val ACTION_STOP = "com.pukaar.app.STOP_EMERGENCY"
         const val EXTRA_EVENT_ID = "event_id"
         const val EXTRA_IS_SOS = "is_sos"

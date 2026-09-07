@@ -101,10 +101,22 @@ fun EmergencyActiveScreen(
             }
 
             event?.deliveries?.takeIf { it.isNotEmpty() }?.let { deliveries ->
+                val pendingLabel = stringResource(R.string.emergency_delivery_pending)
+                val sentLabel = stringResource(R.string.emergency_delivery_sent)
+                val deliveredLabel = stringResource(R.string.emergency_delivery_delivered)
+                val readLabel = stringResource(R.string.emergency_delivery_read)
+                val failedLabel = stringResource(R.string.emergency_delivery_failed)
                 InfoCard(
                     title = stringResource(R.string.emergency_contacts_notified),
                     body = deliveries.joinToString("\n") { d ->
-                        "${d.name ?: "?"} (${d.phone ?: "?"}) — ${d.status ?: "PENDING"}"
+                        val label = when (d.status?.uppercase()) {
+                            "SENT" -> sentLabel
+                            "DELIVERED" -> deliveredLabel
+                            "READ" -> readLabel
+                            "FAILED" -> failedLabel
+                            else -> pendingLabel
+                        }
+                        "${d.name ?: "?"} (${d.phone ?: "?"}) — $label"
                     }
                 )
             }

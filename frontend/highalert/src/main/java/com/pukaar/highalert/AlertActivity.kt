@@ -3,6 +3,7 @@ package com.pukaar.highalert
 import android.content.Context
 import android.content.Intent
 import android.media.AudioAttributes
+import android.media.AudioManager
 import android.media.MediaPlayer
 import android.media.RingtoneManager
 import android.net.Uri
@@ -18,15 +19,19 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 
 class AlertActivity : ComponentActivity() {
     private var player: MediaPlayer? = null
+    private var previousAlarmVolume: Int? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -34,6 +39,7 @@ class AlertActivity : ComponentActivity() {
             setShowWhenLocked(true)
             setTurnScreenOn(true)
         }
+        boostAlarmVolume()
         playAlarm()
         vibrate()
 
@@ -44,8 +50,23 @@ class AlertActivity : ComponentActivity() {
         val battery = intent.getIntExtra(EXTRA_BATTERY, -1)
         val network = intent.getStringExtra(EXTRA_NETWORK) ?: ""
         val mock = intent.getBooleanExtra(EXTRA_MOCK, false)
+        val eventId = intent.getStringExtra(EXTRA_EVENT_ID)
+
+        // Mark delivered when alert is shown
+        if (!eventId.isNullOrBlank()) {
+            Thread {
+                runCatching {
+                    val session = AlertSession(this)
+                    val api = AlertNetwork.api { runBlocking { session.token() } }
+                    runBlocking {
+                        api.acknowledge(AcknowledgeRequest(eventId, "DELIVERED"))
+                    }
+                }
+            }.start()
+        }
 
         setContent {
+            val scope = rememberCoroutineScope()
             Column(
                 Modifier.fillMaxSize().background(Color(0xFF7F1D1D)).padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -69,6 +90,7 @@ class AlertActivity : ComponentActivity() {
                 Button(
                     onClick = {
                         stopAlarm()
+                        markRead(eventId)
                         if (lat != 0.0 && lng != 0.0) {
                             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://maps.google.com/?q=$lat,$lng")))
                         }
@@ -80,6 +102,7 @@ class AlertActivity : ComponentActivity() {
                 Button(
                     onClick = {
                         stopAlarm()
+                        markRead(eventId)
                         startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$phone")))
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF22C55E)),
@@ -87,10 +110,40 @@ class AlertActivity : ComponentActivity() {
                 ) { Text("Call Now", color = Color.Black, fontWeight = FontWeight.Bold) }
                 Spacer(Modifier.height(8.dp))
                 Button(
-                    onClick = { stopAlarm(); finish() },
+                    onClick = {
+                        stopAlarm()
+                        scope.launch { markRead(eventId) }
+                        finish()
+                    },
                     colors = ButtonDefaults.buttonColors(containerColor = Color.Black),
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("Dismiss", color = Color.White) }
+            }
+        }
+    }
+
+    private fun markRead(eventId: String?) {
+        if (eventId.isNullOrBlank()) return
+        Thread {
+            runCatching {
+                val session = AlertSession(this)
+                val api = AlertNetwork.api { runBlocking { session.token() } }
+                runBlocking {
+                    api.acknowledge(AcknowledgeRequest(eventId, "READ"))
+                }
+            }
+        }.start()
+    }
+
+    private fun boostAlarmVolume() {
+        runCatching {
+            val am = getSystemService(AUDIO_SERVICE) as AudioManager
+            previousAlarmVolume = am.getStreamVolume(AudioManager.STREAM_ALARM)
+            val max = am.getStreamMaxVolume(AudioManager.STREAM_ALARM)
+            am.setStreamVolume(AudioManager.STREAM_ALARM, max, 0)
+            // Also raise music/ring as fallback for OEMs that route alarms oddly
+            runCatching {
+                am.setStreamVolume(AudioManager.STREAM_RING, am.getStreamMaxVolume(AudioManager.STREAM_RING), 0)
             }
         }
     }
@@ -107,6 +160,7 @@ class AlertActivity : ComponentActivity() {
             )
             setDataSource(this@AlertActivity, uri)
             isLooping = true
+            setVolume(1f, 1f)
             prepare()
             start()
         }
@@ -120,13 +174,20 @@ class AlertActivity : ComponentActivity() {
             getSystemService(VIBRATOR_SERVICE) as Vibrator
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            v.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 800, 400, 800), 0))
+            v.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 800, 400, 800, 400, 1200), 0))
         }
     }
 
     private fun stopAlarm() {
         player?.run { stop(); release() }
         player = null
+        previousAlarmVolume?.let { vol ->
+            runCatching {
+                val am = getSystemService(AUDIO_SERVICE) as AudioManager
+                am.setStreamVolume(AudioManager.STREAM_ALARM, vol, 0)
+            }
+        }
+        previousAlarmVolume = null
     }
 
     override fun onDestroy() {
@@ -142,6 +203,7 @@ class AlertActivity : ComponentActivity() {
         const val EXTRA_BATTERY = "battery"
         const val EXTRA_NETWORK = "network"
         const val EXTRA_MOCK = "mock"
+        const val EXTRA_EVENT_ID = "event_id"
 
         fun intent(ctx: Context, alert: PendingAlertResponse): Intent =
             Intent(ctx, AlertActivity::class.java).apply {
@@ -153,6 +215,7 @@ class AlertActivity : ComponentActivity() {
                 putExtra(EXTRA_BATTERY, alert.batteryPct ?: -1)
                 putExtra(EXTRA_NETWORK, alert.networkType)
                 putExtra(EXTRA_MOCK, alert.mockDrill == true)
+                putExtra(EXTRA_EVENT_ID, alert.eventId)
             }
     }
 }

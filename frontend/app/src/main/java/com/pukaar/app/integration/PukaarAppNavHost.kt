@@ -18,6 +18,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import com.pukaar.app.PukaarApp
+import com.pukaar.app.R
 import com.pukaar.app.data.api.EmergencyDto
 import com.pukaar.app.emergency.EmergencyForegroundService
 import com.pukaar.app.ui.navigation.PukaarNavHost
@@ -30,8 +31,11 @@ import com.pukaar.app.ui.screen.home.HomeMode
 import com.pukaar.app.ui.screen.home.SosCountdownOverlay
 import com.pukaar.app.ui.screen.splash.SplashScreen
 import com.pukaar.app.ui.theme.PukaarTheme
+import com.pukaar.app.util.EmergencyAlertHelper
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun PukaarAppNavHost() {
@@ -263,7 +267,20 @@ private fun EmergencyActiveRoute(
                             PukaarApp.instance.sessionStore.setProtectionReady(true)
                         }
                     } else {
-                        runCatching { PukaarApp.instance.repository.markSafe(eventId) }
+                        val safeEvent = runCatching { PukaarApp.instance.repository.markSafe(eventId) }.getOrNull()
+                        // Stop recording immediately when I'm Safe is tapped
+                        runCatching { EmergencyForegroundService.stop(context) }
+                        val name = safeEvent?.userName
+                            ?: runCatching { PukaarApp.instance.repository.me().fullName }.getOrNull()
+                            ?: "PUKAAR user"
+                        withContext(Dispatchers.IO) {
+                            EmergencyAlertHelper.sendSafeSmsToContacts(context, name)
+                        }
+                        android.widget.Toast.makeText(
+                            context,
+                            context.getString(R.string.emergency_safe_sms_sent),
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
                     }
                 } finally {
                     runCatching { EmergencyForegroundService.stop(context) }
