@@ -157,6 +157,14 @@ fun EmergencyActiveScreen(
                 )
             }
 
+            event?.nearbySource?.takeIf { it.isNotBlank() }?.let { src ->
+                Text(
+                    text = "Nearby via $src",
+                    color = TextSecondary,
+                    fontSize = 11.sp
+                )
+            }
+
             if (!isMockDrill && event?.call112Status != null) {
                 InfoCard(
                     title = stringResource(R.string.emergency_112),
