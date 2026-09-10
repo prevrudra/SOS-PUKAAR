@@ -18,6 +18,12 @@ public class PukaarProperties {
     private Razorpay razorpay = new Razorpay();
     private Admin admin = new Admin();
     private Alerts alerts = new Alerts();
+    private Google google = new Google();
+
+    @Data
+    public static class Google {
+        private String mapsApiKey = "";
+    }
 
     @Data
     public static class Jwt {

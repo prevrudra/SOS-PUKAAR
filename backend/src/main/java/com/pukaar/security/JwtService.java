@@ -31,11 +31,11 @@ public class JwtService {
         this.refreshDays = props.getJwt().getRefreshTokenDays();
     }
 
-    public String createAccessToken(UUID userId, String role) {
+    public String createAccessToken(UUID userId, String role, int sessionEpoch) {
         Instant now = Instant.now();
         return Jwts.builder()
                 .subject(userId.toString())
-                .claims(Map.of("role", role, "type", "access"))
+                .claims(Map.of("role", role, "type", "access", "se", sessionEpoch))
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(now.plusSeconds(accessMinutes * 60)))
                 .signWith(key)

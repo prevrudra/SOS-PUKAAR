@@ -12,8 +12,8 @@ android {
         applicationId = "com.pukaar.highalert"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 3
+        versionName = "1.2.0"
         buildConfigField("String", "API_BASE_URL", "\"http://43.248.56.240:8080/\"")
     }
 

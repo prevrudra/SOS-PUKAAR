@@ -34,6 +34,7 @@ class SessionStore(private val context: Context) {
     val homeMode: Flow<String> = context.dataStore.data.map { it[homeModeKey] ?: "SOS" }
     val onboardingComplete: Flow<Boolean> = context.dataStore.data.map { it[onboardingKey] ?: false }
     val protectionReady: Flow<Boolean> = context.dataStore.data.map { it[protectionReadyKey] ?: false }
+    val mockDrillPassed: Flow<Boolean> = context.dataStore.data.map { it[mockDrillPassedKey] ?: false }
 
     suspend fun token(): String? = accessToken.first()
 

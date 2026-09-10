@@ -45,6 +45,9 @@ class EmergencyAudioRecorder(private val context: Context) {
             } else {
                 out
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            release()
+            throw e
         } catch (_: Exception) {
             release()
             null

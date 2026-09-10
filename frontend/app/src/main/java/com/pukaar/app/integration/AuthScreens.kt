@@ -85,7 +85,7 @@ import androidx.compose.ui.unit.dp
 private enum class LoginStep { Phone, Otp }
 
 @Composable
-fun OtpLoginScreen(onLoggedIn: () -> Unit) {
+fun OtpLoginScreen(onLoggedIn: (showDeviceRestore: Boolean) -> Unit) {
     var step by remember { mutableStateOf(LoginStep.Phone) }
     var country by remember { mutableStateOf(PhoneNumbers.defaultCountry()) }
     var phoneDigits by remember { mutableStateOf("") }
@@ -191,8 +191,8 @@ fun OtpLoginScreen(onLoggedIn: () -> Unit) {
                                         error = null
                                         loading = true
                                         try {
-                                            PukaarApp.instance.repository.verifyOtp(phoneE164, code)
-                                            onLoggedIn()
+                                            val resp = PukaarApp.instance.repository.verifyOtp(phoneE164, code)
+                                            onLoggedIn(resp.deviceChanged == true)
                                         } catch (e: Exception) {
                                             error = e.userMessage()
                                         } finally {
@@ -212,8 +212,8 @@ fun OtpLoginScreen(onLoggedIn: () -> Unit) {
                                 error = null
                                 loading = true
                                 try {
-                                    PukaarApp.instance.repository.verifyOtp(phoneE164, otpCode)
-                                    onLoggedIn()
+                                    val resp = PukaarApp.instance.repository.verifyOtp(phoneE164, otpCode)
+                                    onLoggedIn(resp.deviceChanged == true)
                                 } catch (e: Exception) {
                                     error = e.userMessage()
                                 } finally {

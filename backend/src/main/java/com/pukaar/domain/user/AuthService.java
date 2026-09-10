@@ -83,20 +83,33 @@ public class AuthService {
         challenge.setConsumed(true);
         otpRepo.save(challenge);
 
-        UserEntity user = userRepo.findByPhoneE164(normalized).orElseGet(() -> createUser(normalized, deviceId, referralCode));
-        if (deviceId != null) {
+        UserEntity user = userRepo.findByPhoneE164(normalized).orElse(null);
+        boolean returningUser = user != null;
+        if (user == null) {
+            user = createUser(normalized, deviceId, referralCode);
+        }
+        String previousDevice = user.getDeviceId();
+        boolean deviceChanged = returningUser && deviceId != null && !deviceId.isBlank()
+                && (previousDevice == null || previousDevice.isBlank() || !previousDevice.equals(deviceId));
+        if (deviceId != null && !deviceId.isBlank()) {
             user.setDeviceId(deviceId);
+        }
+        if (deviceChanged) {
+            user.setSessionEpoch(user.getSessionEpoch() + 1);
         }
         user.setLastActivityAt(Instant.now());
         adminBootstrap.promoteIfAdminPhone(user);
         userRepo.save(user);
 
-        String access = jwtService.createAccessToken(user.getId(), user.getRole().name());
+        String access = jwtService.createAccessToken(user.getId(), user.getRole().name(), user.getSessionEpoch());
         String refresh = jwtService.createRefreshToken(user.getId());
         Map<String, Object> resp = new LinkedHashMap<>();
         resp.put("accessToken", access);
         resp.put("refreshToken", refresh);
         resp.put("user", toUserDto(user));
+        resp.put("deviceChanged", deviceChanged);
+        resp.put("previousDeviceDeactivated", deviceChanged);
+        resp.put("restoreAvailable", returningUser);
         return resp;
     }
 

@@ -128,7 +128,8 @@ fun EmergencyActiveScreen(
                         ps.name?.let { append(it) }
                         ps.address?.let { append("\n$it") }
                         ps.phone?.let { append("\n$it") }
-                    }
+                    },
+                    phone = ps.phone
                 )
             }
 
@@ -139,7 +140,20 @@ fun EmergencyActiveScreen(
                         h.name?.let { append(it) }
                         h.address?.let { append("\n$it") }
                         h.phone?.let { append("\n$it") }
-                    }
+                    },
+                    phone = h.phone
+                )
+            }
+
+            event?.nearestAmbulance?.let { a ->
+                InfoCard(
+                    title = stringResource(R.string.emergency_ambulance),
+                    body = buildString {
+                        a.name?.let { append(it) }
+                        a.address?.let { append("\n$it") }
+                        a.phone?.let { append("\n$it") }
+                    },
+                    phone = a.phone
                 )
             }
 
@@ -203,6 +217,15 @@ fun EmergencyActiveScreen(
             )
         }
 
+        if (!isMockDrill) {
+            Text(
+                text = stringResource(R.string.emergency_im_safe_hint),
+                color = TextSecondary,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+        }
+
         Spacer(modifier = Modifier.height(8.dp))
         Text(
             text = stringResource(R.string.emergency_disclaimer),
@@ -213,7 +236,8 @@ fun EmergencyActiveScreen(
 }
 
 @Composable
-private fun InfoCard(title: String, body: String) {
+private fun InfoCard(title: String, body: String, phone: String? = null) {
+    val context = LocalContext.current
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -223,5 +247,17 @@ private fun InfoCard(title: String, body: String) {
         Text(text = title.uppercase(), color = TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
         Spacer(modifier = Modifier.height(6.dp))
         Text(text = body, color = TextSecondary, fontSize = 13.sp, lineHeight = 19.sp)
+        if (!phone.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = {
+                    context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$phone")))
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = PukaarRed),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text(stringResource(R.string.emergency_call_place).uppercase(), fontWeight = FontWeight.Bold)
+            }
+        }
     }
 }
