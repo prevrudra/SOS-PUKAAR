@@ -103,7 +103,6 @@ fun PukaarAppNavHost() {
                     add(Manifest.permission.ACCESS_FINE_LOCATION)
                     add(Manifest.permission.RECORD_AUDIO)
                     add(Manifest.permission.CALL_PHONE)
-                    add(Manifest.permission.SEND_SMS)
                     if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
                 }.filter {
                     ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED
@@ -359,16 +358,10 @@ private fun EmergencyActiveRoute(
                             PukaarApp.instance.sessionStore.setProtectionReady(true)
                         }
                     } else {
-                        val safeEvent = runCatching { PukaarApp.instance.repository.markSafe(eventId) }.getOrNull()
-                        val name = safeEvent?.userName
-                            ?: runCatching { PukaarApp.instance.repository.me().fullName }.getOrNull()
-                            ?: "PUKAAR user"
-                        withContext(Dispatchers.IO) {
-                            EmergencyAlertHelper.sendSafeSmsToContacts(context, name)
-                        }
+                        runCatching { PukaarApp.instance.repository.markSafe(eventId) }
                         android.widget.Toast.makeText(
                             context,
-                            context.getString(R.string.emergency_safe_sms_sent),
+                            "Contacts notified via WhatsApp that you are safe",
                             android.widget.Toast.LENGTH_LONG
                         ).show()
                     }

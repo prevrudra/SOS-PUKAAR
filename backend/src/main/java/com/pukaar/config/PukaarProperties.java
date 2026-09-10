@@ -103,6 +103,8 @@ public class PukaarProperties {
         public static class Whatsapp {
             private String token = "";
             private String phoneNumberId = "";
+            private String templateName = "emergency";
+            private String templateLanguage = "en";
         }
 
         @Data
