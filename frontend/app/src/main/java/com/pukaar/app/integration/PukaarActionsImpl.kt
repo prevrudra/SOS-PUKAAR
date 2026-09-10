@@ -89,31 +89,9 @@ class PukaarActionsImpl(
                     }
                 }
 
-                // Never open SMS composer / send bulk SMS during mock drills — that freezes UX.
+                // Alerts go via WhatsApp Cloud API on the server — no device SMS permission.
                 if (!mockDrill && settings.alertContacts) {
-                    val smsResult = withContext(Dispatchers.IO) {
-                        EmergencyAlertHelper.sendSmsToContactsInBackground(
-                            context, event, isSos, isMockDrill = false
-                        )
-                    }
-                    when {
-                        smsResult.success -> {
-                            android.util.Log.i("PUKAAR", "Emergency SMS sent to ${smsResult.sent} contact(s)")
-                            runCatching {
-                                PukaarApp.instance.repository.updateDeliveryStatuses(
-                                    id,
-                                    smsResult.numbers,
-                                    "SENT"
-                                )
-                            }
-                        }
-                        !SmsHelper.hasSendSmsPermission(context) -> {
-                            onError("SMS permission blocked — confirm send in your SMS app when it opens")
-                        }
-                        else -> {
-                            onError("Could not send SMS to contacts. Check signal and SMS permission.")
-                        }
-                    }
+                    android.util.Log.i("PUKAAR", "Trusted-contact alerts queued via WhatsApp on server")
                 }
 
                 if (!mockDrill && settings.autoCall && isSos) {

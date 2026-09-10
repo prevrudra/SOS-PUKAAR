@@ -7,7 +7,9 @@ import org.springframework.http.*;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 @Slf4j
@@ -23,30 +25,99 @@ public class WhatsAppAlertSender {
                 && wa.getPhoneNumberId() != null && !wa.getPhoneNumberId().isBlank();
     }
 
+    /**
+     * Sends the approved WhatsApp "emergency" template (19 body variables).
+     */
+    public boolean sendEmergencyTemplate(String toPhoneE164, List<String> bodyParams) {
+        if (!isConfigured()) return false;
+        try {
+            String phone = digitsOnly(toPhoneE164);
+            var wa = props.getAlerts().getWhatsapp();
+            String url = "https://graph.facebook.com/v26.0/" + wa.getPhoneNumberId() + "/messages";
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.setBearerAuth(wa.getToken());
+
+            List<Map<String, Object>> parameters = new ArrayList<>();
+            for (String p : padParams(bodyParams, 19)) {
+                Map<String, Object> param = new LinkedHashMap<>();
+                param.put("type", "text");
+                param.put("text", sanitize(p));
+                parameters.add(param);
+            }
+
+            Map<String, Object> bodyComponent = new LinkedHashMap<>();
+            bodyComponent.put("type", "body");
+            bodyComponent.put("parameters", parameters);
+
+            Map<String, Object> template = new LinkedHashMap<>();
+            template.put("name", wa.getTemplateName() == null || wa.getTemplateName().isBlank()
+                    ? "emergency" : wa.getTemplateName());
+            template.put("language", Map.of("code", wa.getTemplateLanguage() == null || wa.getTemplateLanguage().isBlank()
+                    ? "en" : wa.getTemplateLanguage()));
+            template.put("components", List.of(bodyComponent));
+
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("messaging_product", "whatsapp");
+            payload.put("to", phone);
+            payload.put("type", "template");
+            payload.put("template", template);
+
+            ResponseEntity<String> resp = restTemplate.exchange(
+                    url, HttpMethod.POST, new HttpEntity<>(payload, headers), String.class);
+            boolean ok = resp.getStatusCode().is2xxSuccessful();
+            if (ok) log.info("WhatsApp emergency template sent to {}", phone);
+            else log.warn("WhatsApp template failed {} -> {}", phone, resp.getBody());
+            return ok;
+        } catch (Exception e) {
+            log.error("WhatsApp template send failed for {}", toPhoneE164, e);
+            return false;
+        }
+    }
+
     public boolean sendText(String toPhoneE164, String body) {
         if (!isConfigured()) return false;
         try {
-            String phone = toPhoneE164.replace("+", "").trim();
-            String url = "https://graph.facebook.com/v19.0/" + props.getAlerts().getWhatsapp().getPhoneNumberId() + "/messages";
+            String phone = digitsOnly(toPhoneE164);
+            var wa = props.getAlerts().getWhatsapp();
+            String url = "https://graph.facebook.com/v26.0/" + wa.getPhoneNumberId() + "/messages";
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.setBearerAuth(props.getAlerts().getWhatsapp().getToken());
+            headers.setBearerAuth(wa.getToken());
 
-            Map<String, Object> text = Map.of("preview_url", true, "body", body);
             Map<String, Object> payload = new LinkedHashMap<>();
             payload.put("messaging_product", "whatsapp");
             payload.put("to", phone);
             payload.put("type", "text");
-            payload.put("text", text);
+            payload.put("text", Map.of("preview_url", true, "body", body));
 
-            ResponseEntity<String> resp = restTemplate.exchange(url, HttpMethod.POST, new HttpEntity<>(payload, headers), String.class);
-            boolean ok = resp.getStatusCode().is2xxSuccessful();
-            if (ok) log.info("WhatsApp alert sent to {}", toPhoneE164);
-            else log.warn("WhatsApp alert failed {} -> {}", toPhoneE164, resp.getBody());
-            return ok;
+            ResponseEntity<String> resp = restTemplate.exchange(
+                    url, HttpMethod.POST, new HttpEntity<>(payload, headers), String.class);
+            return resp.getStatusCode().is2xxSuccessful();
         } catch (Exception e) {
-            log.error("WhatsApp send failed for {}", toPhoneE164, e);
+            log.error("WhatsApp text send failed for {}", toPhoneE164, e);
             return false;
         }
+    }
+
+    private static String digitsOnly(String phone) {
+        return phone == null ? "" : phone.replaceAll("[^0-9]", "");
+    }
+
+    private static List<String> padParams(List<String> in, int n) {
+        List<String> out = new ArrayList<>(n);
+        for (int i = 0; i < n; i++) {
+            out.add(i < in.size() && in.get(i) != null && !in.get(i).isBlank() ? in.get(i) : "-");
+        }
+        return out;
+    }
+
+    /** WhatsApp template vars cannot be empty and have length limits. */
+    private static String sanitize(String raw) {
+        String s = raw == null ? "-" : raw.trim();
+        if (s.isBlank()) s = "-";
+        if (s.length() > 1024) s = s.substring(0, 1024);
+        return s;
     }
 }

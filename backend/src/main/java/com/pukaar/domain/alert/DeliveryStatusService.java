@@ -31,6 +31,7 @@ public class DeliveryStatusService {
     private final ContactAlertDeviceRepository alertDeviceRepo;
     private final FcmPushSender fcm;
     private final YourBulkSmsSender smsSender;
+    private final WhatsAppAlertSender whatsApp;
 
     @Transactional
     public Map<String, Object> updateStatuses(UUID ownerUserId, UUID eventId, List<StatusUpdate> updates) {
@@ -100,8 +101,9 @@ public class DeliveryStatusService {
             if (device.isPresent() && device.get().getFcmToken() != null) {
                 fcm.sendHighPriority(device.get().getFcmToken(), "PUKAAR — User Safe", message, pushData);
             }
-            // Best-effort SMS when gateway supports the destination
-            smsSender.send(d.getContactPhone(), message);
+            if (whatsApp.isConfigured()) {
+                whatsApp.sendText(d.getContactPhone(), message);
+            }
         }
         log.info("Safe notifications enqueued for event {}", eventId);
     }
