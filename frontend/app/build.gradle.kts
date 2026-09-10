@@ -12,8 +12,8 @@ android {
         applicationId = "com.pukaar.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 19
-        versionName = "1.11.0"
+        versionCode = 20
+        versionName = "1.12.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // Emulator default; debug override points at LAN Mac IP for physical devices
         buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8080/\"")
@@ -23,7 +23,7 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            buildConfigField("String", "API_BASE_URL", "\"http://43.248.56.240:8080/\"")
+            buildConfigField("String", "API_BASE_URL", "\"http://43.248.56.240/pukaar/\"")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -32,7 +32,7 @@ android {
         debug {
             applicationIdSuffix = ".debug"
             isDebuggable = true
-            buildConfigField("String", "API_BASE_URL", "\"http://43.248.56.240:8080/\"")
+            buildConfigField("String", "API_BASE_URL", "\"http://43.248.56.240/pukaar/\"")
         }
     }
 
