@@ -34,6 +34,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 if ("access".equals(claims.get("type"))) {
                     UUID userId = UUID.fromString(claims.getSubject());
                     userRepository.findById(userId).ifPresent(user -> {
+                        int tokenEpoch = 0;
+                        Object se = claims.get("se");
+                        if (se instanceof Number n) tokenEpoch = n.intValue();
+                        if (tokenEpoch != user.getSessionEpoch()) {
+                            return; // old phone after device restore
+                        }
                         UserPrincipal principal = new UserPrincipal(user.getId(), user.getPhoneE164(), user.getRole());
                         var auth = new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities());
                         SecurityContextHolder.getContext().setAuthentication(auth);

@@ -47,23 +47,46 @@ fun PukaarAppNavHost() {
   var countdownMode by remember { mutableStateOf<HomeMode?>(null) }
     val emergencyNav = rememberNavController()
 
+    var showDeviceRestore by remember { mutableStateOf(false) }
+
     LaunchedEffect(Unit) {
-        authed = PukaarApp.instance.sessionStore.token() != null
-        if (authed == true) {
-            runCatching { PukaarApp.instance.repository.syncSession() }
-            onboardingDone = PukaarApp.instance.sessionStore.onboardingComplete.first()
+        withContext(Dispatchers.IO) {
+            val token = PukaarApp.instance.sessionStore.token()
+            if (token != null) {
+                runCatching { PukaarApp.instance.repository.syncSession() }
+                val done = PukaarApp.instance.sessionStore.onboardingComplete.first()
+                withContext(Dispatchers.Main) {
+                    authed = true
+                    onboardingDone = done
+                }
+            } else {
+                withContext(Dispatchers.Main) { authed = false }
+            }
         }
     }
 
     when {
-        authed == null || (authed == true && onboardingDone == null) -> SplashScreen()
+        authed == null -> SplashScreen()
         authed == false -> PukaarTheme {
-            OtpLoginScreen {
+            OtpLoginScreen { restore ->
+                showDeviceRestore = restore
                 authed = true
-                onboardingDone = false
-                com.pukaar.app.emergency.PukaarGuardService.start(context, hasSession = true)
+                // Returning users already have onboarding on server; syncSession fills local prefs
+                scope.launch {
+                    withContext(Dispatchers.IO) {
+                        runCatching { PukaarApp.instance.repository.syncSession() }
+                    }
+                    onboardingDone = PukaarApp.instance.sessionStore.onboardingComplete.first()
+                    com.pukaar.app.emergency.PukaarGuardService.start(context, hasSession = true)
+                }
             }
         }
+        showDeviceRestore -> PukaarTheme {
+            DeviceRestoreScreen {
+                showDeviceRestore = false
+            }
+        }
+        onboardingDone == null -> SplashScreen()
         onboardingDone == false -> PukaarTheme {
             OnboardingConsentScreen {
                 onboardingDone = true
@@ -120,10 +143,36 @@ fun PukaarAppNavHost() {
             }
 
             LaunchedEffect(Unit) {
-                val active = runCatching { PukaarApp.instance.repository.activeEmergency() }.getOrNull()
-                if (active?.active == true && active.id != null) {
-                    val mock = active.mockDrill == true
-                    emergencyNav.navigate("emergency/${active.id}?mock=$mock")
+                val active = withContext(Dispatchers.IO) {
+                    runCatching { PukaarApp.instance.repository.activeEmergency() }.getOrNull()
+                } ?: return@LaunchedEffect
+                if (active.active != true || active.id == null) return@LaunchedEffect
+                val mock = active.mockDrill == true
+                // Don't reopen Finish Drill after user already passed mock, or for stale drills
+                if (mock) {
+                    val passed = PukaarApp.instance.sessionStore.mockDrillPassed.first()
+                    if (passed) {
+                        withContext(Dispatchers.IO) {
+                            runCatching { PukaarApp.instance.repository.markSafe(active.id) }
+                        }
+                        return@LaunchedEffect
+                    }
+                    val started = active.startedAt
+                    if (!started.isNullOrBlank()) {
+                        val stale = runCatching {
+                            java.time.Instant.parse(started)
+                                .isBefore(java.time.Instant.now().minusSeconds(10 * 60))
+                        }.getOrDefault(false)
+                        if (stale) {
+                            withContext(Dispatchers.IO) {
+                                runCatching { PukaarApp.instance.repository.markSafe(active.id) }
+                            }
+                            return@LaunchedEffect
+                        }
+                    }
+                }
+                emergencyNav.navigate("emergency/${active.id}?mock=$mock") {
+                    launchSingleTop = true
                 }
             }
 
@@ -232,7 +281,8 @@ private fun EmergencyActiveRoute(
             if (finishing) break
             val e = runCatching { PukaarApp.instance.repository.getEmergency(eventId) }.getOrNull()
             event = e
-            if (e?.active == false && !isMockDrill) {
+            // Closed mock drills were restoring as "Finish Drill" on Motorola (and others)
+            if (e?.active == false) {
                 EmergencyForegroundService.stop(context)
                 onClosed()
                 break
@@ -247,6 +297,8 @@ private fun EmergencyActiveRoute(
         onMarkSafe = {
             if (finishing) return@EmergencyActiveScreen
             finishing = true
+            // Stop background recording immediately — do not wait for the API
+            EmergencyForegroundService.stop(context)
             scope.launch {
                 try {
                     if (isMockDrill) {
@@ -268,8 +320,6 @@ private fun EmergencyActiveRoute(
                         }
                     } else {
                         val safeEvent = runCatching { PukaarApp.instance.repository.markSafe(eventId) }.getOrNull()
-                        // Stop recording immediately when I'm Safe is tapped
-                        runCatching { EmergencyForegroundService.stop(context) }
                         val name = safeEvent?.userName
                             ?: runCatching { PukaarApp.instance.repository.me().fullName }.getOrNull()
                             ?: "PUKAAR user"

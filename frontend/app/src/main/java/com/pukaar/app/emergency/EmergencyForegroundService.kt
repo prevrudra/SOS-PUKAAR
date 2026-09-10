@@ -260,8 +260,7 @@ class EmergencyForegroundService : Service() {
         }
 
         fun stop(context: Context) {
-            val intent = Intent(context, EmergencyForegroundService::class.java).apply { action = ACTION_STOP }
-            ContextCompatStart(context, intent)
+            runCatching { context.stopService(Intent(context, EmergencyForegroundService::class.java)) }
         }
 
         private fun ContextCompatStart(context: Context, intent: Intent) {

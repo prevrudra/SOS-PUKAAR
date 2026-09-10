@@ -114,6 +114,8 @@ pukaar:
   admin:
     phone: ${ADMIN_PHONE:}
     # Comma-separated list also supported via ADMIN_PHONE
+  google:
+    maps-api-key: ${GOOGLE_MAPS_API_KEY:}
   alerts:
     whatsapp:
       token: ${WHATSAPP_TOKEN:}

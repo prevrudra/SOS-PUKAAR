@@ -52,6 +52,11 @@ public class UserEntity {
     @Column(name = "device_id", length = 128)
     private String deviceId;
 
+    /** Incremented when the active phone changes so old-device JWTs stop working. */
+    @Column(name = "session_epoch", nullable = false)
+    @Builder.Default
+    private int sessionEpoch = 0;
+
     @Column(name = "referral_code", nullable = false, unique = true, length = 16)
     private String referralCode;
 

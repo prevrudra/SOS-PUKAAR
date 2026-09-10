@@ -6,6 +6,7 @@ import com.pukaar.domain.contact.TrustedContactEntity;
 import com.pukaar.domain.contact.TrustedContactRepository;
 import com.pukaar.domain.hospital.HospitalEntity;
 import com.pukaar.domain.hospital.HospitalRepository;
+import com.pukaar.domain.nearby.NearbyPlacesService;
 import com.pukaar.domain.evidence.AudioSegmentEntity;
 import com.pukaar.domain.evidence.AudioSegmentRepository;
 import com.pukaar.domain.evidence.EvidenceStorageService;
@@ -45,6 +46,7 @@ public class EmergencyOrchestrator {
     private final MockDrillRepository mockDrillRepo;
     private final NotificationService notificationService;
     private final PukaarProperties props;
+    private final NearbyPlacesService nearbyPlacesService;
 
     @Transactional
     public Map<String, Object> trigger(UUID userId, TriggerType triggerType, Double lat, Double lng,
@@ -311,17 +313,38 @@ public class EmergencyOrchestrator {
         return m;
     }
 
+    @Transactional
     public Map<String, Object> getActive(UUID userId) {
         return eventRepo.findFirstByUserIdAndClosedAtIsNullOrderByStartedAtDesc(userId)
-                .map(e -> toEventDto(e, true))
+                .map(e -> {
+                    if (closeIfStaleMockDrill(e, userId)) {
+                        return Map.<String, Object>of("active", false);
+                    }
+                    return toEventDto(e, true);
+                })
                 .orElse(Map.of("active", false));
     }
 
+    @Transactional
     public Map<String, Object> getEvent(UUID userId, UUID eventId) {
         EmergencyEventEntity event = eventRepo.findById(eventId)
                 .orElseThrow(() -> new ApiException("EVENT_NOT_FOUND", "Emergency not found"));
         if (!event.getUserId().equals(userId)) throw new ApiException("FORBIDDEN", "Not your event");
+        closeIfStaleMockDrill(event, userId);
         return toEventDto(event, true);
+    }
+
+    private boolean closeIfStaleMockDrill(EmergencyEventEntity e, UUID userId) {
+        if (!e.isMockDrill() || e.getClosedAt() != null || e.getStartedAt() == null) return false;
+        if (!e.getStartedAt().isBefore(Instant.now().minus(10, java.time.temporal.ChronoUnit.MINUTES))) {
+            return false;
+        }
+        e.setClosureReason(ClosureReason.IM_SAFE);
+        e.setClosedAt(Instant.now());
+        e.setStatus(EmergencyStatus.CLOSED);
+        eventRepo.save(e);
+        audit(e.getId(), userId, "AUTO_CLOSED_STALE_DRILL", Map.of());
+        return true;
     }
 
     public Map<String, Object> listHistory(UUID userId) {
@@ -479,6 +502,19 @@ public class EmergencyOrchestrator {
                 hospitalRepo.findNearest(event.getLatitude(), event.getLongitude(), 1).stream()
                         .findFirst()
                         .ifPresent(h -> m.put("nearestHospital", toHospitalDto(h)));
+                // Enrich from Google Places / OSM when DB is thin
+                try {
+                    Map<String, Object> nearby = nearbyPlacesService.nearby(event.getLatitude(), event.getLongitude(), 3);
+                    if (!m.containsKey("policeStation")) {
+                        firstPlace(nearby.get("police")).ifPresent(p -> m.put("policeStation", p));
+                    }
+                    if (!m.containsKey("nearestHospital")) {
+                        firstPlace(nearby.get("hospitals")).ifPresent(h -> m.put("nearestHospital", h));
+                    }
+                    firstPlace(nearby.get("ambulance")).ifPresent(a -> m.put("nearestAmbulance", a));
+                    m.put("nearbySource", nearby.get("source"));
+                } catch (Exception ignored) {
+                }
             }
             m.put("audit", auditRepo.findByEventIdOrderByCreatedAtAsc(event.getId()).stream().map(a -> {
                 Map<String, Object> am = new LinkedHashMap<>();
@@ -489,6 +525,15 @@ public class EmergencyOrchestrator {
             }).toList());
         }
         return m;
+    }
+
+    private Optional<Map<String, Object>> firstPlace(Object listObj) {
+        if (!(listObj instanceof List<?> list) || list.isEmpty()) return Optional.empty();
+        Object first = list.get(0);
+        if (!(first instanceof Map<?, ?> raw)) return Optional.empty();
+        Map<String, Object> m = new LinkedHashMap<>();
+        raw.forEach((k, v) -> m.put(String.valueOf(k), v));
+        return Optional.of(m);
     }
 
     private Map<String, Object> toPoliceDto(PoliceStationEntity p) {

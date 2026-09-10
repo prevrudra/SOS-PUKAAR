@@ -24,7 +24,7 @@ interface AlertApi {
 data class OtpRequest(val phone: String)
 
 @JsonClass(generateAdapter = true)
-data class OtpVerifyRequest(val phone: String, val code: String, val deviceId: String = "highalert")
+data class OtpVerifyRequest(val phone: String, val code: String, val deviceId: String? = null)
 
 @JsonClass(generateAdapter = true)
 data class AuthResponse(val accessToken: String?, val user: Map<String, Any?>? = null)

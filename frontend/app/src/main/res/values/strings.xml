@@ -61,6 +61,8 @@
     <string name="emergency_device_status">Device Status</string>
     <string name="emergency_call_112">Call 112</string>
     <string name="emergency_im_safe">I\'m Safe</string>
+    <string name="emergency_im_safe_hint">Stops background recording immediately and tells your contacts you are safe.</string>
+    <string name="emergency_call_place">Call</string>
     <string name="emergency_finish_drill">Finish Drill</string>
     <string name="emergency_disclaimer">PUKAAR does not guarantee rescue.</string>
     <string name="mock_drill_start_live">Run Live Drill</string>

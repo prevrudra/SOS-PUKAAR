@@ -8,7 +8,10 @@ data class AuthResponse(
     val user: UserDto?,
     val phone: String? = null,
     val expiresInSeconds: Int? = null,
-    val devCode: String? = null
+    val devCode: String? = null,
+    val deviceChanged: Boolean? = null,
+    val previousDeviceDeactivated: Boolean? = null,
+    val restoreAvailable: Boolean? = null
 )
 data class UserDto(
     val id: String?,
@@ -80,6 +83,8 @@ data class EmergencyDto(
     val audioSegments: List<AudioSegmentDto>? = null,
     val policeStation: PoliceDto? = null,
     val nearestHospital: HospitalDto? = null,
+    val nearestAmbulance: HospitalDto? = null,
+    val nearbySource: String? = null,
     val userName: String? = null,
     val userPhone: String? = null
 )
