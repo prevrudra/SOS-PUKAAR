@@ -2,6 +2,7 @@ package com.pukaar.app.util
 
 import android.content.Context
 import android.util.Log
+import com.pukaar.app.PukaarApp
 import com.pukaar.app.data.api.EmergencyDto
 import com.pukaar.app.integration.ContactRepositoryBridge
 import com.pukaar.app.ui.screen.contacts.ContactType
@@ -81,34 +82,76 @@ object EmergencyAlertHelper {
         isMockDrill: Boolean
     ): SmsHelper.SendResult {
         val contacts = runCatching { ContactRepositoryBridge.loadContacts() }.getOrNull().orEmpty()
-        val relevant = contacts.filter {
+        // SMS restrictions: only verified contacts for the matching alert type
+        val relevant = contacts.filter { it.verified }.filter {
             when {
-                isSos || isMockDrill -> it.type == ContactType.SOS ||
-                    it.type == ContactType.DOCTOR || it.type == ContactType.NEIGHBOUR
-                else -> it.type == ContactType.SOS || it.type == ContactType.HELP ||
-                    it.type == ContactType.DOCTOR || it.type == ContactType.NEIGHBOUR
+                isSos || isMockDrill -> it.type == ContactType.SOS
+                else -> it.type == ContactType.HELP || it.type == ContactType.INACTIVITY
             }
         }
         if (relevant.isEmpty()) {
-            Log.w(TAG, "No contacts to alert")
+            Log.w(TAG, "No verified contacts for this alert type — SMS skipped")
             return SmsHelper.SendResult(0, 0, emptyList())
+        }
+
+        var enriched = event
+        if (event.policeStation == null || event.nearestHospital == null) {
+            val lat = event.latitude
+            val lng = event.longitude
+            if (lat != null && lng != null) {
+                runCatching {
+                    val nearby = PukaarApp.instance.repository.nearby(lat, lng, 3)
+                    enriched = event.copy(
+                        policeStation = event.policeStation ?: nearby.police?.firstOrNull()?.let {
+                            com.pukaar.app.data.api.PoliceDto(
+                                name = it.name,
+                                phone = it.phone,
+                                phoneVerified = true,
+                                address = it.address,
+                                latitude = it.latitude,
+                                longitude = it.longitude
+                            )
+                        },
+                        nearestHospital = event.nearestHospital ?: nearby.hospitals?.firstOrNull()?.let {
+                            com.pukaar.app.data.api.HospitalDto(
+                                name = it.name,
+                                phone = it.phone,
+                                address = it.address,
+                                latitude = it.latitude,
+                                longitude = it.longitude
+                            )
+                        },
+                        nearestAmbulance = event.nearestAmbulance ?: nearby.ambulance
+                            ?.firstOrNull { it.source != "NATIONAL" }
+                            ?.let {
+                                com.pukaar.app.data.api.HospitalDto(
+                                    name = it.name,
+                                    phone = it.phone,
+                                    address = it.address
+                                )
+                            }
+                            ?: event.nearestAmbulance,
+                        nearbySource = event.nearbySource ?: nearby.source
+                    )
+                }.onFailure { Log.w(TAG, "Nearby enrich for SMS failed: ${it.message}") }
+            }
         }
 
         val message = buildAlertMessage(
             context = context,
-            userName = event.userName,
-            userPhone = event.userPhone,
+            userName = enriched.userName,
+            userPhone = enriched.userPhone,
             isSos = isSos,
             isMockDrill = isMockDrill,
-            latitude = event.latitude,
-            longitude = event.longitude,
-            event = event,
+            latitude = enriched.latitude,
+            longitude = enriched.longitude,
+            event = enriched,
             otherContacts = relevant.map { it.name to it.phoneNumber }
         )
 
         val numbers = relevant.map { it.phoneNumber }.filter { it.isNotBlank() }.distinct()
         val result = SmsHelper.sendSmsWithFallback(context, numbers, message)
-        Log.i(TAG, "Device SMS fallback: sent=${result.sent} failed=${result.failed}")
+        Log.i(TAG, "Device SMS: sent=${result.sent} failed=${result.failed} to ${numbers.size} verified contact(s)")
         return result
     }
 
