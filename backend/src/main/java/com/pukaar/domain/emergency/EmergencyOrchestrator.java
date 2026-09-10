@@ -145,7 +145,7 @@ public class EmergencyOrchestrator {
         applyLocation(event, lat, lng, accuracy);
         event.setStatus(EmergencyStatus.LIVE_LOCATION_ACTIVE);
         eventRepo.save(event);
-        return toEventDto(event, false);
+        return toEventDto(event, true);
     }
 
     @Transactional
@@ -491,30 +491,41 @@ public class EmergencyOrchestrator {
                 }
                 return sm;
             }).toList());
-            if (event.getPoliceStationId() != null) {
-                policeRepo.findById(event.getPoliceStationId()).ifPresent(p -> m.put("policeStation", toPoliceDto(p)));
-            } else if (event.getLatitude() != null && event.getLongitude() != null) {
-                policeRepo.findNearest(event.getLatitude(), event.getLongitude(), 1).stream()
-                        .findFirst()
-                        .ifPresent(p -> m.put("policeStation", toPoliceDto(p)));
-            }
             if (event.getLatitude() != null && event.getLongitude() != null) {
-                hospitalRepo.findNearest(event.getLatitude(), event.getLongitude(), 1).stream()
-                        .findFirst()
-                        .ifPresent(h -> m.put("nearestHospital", toHospitalDto(h)));
-                // Enrich from Google Places / OSM when DB is thin
+                // Live Google Places / OSM first — seed DB is only a fallback
                 try {
-                    Map<String, Object> nearby = nearbyPlacesService.nearby(event.getLatitude(), event.getLongitude(), 3);
-                    if (!m.containsKey("policeStation")) {
-                        firstPlace(nearby.get("police")).ifPresent(p -> m.put("policeStation", p));
-                    }
-                    if (!m.containsKey("nearestHospital")) {
-                        firstPlace(nearby.get("hospitals")).ifPresent(h -> m.put("nearestHospital", h));
-                    }
-                    firstPlace(nearby.get("ambulance")).ifPresent(a -> m.put("nearestAmbulance", a));
+                    Map<String, Object> nearby = nearbyPlacesService.nearby(
+                            event.getLatitude(), event.getLongitude(), 3);
+                    firstPlace(nearby.get("police")).ifPresent(p -> m.put("policeStation", p));
+                    firstPlace(nearby.get("hospitals")).ifPresent(h -> m.put("nearestHospital", h));
+                    firstLiveAmbulance(nearby.get("ambulance")).ifPresent(a -> m.put("nearestAmbulance", a));
                     m.put("nearbySource", nearby.get("source"));
-                } catch (Exception ignored) {
+                } catch (Exception e) {
+                    // fall through to DB
                 }
+                if (!m.containsKey("policeStation")) {
+                    if (event.getPoliceStationId() != null) {
+                        policeRepo.findById(event.getPoliceStationId()).ifPresent(p -> m.put("policeStation", toPoliceDto(p)));
+                    } else {
+                        policeRepo.findNearest(event.getLatitude(), event.getLongitude(), 1).stream()
+                                .findFirst()
+                                .ifPresent(p -> m.put("policeStation", toPoliceDto(p)));
+                    }
+                }
+                if (!m.containsKey("nearestHospital")) {
+                    hospitalRepo.findNearest(event.getLatitude(), event.getLongitude(), 1).stream()
+                            .findFirst()
+                            .ifPresent(h -> m.put("nearestHospital", toHospitalDto(h)));
+                }
+                if (!m.containsKey("nearestAmbulance")) {
+                    m.put("nearestAmbulance", Map.of(
+                            "name", "National Ambulance",
+                            "phone", "108",
+                            "source", "NATIONAL"
+                    ));
+                }
+            } else if (event.getPoliceStationId() != null) {
+                policeRepo.findById(event.getPoliceStationId()).ifPresent(p -> m.put("policeStation", toPoliceDto(p)));
             }
             m.put("audit", auditRepo.findByEventIdOrderByCreatedAtAsc(event.getId()).stream().map(a -> {
                 Map<String, Object> am = new LinkedHashMap<>();
@@ -534,6 +545,20 @@ public class EmergencyOrchestrator {
         Map<String, Object> m = new LinkedHashMap<>();
         raw.forEach((k, v) -> m.put(String.valueOf(k), v));
         return Optional.of(m);
+    }
+
+    /** Prefer a real nearby ambulance; skip static national 108/112 if a live place exists. */
+    private Optional<Map<String, Object>> firstLiveAmbulance(Object listObj) {
+        if (!(listObj instanceof List<?> list) || list.isEmpty()) return Optional.empty();
+        for (Object item : list) {
+            if (!(item instanceof Map<?, ?> raw)) continue;
+            Object source = raw.get("source");
+            if ("NATIONAL".equals(String.valueOf(source))) continue;
+            Map<String, Object> m = new LinkedHashMap<>();
+            raw.forEach((k, v) -> m.put(String.valueOf(k), v));
+            return Optional.of(m);
+        }
+        return firstPlace(listObj);
     }
 
     private Map<String, Object> toPoliceDto(PoliceStationEntity p) {

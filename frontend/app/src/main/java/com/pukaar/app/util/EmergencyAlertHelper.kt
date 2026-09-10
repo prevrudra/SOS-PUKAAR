@@ -54,12 +54,21 @@ object EmergencyAlertHelper {
                 sb.append("- $name $phone\n")
             }
         }
-        sb.append("Emergency: 112\nAmbulance: 108\n")
+        sb.append("Emergency: 112\n")
+        event?.nearestAmbulance?.let { a ->
+            sb.append("Ambulance: ${a.name ?: ""} ${a.phone ?: "108"}\n")
+        } ?: sb.append("Ambulance: 108\n")
         event?.policeStation?.let { ps ->
-            sb.append("Police: ${ps.name ?: ""} ${ps.phone ?: ""}\n")
+            sb.append("Police: ${ps.name ?: ""}")
+            ps.address?.takeIf { it.isNotBlank() }?.let { sb.append(" ($it)") }
+            ps.phone?.takeIf { it.isNotBlank() }?.let { sb.append(" $it") }
+            sb.append("\n")
         }
         event?.nearestHospital?.let { h ->
-            sb.append("Hospital: ${h.name ?: ""} ${h.phone ?: ""}\n")
+            sb.append("Hospital: ${h.name ?: ""}")
+            h.address?.takeIf { it.isNotBlank() }?.let { sb.append(" ($it)") }
+            h.phone?.takeIf { it.isNotBlank() }?.let { sb.append(" $it") }
+            sb.append("\n")
         }
         sb.append("Install PUKAAR High Alert app for grabbing alert.")
         return sb.toString().trim()

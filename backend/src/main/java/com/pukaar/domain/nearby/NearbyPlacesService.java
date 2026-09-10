@@ -44,16 +44,28 @@ public class NearbyPlacesService {
             try {
                 List<Map<String, Object>> police = googleNearby(lat, lng, lim, List.of("police"), "POLICE");
                 List<Map<String, Object>> hospitals = googleNearby(lat, lng, lim, List.of("hospital"), "HOSPITAL");
-                List<Map<String, Object>> ambulance = googleTextSearch(lat, lng, lim, "ambulance station");
-                if (!police.isEmpty()) out.put("police", police);
-                if (!hospitals.isEmpty()) out.put("hospitals", hospitals);
+                List<Map<String, Object>> ambulance = googleTextSearch(lat, lng, lim, "ambulance");
+                if (ambulance.isEmpty()) {
+                    ambulance = googleTextSearch(lat, lng, lim, "ambulance service");
+                }
+                if (!police.isEmpty()) {
+                    out.put("police", police);
+                } else {
+                    log.warn("Google Places returned no police near {},{}", lat, lng);
+                }
+                if (!hospitals.isEmpty()) {
+                    out.put("hospitals", hospitals);
+                } else {
+                    log.warn("Google Places returned no hospitals near {},{}", lat, lng);
+                }
                 if (!ambulance.isEmpty()) {
-                    List<Map<String, Object>> amb = new ArrayList<>(nationalAmbulance());
-                    amb.addAll(0, ambulance);
+                    List<Map<String, Object>> amb = new ArrayList<>(ambulance);
+                    amb.addAll(nationalAmbulance());
                     out.put("ambulance", amb.stream().limit(lim + 2).toList());
                 }
-                out.put("source", "GOOGLE");
-                return out;
+                boolean usedGoogle = !police.isEmpty() || !hospitals.isEmpty() || !ambulance.isEmpty();
+                out.put("source", usedGoogle ? "GOOGLE" : "DB");
+                if (usedGoogle) return out;
             } catch (Exception e) {
                 log.warn("Google Places nearby failed: {}", e.getMessage());
             }
