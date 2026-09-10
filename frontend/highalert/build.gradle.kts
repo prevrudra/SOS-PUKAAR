@@ -12,19 +12,20 @@ android {
         applicationId = "com.pukaar.highalert"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.2.0"
-        buildConfigField("String", "API_BASE_URL", "\"http://43.248.56.240:8080/\"")
+        versionCode = 4
+        versionName = "1.3.0"
+        buildConfigField("String", "API_BASE_URL", "\"http://43.248.56.240/pukaar/\"")
     }
 
     buildTypes {
         release {
             isMinifyEnabled = true
-            buildConfigField("String", "API_BASE_URL", "\"http://43.248.56.240:8080/\"")
+            buildConfigField("String", "API_BASE_URL", "\"http://43.248.56.240/pukaar/\"")
         }
         debug {
             applicationIdSuffix = ".debug"
             isDebuggable = true
+            buildConfigField("String", "API_BASE_URL", "\"http://43.248.56.240/pukaar/\"")
         }
     }
 
