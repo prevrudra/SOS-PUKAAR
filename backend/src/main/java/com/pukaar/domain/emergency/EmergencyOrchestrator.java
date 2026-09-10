@@ -399,11 +399,19 @@ public class EmergencyOrchestrator {
 
     private void notifyContacts(UserEntity user, EmergencyEventEntity event) {
         List<ContactRole> roles = event.getTriggerType() == TriggerType.HELP
-                ? List.of(ContactRole.HELP_MONITOR, ContactRole.HELP_BACKUP, ContactRole.SOS_TRUSTED)
+                ? List.of(ContactRole.HELP_MONITOR, ContactRole.HELP_BACKUP)
                 : List.of(ContactRole.SOS_TRUSTED);
-        List<TrustedContactEntity> contacts = contactRepo.findByOwnerUserIdAndContactRoleInAndActiveTrue(user.getId(), roles);
+        List<TrustedContactEntity> contacts = contactRepo
+                .findByOwnerUserIdAndContactRoleInAndActiveTrue(user.getId(), roles)
+                .stream()
+                .filter(TrustedContactEntity::isVerified)
+                .toList();
+        // No fallback to every contact — SMS alert restrictions: only verified matching roles
         if (contacts.isEmpty()) {
-            contacts = contactRepo.findByOwnerUserIdAndActiveTrueOrderByPriorityOrderAsc(user.getId());
+            audit(event.getId(), user.getId(), "NO_VERIFIED_CONTACTS_FOR_ALERT", Map.of(
+                    "trigger", event.getTriggerType().name()
+            ));
+            return;
         }
         for (TrustedContactEntity c : contacts) {
             ContactDeliveryEntity delivery = ContactDeliveryEntity.builder()
@@ -542,9 +550,7 @@ public class EmergencyOrchestrator {
         if (!(listObj instanceof List<?> list) || list.isEmpty()) return Optional.empty();
         Object first = list.get(0);
         if (!(first instanceof Map<?, ?> raw)) return Optional.empty();
-        Map<String, Object> m = new LinkedHashMap<>();
-        raw.forEach((k, v) -> m.put(String.valueOf(k), v));
-        return Optional.of(m);
+        return Optional.of(sanitizePlace(raw));
     }
 
     /** Prefer a real nearby ambulance; skip static national 108/112 if a live place exists. */
@@ -554,19 +560,33 @@ public class EmergencyOrchestrator {
             if (!(item instanceof Map<?, ?> raw)) continue;
             Object source = raw.get("source");
             if ("NATIONAL".equals(String.valueOf(source))) continue;
-            Map<String, Object> m = new LinkedHashMap<>();
-            raw.forEach((k, v) -> m.put(String.valueOf(k), v));
-            return Optional.of(m);
+            return Optional.of(sanitizePlace(raw));
         }
         return firstPlace(listObj);
     }
 
+    /** Keep only fields the Android EmergencyDto adapters understand. */
+    private Map<String, Object> sanitizePlace(Map<?, ?> raw) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        copyIfPresent(raw, m, "name");
+        copyIfPresent(raw, m, "phone");
+        copyIfPresent(raw, m, "address");
+        copyIfPresent(raw, m, "latitude");
+        copyIfPresent(raw, m, "longitude");
+        if (raw.get("phoneVerified") != null) m.put("phoneVerified", raw.get("phoneVerified"));
+        else m.put("phoneVerified", raw.get("phone") != null);
+        return m;
+    }
+
+    private void copyIfPresent(Map<?, ?> raw, Map<String, Object> out, String key) {
+        Object v = raw.get(key);
+        if (v != null) out.put(key, v);
+    }
+
     private Map<String, Object> toPoliceDto(PoliceStationEntity p) {
         Map<String, Object> m = new LinkedHashMap<>();
-        m.put("id", p.getId());
         m.put("name", p.getName());
         m.put("address", p.getAddress());
-        m.put("source", p.getSource());
         m.put("phoneVerified", p.isPhoneVerified());
         if (p.isPhoneVerified()) {
             m.put("phone", p.getPhoneE164());
@@ -578,12 +598,12 @@ public class EmergencyOrchestrator {
 
     private Map<String, Object> toHospitalDto(HospitalEntity h) {
         Map<String, Object> m = new LinkedHashMap<>();
-        m.put("id", h.getId());
         m.put("name", h.getName());
-        m.put("address", h.getAddress());
         m.put("phone", h.getPhoneE164());
+        m.put("address", h.getAddress());
         m.put("latitude", h.getLatitude());
         m.put("longitude", h.getLongitude());
+        m.put("phoneVerified", h.getPhoneE164() != null);
         return m;
     }
 }

@@ -88,7 +88,14 @@ data class EmergencyDto(
     val userName: String? = null,
     val userPhone: String? = null
 )
-data class HospitalDto(val name: String?, val phone: String?, val address: String?)
+data class HospitalDto(
+    val name: String?,
+    val phone: String?,
+    val address: String?,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val phoneVerified: Boolean? = null
+)
 data class DrillCompleteRequest(val contactsConfirmed: Boolean = true, val notes: String? = null)
 data class DeliveryDto(
     val name: String?,
@@ -107,7 +114,14 @@ data class AudioSegmentDto(
     val uploadedAt: String? = null,
     val playUrl: String? = null
 )
-data class PoliceDto(val name: String?, val phone: String?, val phoneVerified: Boolean?, val address: String?, val latitude: Double? = null, val longitude: Double? = null)
+data class PoliceDto(
+    val name: String?,
+    val phone: String?,
+    val phoneVerified: Boolean? = null,
+    val address: String?,
+    val latitude: Double? = null,
+    val longitude: Double? = null
+)
 data class LocationRequest(val latitude: Double, val longitude: Double, val accuracyM: Double? = null)
 data class SegmentRequest(val index: Int, val checksumSha256: String? = null, val byteSize: Long? = null)
 data class UploadConfirmRequest(val storageKey: String)
