@@ -30,6 +30,12 @@ public class AlertDeviceController {
         return deviceService.pendingAlertForContact(user.getPhoneE164());
     }
 
+    @GetMapping("/events/{eventId}")
+    public Map<String, Object> eventSnapshot(@PathVariable UUID eventId) {
+        var user = userRepo.findById(SecurityUtils.currentUserId()).orElseThrow();
+        return deviceService.alertSnapshotForContact(user.getPhoneE164(), eventId);
+    }
+
     @PostMapping("/acknowledge")
     public Map<String, Object> acknowledge(@RequestBody AcknowledgeRequest req) {
         return deliveryStatusService.acknowledgeByContact(

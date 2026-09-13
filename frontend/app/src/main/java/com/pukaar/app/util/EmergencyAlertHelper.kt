@@ -94,48 +94,10 @@ object EmergencyAlertHelper {
             return SmsHelper.SendResult(0, 0, emptyList())
         }
 
-        var enriched = event
-        if (event.policeStation == null || event.nearestHospital == null) {
-            val lat = event.latitude
-            val lng = event.longitude
-            if (lat != null && lng != null) {
-                runCatching {
-                    val nearby = PukaarApp.instance.repository.nearby(lat, lng, 3)
-                    enriched = event.copy(
-                        policeStation = event.policeStation ?: nearby.police?.firstOrNull()?.let {
-                            com.pukaar.app.data.api.PoliceDto(
-                                name = it.name,
-                                phone = it.phone,
-                                phoneVerified = true,
-                                address = it.address,
-                                latitude = it.latitude,
-                                longitude = it.longitude
-                            )
-                        },
-                        nearestHospital = event.nearestHospital ?: nearby.hospitals?.firstOrNull()?.let {
-                            com.pukaar.app.data.api.HospitalDto(
-                                name = it.name,
-                                phone = it.phone,
-                                address = it.address,
-                                latitude = it.latitude,
-                                longitude = it.longitude
-                            )
-                        },
-                        nearestAmbulance = event.nearestAmbulance ?: nearby.ambulance
-                            ?.firstOrNull { it.source != "NATIONAL" }
-                            ?.let {
-                                com.pukaar.app.data.api.HospitalDto(
-                                    name = it.name,
-                                    phone = it.phone,
-                                    address = it.address
-                                )
-                            }
-                            ?: event.nearestAmbulance,
-                        nearbySource = event.nearbySource ?: nearby.source
-                    )
-                }.onFailure { Log.w(TAG, "Nearby enrich for SMS failed: ${it.message}") }
-            }
-        }
+        var enriched = runCatching {
+            NearbyServicesHelper.enrich(event, context)
+        }.getOrDefault(NearbyServicesHelper.withNationalFallbacks(event))
+
 
         val message = buildAlertMessage(
             context = context,

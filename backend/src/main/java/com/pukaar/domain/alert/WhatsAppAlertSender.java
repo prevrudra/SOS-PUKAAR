@@ -26,7 +26,9 @@ public class WhatsAppAlertSender {
     }
 
     /**
-     * Sends the approved WhatsApp "emergency" template (19 body variables).
+     * Sends the configured WhatsApp SOS template.
+     * Param count follows the list built by AlertDeliveryService
+     * ({@code emergency}=19, {@code pukaar_sos}=18).
      */
     public boolean sendEmergencyTemplate(String toPhoneE164, List<String> bodyParams) {
         if (!isConfigured()) return false;
@@ -34,13 +36,16 @@ public class WhatsAppAlertSender {
             String phone = digitsOnly(toPhoneE164);
             var wa = props.getAlerts().getWhatsapp();
             String url = "https://graph.facebook.com/v26.0/" + wa.getPhoneNumberId() + "/messages";
+            String templateName = wa.getTemplateName() == null || wa.getTemplateName().isBlank()
+                    ? "emergency" : wa.getTemplateName();
+            int expected = "pukaar_sos".equalsIgnoreCase(templateName) ? 18 : 19;
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.setBearerAuth(wa.getToken());
 
             List<Map<String, Object>> parameters = new ArrayList<>();
-            for (String p : padParams(bodyParams, 19)) {
+            for (String p : padParams(bodyParams, expected)) {
                 Map<String, Object> param = new LinkedHashMap<>();
                 param.put("type", "text");
                 param.put("text", sanitize(p));
@@ -52,8 +57,7 @@ public class WhatsAppAlertSender {
             bodyComponent.put("parameters", parameters);
 
             Map<String, Object> template = new LinkedHashMap<>();
-            template.put("name", wa.getTemplateName() == null || wa.getTemplateName().isBlank()
-                    ? "emergency" : wa.getTemplateName());
+            template.put("name", templateName);
             template.put("language", Map.of("code", wa.getTemplateLanguage() == null || wa.getTemplateLanguage().isBlank()
                     ? "en" : wa.getTemplateLanguage()));
             template.put("components", List.of(bodyComponent));

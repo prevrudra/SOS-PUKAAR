@@ -386,13 +386,16 @@ public class EmergencyOrchestrator {
                 .longitude(lng)
                 .accuracyM(accuracy)
                 .build());
-        policeRepo.findNearest(lat, lng, 1).stream().findFirst().ifPresent(station -> {
-            event.setPoliceStationId(station.getId());
-            audit(event.getId(), event.getUserId(), "POLICE_RESOLVED", Map.of(
-                    "stationId", station.getId().toString(),
-                    "verified", station.isPhoneVerified()
-            ));
-        });
+        policeRepo.findNearest(lat, lng, 1).stream()
+                .filter(station -> withinKm(lat, lng, station.getLatitude(), station.getLongitude(), 20))
+                .findFirst()
+                .ifPresent(station -> {
+                    event.setPoliceStationId(station.getId());
+                    audit(event.getId(), event.getUserId(), "POLICE_RESOLVED", Map.of(
+                            "stationId", station.getId().toString(),
+                            "verified", station.isPhoneVerified()
+                    ));
+                });
         eventRepo.save(event);
         audit(event.getId(), event.getUserId(), "LOCATION_UPDATED", Map.of("lat", lat, "lng", lng));
     }
@@ -513,17 +516,39 @@ public class EmergencyOrchestrator {
                 }
                 if (!m.containsKey("policeStation")) {
                     if (event.getPoliceStationId() != null) {
-                        policeRepo.findById(event.getPoliceStationId()).ifPresent(p -> m.put("policeStation", toPoliceDto(p)));
-                    } else {
+                        policeRepo.findById(event.getPoliceStationId())
+                                .filter(p -> withinKm(event.getLatitude(), event.getLongitude(),
+                                        p.getLatitude(), p.getLongitude(), 20))
+                                .ifPresent(p -> m.put("policeStation", toPoliceDto(p)));
+                    }
+                    if (!m.containsKey("policeStation")) {
                         policeRepo.findNearest(event.getLatitude(), event.getLongitude(), 1).stream()
+                                .filter(p -> withinKm(event.getLatitude(), event.getLongitude(),
+                                        p.getLatitude(), p.getLongitude(), 20))
                                 .findFirst()
                                 .ifPresent(p -> m.put("policeStation", toPoliceDto(p)));
                     }
                 }
+                if (!m.containsKey("policeStation")) {
+                    m.put("policeStation", Map.of(
+                            "name", "Police Emergency",
+                            "phone", "100",
+                            "phoneVerified", true
+                    ));
+                }
                 if (!m.containsKey("nearestHospital")) {
                     hospitalRepo.findNearest(event.getLatitude(), event.getLongitude(), 1).stream()
+                            .filter(h -> withinKm(event.getLatitude(), event.getLongitude(),
+                                    h.getLatitude(), h.getLongitude(), 20))
                             .findFirst()
                             .ifPresent(h -> m.put("nearestHospital", toHospitalDto(h)));
+                }
+                if (!m.containsKey("nearestHospital")) {
+                    m.put("nearestHospital", Map.of(
+                            "name", "Nearest Hospital / Emergency",
+                            "phone", "112",
+                            "phoneVerified", true
+                    ));
                 }
                 if (!m.containsKey("nearestAmbulance")) {
                     m.put("nearestAmbulance", Map.of(
@@ -581,6 +606,18 @@ public class EmergencyOrchestrator {
     private void copyIfPresent(Map<?, ?> raw, Map<String, Object> out, String key) {
         Object v = raw.get(key);
         if (v != null) out.put(key, v);
+    }
+
+    private static boolean withinKm(double lat1, double lng1, Double lat2, Double lng2, double maxKm) {
+        if (lat2 == null || lng2 == null) return false;
+        double r = 6371.0;
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLng = Math.toRadians(lng2 - lng1);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
+                * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        double km = r * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return km <= maxKm;
     }
 
     private Map<String, Object> toPoliceDto(PoliceStationEntity p) {

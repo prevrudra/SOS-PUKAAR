@@ -74,18 +74,20 @@ class PukaarActionsImpl(
                     )
                 )
                 val id = event.id ?: return@launch
-                if (!mockDrill) {
-                    EmergencyForegroundService.start(
-                        context, id, isSos = isSos, recordAudio = isSos && settings.audio
-                    )
-                    if (isSos && settings.audio) {
-                        withContext(Dispatchers.Main) {
-                            android.widget.Toast.makeText(
-                                context,
-                                context.getString(com.pukaar.app.R.string.emergency_recording_started),
-                                android.widget.Toast.LENGTH_LONG
-                            ).show()
-                        }
+                // Keep live GPS flowing so nearest police/hospital stay local to the user
+                EmergencyForegroundService.start(
+                    context,
+                    id,
+                    isSos = isSos && !mockDrill,
+                    recordAudio = !mockDrill && isSos && settings.audio
+                )
+                if (!mockDrill && isSos && settings.audio) {
+                    withContext(Dispatchers.Main) {
+                        android.widget.Toast.makeText(
+                            context,
+                            context.getString(com.pukaar.app.R.string.emergency_recording_started),
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
                     }
                 }
 

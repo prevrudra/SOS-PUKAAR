@@ -27,3 +27,9 @@ frontend/captures/
 # Evidence / local storage (data dirs only — not Java source packages)
 backend/data/
 **/files/evidence/
+
+# Play / signing secrets
+deploy/secrets/
+*.jks
+*.keystore
+local.properties
