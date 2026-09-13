@@ -65,8 +65,9 @@ public class DeliveryStatusService {
             status = DeliveryStatus.READ;
         }
         int updated = 0;
+        String contactDigits = last10(phone);
         for (ContactDeliveryEntity d : deliveryRepo.findByEventId(eventId)) {
-            if (!phone.equals(d.getContactPhone())) continue;
+            if (!contactDigits.equals(last10(d.getContactPhone()))) continue;
             applyStatus(d, status);
             if (status == DeliveryStatus.READ && d.getAcknowledgedAt() == null) {
                 d.setAcknowledgedAt(Instant.now());
@@ -134,6 +135,12 @@ public class DeliveryStatusService {
         } catch (Exception e) {
             return DeliveryStatus.SENT;
         }
+    }
+
+    private static String last10(String phone) {
+        if (phone == null) return "";
+        String digits = phone.replaceAll("[^0-9]", "");
+        return digits.length() <= 10 ? digits : digits.substring(digits.length() - 10);
     }
 
     public record StatusUpdate(String phone, String status) {}

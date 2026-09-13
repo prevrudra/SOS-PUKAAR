@@ -18,6 +18,7 @@ public interface EmergencyEventRepository extends JpaRepository<EmergencyEventEn
             WHERE e.closed_at IS NULL
               AND RIGHT(regexp_replace(d.contact_phone, '[^0-9]', '', 'g'), 10)
                 = RIGHT(regexp_replace(:phone, '[^0-9]', '', 'g'), 10)
+              AND d.status NOT IN ('DELIVERED', 'READ')
             ORDER BY e.started_at DESC LIMIT 1
             """, nativeQuery = true)
     Optional<EmergencyEventEntity> findOpenAlertsForContactPhone(@Param("phone") String phone);

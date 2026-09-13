@@ -85,14 +85,20 @@ public class RichAlertMessageBuilder {
 
     public String buildPushTitle(EmergencyEventEntity event) {
         if (event.isMockDrill()) return "PUKAAR TEST ALERT";
-        return event.getTriggerType() == TriggerType.HELP ? "PUKAAR HELP ALERT" : "PUKAAR EMERGENCY SOS";
+        return event.getTriggerType() == TriggerType.HELP
+                ? "PUKAAR HELP — EMERGENCY"
+                : "PUKAAR SOS — EMERGENCY";
     }
 
     public String buildPushBody(UserEntity user, EmergencyEventEntity event) {
         String who = user.getFullName() != null ? user.getFullName() : "A PUKAAR user";
-        if (event.isMockDrill()) return who + " — practice drill. Tap to view.";
-        if (event.getTriggerType() == TriggerType.HELP) return who + " pressed HELP. Tap to view location.";
-        return who + " may be in danger. Tap NOW for location and details.";
+        if (event.isMockDrill()) {
+            return who + " has activated a practice SOS. Tap for live location.";
+        }
+        if (event.getTriggerType() == TriggerType.HELP) {
+            return who + " has activated HELP and may need assistance. Tap for location.";
+        }
+        return who + " has activated SOS and may need immediate help. Tap NOW for location.";
     }
 
     public String contactsSummary(List<TrustedContactEntity> contacts) {

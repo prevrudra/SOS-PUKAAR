@@ -16,6 +16,9 @@ interface AlertApi {
     @GET("api/v1/alert-devices/pending")
     suspend fun pendingAlert(): PendingAlertResponse
 
+    @GET("api/v1/alert-devices/events/{eventId}")
+    suspend fun eventSnapshot(@Path("eventId") eventId: String): PendingAlertResponse
+
     @POST("api/v1/alert-devices/acknowledge")
     suspend fun acknowledge(@Body body: AcknowledgeRequest): Map<String, Any?>
 }
@@ -46,5 +49,12 @@ data class PendingAlertResponse(
     val batteryPct: Int? = null,
     val networkType: String? = null,
     val mockDrill: Boolean? = false,
-    val triggerType: String? = null
+    val triggerType: String? = null,
+    val startedAt: String? = null,
+    val policeName: String? = null,
+    val policePhone: String? = null,
+    val hospitalName: String? = null,
+    val hospitalPhone: String? = null,
+    val ambulanceName: String? = null,
+    val ambulancePhone: String? = null
 )

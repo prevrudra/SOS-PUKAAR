@@ -49,6 +49,10 @@
     <string name="emergency_police">Nearest Police Station</string>
     <string name="emergency_hospital">Nearest Hospital</string>
     <string name="emergency_ambulance">Ambulance</string>
+    <string name="emergency_nearby_section">Nearest emergency services</string>
+    <string name="emergency_nearby_section_hint">Based on your live GPS location</string>
+    <string name="emergency_nearby_via">Nearby via %1$s</string>
+    <string name="emergency_open_map">Map</string>
     <string name="emergency_112">112 Pathway</string>
     <string name="emergency_audio">Audio Recording</string>
     <string name="emergency_audio_segments">%1$d segment(s) recorded</string>
@@ -369,7 +373,7 @@
 
     <!-- About -->
     <string name="about_title">About PUKAAR</string>
-    <string name="about_version">Version 1.0.0</string>
+    <string name="about_version">Version 1.14.0</string>
     <string name="about_slogan">One Tap.\nMaximum Protection.</string>
     <string name="about_copyright">© 2026 PUKAAR\nAll rights reserved.</string>
 </resources>

@@ -35,13 +35,22 @@ public class FcmPushSender {
             notification.put("sound", "default");
             notification.put("priority", "high");
 
-            Map<String, Object> android = Map.of("priority", "high");
+            // Data-only + high priority so Android can wake a custom MessagingService
+            // even when the app is backgrounded (notification payloads often skip that).
+            Map<String, Object> androidCfg = new LinkedHashMap<>();
+            androidCfg.put("priority", "high");
             Map<String, Object> payload = new LinkedHashMap<>();
             payload.put("to", fcmToken);
             payload.put("priority", "high");
+            payload.put("content_available", true);
+            // Keep a thin notification for lock-screen visibility, but always send data.
             payload.put("notification", notification);
-            payload.put("android", android);
-            if (data != null && !data.isEmpty()) payload.put("data", data);
+            payload.put("android", androidCfg);
+            Map<String, String> dataPayload = data == null ? new LinkedHashMap<>() : new LinkedHashMap<>(data);
+            dataPayload.putIfAbsent("type", "EMERGENCY_ALERT");
+            dataPayload.putIfAbsent("title", title);
+            dataPayload.putIfAbsent("body", body);
+            payload.put("data", dataPayload);
 
             ResponseEntity<String> resp = restTemplate.exchange(
                     "https://fcm.googleapis.com/fcm/send",

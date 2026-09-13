@@ -279,46 +279,10 @@ private fun EmergencyActiveRoute(
         while (true) {
             if (finishing) break
             var e = runCatching { PukaarApp.instance.repository.getEmergency(eventId) }.getOrNull()
-            // If backend place fields are missing, fetch live nearby on-device
-            if (e != null && e.active != false &&
-                (e.policeStation == null || e.nearestHospital == null) &&
-                e.latitude != null && e.longitude != null
-            ) {
-                val nearby = runCatching {
-                    PukaarApp.instance.repository.nearby(e.latitude, e.longitude, 3)
-                }.getOrNull()
-                if (nearby != null) {
-                    e = e.copy(
-                        policeStation = e.policeStation ?: nearby.police?.firstOrNull()?.let {
-                            com.pukaar.app.data.api.PoliceDto(
-                                name = it.name,
-                                phone = it.phone,
-                                phoneVerified = true,
-                                address = it.address,
-                                latitude = it.latitude,
-                                longitude = it.longitude
-                            )
-                        },
-                        nearestHospital = e.nearestHospital ?: nearby.hospitals?.firstOrNull()?.let {
-                            com.pukaar.app.data.api.HospitalDto(
-                                name = it.name,
-                                phone = it.phone,
-                                address = it.address,
-                                latitude = it.latitude,
-                                longitude = it.longitude
-                            )
-                        },
-                        nearestAmbulance = e.nearestAmbulance
-                            ?: nearby.ambulance?.firstOrNull { it.source != "NATIONAL" }?.let {
-                                com.pukaar.app.data.api.HospitalDto(
-                                    name = it.name,
-                                    phone = it.phone,
-                                    address = it.address
-                                )
-                            },
-                        nearbySource = e.nearbySource ?: nearby.source
-                    )
-                }
+            if (e != null && e.active != false) {
+                e = runCatching {
+                    com.pukaar.app.util.NearbyServicesHelper.enrich(e!!, context)
+                }.getOrDefault(e)
             }
             event = e
             if (e?.active == false) {
@@ -326,7 +290,7 @@ private fun EmergencyActiveRoute(
                 onClosed()
                 break
             }
-            kotlinx.coroutines.delay(3000)
+            kotlinx.coroutines.delay(4000)
         }
     }
 

@@ -73,7 +73,8 @@ class MainActivity : ComponentActivity() {
                 if (!HighAlertApp.instance.session.token().isNullOrBlank()) {
                     activePhone = HighAlertApp.instance.session.phone().orEmpty()
                     step = Step.Active
-                    enableGrabbing()
+                    // Only start monitor — do NOT open settings screens (causes Motorola crash loops)
+                    ensureMonitoring()
                 }
             }
 
@@ -87,14 +88,14 @@ class MainActivity : ComponentActivity() {
                     .padding(24.dp)
             ) {
                 Column(Modifier.fillMaxWidth()) {
-                    Text("PUKAAR", color = Color(0xFF22C55E), fontSize = 34.sp, fontWeight = FontWeight.Black)
-                    Text("High Alert", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    Text("PUKAAR", color = Color(0xFFEF4444), fontSize = 36.sp, fontWeight = FontWeight.Black)
+                    Text("High Alert", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(8.dp))
                     Text(
                         when (step) {
-                            Step.Phone -> "Enter your phone number to receive SOS alerts."
+                            Step.Phone -> "Sign in with your phone to receive loud SOS alerts from people who trust you."
                             Step.Otp -> "Enter the 6-digit code we sent by SMS."
-                            Step.Active -> "You will get a loud full-screen alert when someone needs you."
+                            Step.Active -> "Monitoring is on. You will get a full-screen alert with map, call, police and hospital."
                         },
                         color = Color(0xFF9CA3AF),
                         fontSize = 14.sp,
@@ -176,7 +177,7 @@ class MainActivity : ComponentActivity() {
                                             )
                                         )
                                         activePhone = phoneE164
-                                        enableGrabbing()
+                                        ensureMonitoring()
                                         step = Step.Active
                                     } catch (e: Exception) {
                                         error = friendlyError(e)
@@ -212,8 +213,14 @@ class MainActivity : ComponentActivity() {
                                     )
                                 }
                             }
-                            Spacer(Modifier.height(16.dp))
-                            PrimaryButton("Fix alert permissions") { enableGrabbing() }
+                                    Text(
+                                        "Keep the green “Watching…” notification on. On Motorola/Xiaomi tap Fix alert permissions and set battery to Unrestricted / allow auto-start.",
+                                        color = Color(0xFF9CA3AF),
+                                        fontSize = 13.sp,
+                                        lineHeight = 18.sp
+                                    )
+                                    Spacer(Modifier.height(16.dp))
+                                    PrimaryButton("Fix alert permissions") { enableGrabbing() }
                             Spacer(Modifier.height(8.dp))
                             TextButton(onClick = {
                                 scope.launch {
@@ -233,35 +240,87 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun enableGrabbing() {
-        AlertMonitorService.start(this)
+    /** Safe: start monitoring only — never opens Settings (avoids Motorola crash loops). */
+    private fun ensureMonitoring() {
+        runCatching {
+            AlertMonitorService.start(this)
+            MonitorWatchdogReceiver.schedule(this)
+            MonitorKeepAliveWorker.enqueue(this)
+        }.onFailure {
+            android.util.Log.e("HighAlert", "ensureMonitoring failed: ${it.message}", it)
+        }
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
             != PackageManager.PERMISSION_GRANTED
         ) {
-            notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            runCatching { notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS) }
         }
+    }
+
+    /** User-tapped: request at most one settings screen so we don't crash-loop on resume. */
+    private fun enableGrabbing() {
+        ensureMonitoring()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val pm = getSystemService(PowerManager::class.java)
-            if (!pm.isIgnoringBatteryOptimizations(packageName)) {
+            if (pm != null && !pm.isIgnoringBatteryOptimizations(packageName)) {
                 runCatching {
                     startActivity(
                         Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
                             data = Uri.parse("package:$packageName")
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         }
                     )
                 }
+                return
             }
         }
         if (Build.VERSION.SDK_INT >= 34) {
             val nm = getSystemService(NotificationManager::class.java)
-            if (!nm.canUseFullScreenIntent()) {
+            if (nm != null && !nm.canUseFullScreenIntent()) {
                 runCatching {
                     startActivity(
                         Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT).apply {
                             data = Uri.parse("package:$packageName")
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         }
                     )
+                }
+                return
+            }
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val am = getSystemService(android.app.AlarmManager::class.java)
+            if (am != null && !am.canScheduleExactAlarms()) {
+                runCatching {
+                    startActivity(
+                        Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                            data = Uri.parse("package:$packageName")
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                    )
+                }
+                return
+            }
+        }
+        // Motorola / OEM: open app details so user can allow auto-start / unrestricted battery
+        runCatching {
+            startActivity(
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.parse("package:$packageName")
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            )
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Soft re-assert only — never open Settings from here
+        runCatching {
+            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+                val token = HighAlertApp.instance.session.token()
+                if (!token.isNullOrBlank()) {
+                    ensureMonitoring()
                 }
             }
         }

@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
@@ -6,24 +8,41 @@ plugins {
 
 android {
     namespace = "com.pukaar.app"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.pukaar.app"
+        applicationId = "pukaar.com"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 21
-        versionName = "1.13.0"
+        targetSdk = 36
+        versionCode = 23
+        versionName = "1.14.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // Emulator default; debug override points at LAN Mac IP for physical devices
         buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8080/\"")
+    }
+
+    signingConfigs {
+        create("release") {
+            val secretsDir = rootProject.file("../deploy/secrets")
+            val keystorePropsFile = secretsDir.resolve("keystore.properties")
+            if (keystorePropsFile.exists()) {
+                val props = Properties().apply {
+                    keystorePropsFile.inputStream().use { load(it) }
+                }
+                storeFile = secretsDir.resolve(props.getProperty("storeFile"))
+                storePassword = props.getProperty("storePassword")
+                keyAlias = props.getProperty("keyAlias")
+                keyPassword = props.getProperty("keyPassword")
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            buildConfigField("String", "API_BASE_URL", "\"http://43.248.56.240/pukaar/\"")
+            signingConfig = signingConfigs.getByName("release")
+            buildConfigField("String", "API_BASE_URL", "\"https://pukaaralert.com/pukaar/\"")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -32,7 +51,7 @@ android {
         debug {
             applicationIdSuffix = ".debug"
             isDebuggable = true
-            buildConfigField("String", "API_BASE_URL", "\"http://43.248.56.240/pukaar/\"")
+            buildConfigField("String", "API_BASE_URL", "\"https://pukaaralert.com/pukaar/\"")
         }
     }
 
