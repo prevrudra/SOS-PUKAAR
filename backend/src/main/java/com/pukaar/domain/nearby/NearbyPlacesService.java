@@ -59,10 +59,12 @@ public class NearbyPlacesService {
 
     private Map<String, Object> resolveNearby(double lat, double lng, int lim) {
         Map<String, Object> out = new LinkedHashMap<>();
-        // Fetch a wider candidate set so we can prefer real hospitals over tiny clinics
-        int fetch = Math.max(lim, 5);
+        // Fetch a wider candidate set, then hard-filter to big hospitals only
+        int fetch = Math.max(lim * 3, 10);
         List<Map<String, Object>> dbPolice = withinDistance(fromDbPolice(lat, lng, fetch), lat, lng);
-        List<Map<String, Object>> dbHospitals = withinDistance(fromDbHospitals(lat, lng, fetch), lat, lng);
+        List<Map<String, Object>> dbHospitals = filterHospitals(
+                withinDistance(fromDbHospitals(lat, lng, fetch), lat, lng)
+        );
         out.put("police", dbPolice);
         out.put("hospitals", dbHospitals);
         out.put("ambulance", nationalAmbulance());
@@ -75,9 +77,19 @@ public class NearbyPlacesService {
             if (police.isEmpty()) {
                 police = googleTextSearchSafe(lat, lng, fetch, "police station", "POLICE", "police");
             }
-            List<Map<String, Object>> hospitals = googleNearbySafe(lat, lng, fetch, List.of("hospital"), "HOSPITAL");
+            List<Map<String, Object>> hospitals = filterHospitals(
+                    googleNearbySafe(lat, lng, fetch, List.of("hospital"), "HOSPITAL")
+            );
+            if (hospitals.size() < lim) {
+                List<Map<String, Object>> more = filterHospitals(
+                        googleTextSearchSafe(lat, lng, fetch, "hospital near me", "HOSPITAL", "hospital")
+                );
+                hospitals = merge(hospitals, more, fetch * 2);
+            }
             if (hospitals.isEmpty()) {
-                hospitals = googleTextSearchSafe(lat, lng, fetch, "major hospital emergency", "HOSPITAL", "hospital");
+                hospitals = filterHospitals(
+                        googleTextSearchSafe(lat, lng, fetch, "government hospital", "HOSPITAL", "hospital")
+                );
             }
             List<Map<String, Object>> ambulance = googleTextSearchSafe(lat, lng, fetch, "ambulance", "AMBULANCE", null);
             if (ambulance.isEmpty()) {
@@ -142,40 +154,138 @@ public class NearbyPlacesService {
     }
 
     /**
-     * Prefer real hospitals over clinics/doctors, real phones over national numbers,
-     * then closer distance. Keeps large hospitals from losing to a nearer clinic.
+     * Hard-drop clinics/chemists; keep real hospitals.
+     * Prefer nearest by distance — brand names must not beat a closer hospital.
+     */
+    private static List<Map<String, Object>> filterHospitals(List<Map<String, Object>> places) {
+        if (places == null || places.isEmpty()) return List.of();
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Map<String, Object> p : places) {
+            String name = String.valueOf(p.getOrDefault("name", ""));
+            if (isRejectedHospitalName(name)) continue;
+            if (!isBigHospitalName(name)) continue;
+            out.add(p);
+        }
+        return out;
+    }
+
+    /** @deprecated use {@link #filterHospitals} */
+    private static List<Map<String, Object>> onlyBigHospitals(List<Map<String, Object>> places) {
+        return filterHospitals(places);
+    }
+
+    private static boolean isRejectedHospitalName(String name) {
+        String n = name == null ? "" : name.toLowerCase(Locale.ROOT);
+        if (n.isBlank()) return true;
+        // Hard rejects — never show these even if Google tags them as hospital
+        String[] hardReject = {
+                "clinic", "polyclinic", "poly clinic", "chemist", "pharmacy", "medical store",
+                "medical hall", "dispensary", "dental", "dentist", "diagnostic", "pathology",
+                "path lab", "imaging", "scan centre", "scan center", "blood bank", "optical",
+                "eye care", "optics", "physiotherapy", "physio", "ayurved", "homeopath",
+                "wellness", "spa", "beauty", "skin care", "veterinary", "vet ", "pet hospital",
+                "nursing bureau", "first aid", "medical shop", "medicos", "medicine shop",
+                "drugstore", "drug store", "consultation chamber"
+        };
+        for (String bad : hardReject) {
+            if (n.contains(bad)) return true;
+        }
+        // Soft rejects — only when the name is not clearly a hospital
+        if (!n.contains("hospital") && !n.contains("medical college") && !n.contains("nursing home")) {
+            String[] softReject = {"doctor", "dr.", " laboratory", "lab ", "chamber of"};
+            for (String bad : softReject) {
+                if (n.contains(bad)) return true;
+            }
+        }
+        return false;
+    }
+
+    /** Require a clear hospital / medical-college / multi-speciality signal in the name. */
+    private static boolean isBigHospitalName(String name) {
+        String n = name == null ? "" : name.toLowerCase(Locale.ROOT);
+        if (n.isBlank()) return false;
+        if (n.contains("hospital")
+                || n.contains("medical college")
+                || n.contains("medico surgical")
+                || n.contains("multi special")
+                || n.contains("multispecial")
+                || n.contains("superspecial")
+                || n.contains("super special")
+                || n.contains("trauma centre")
+                || n.contains("trauma center")
+                || n.contains("emergency hospital")
+                || n.contains("nursing home")) {
+            return true;
+        }
+        // Major Indian hospital brands / institutes often omit the word "hospital"
+        String[] brands = {
+                "aiims", "apollo", "fortis", "medanta", "manipal", "narayana", "yashoda",
+                "kokilaben", "lilavati", "hinduja", "jaslok", "tata memorial", "safdarjung",
+                "safdarjang", "ganga ram", "gangaram", "blk-", "blk max", "max super",
+                "care hospitals", "rainbow hospitals", "cloudnine", "aster ", "kims ",
+                "sree chitra", "pgimer", "cmc vellore", "christian medical"
+        };
+        for (String b : brands) {
+            if (n.contains(b)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Distance-first ranking. Quality only breaks near-ties (~200m).
+     * Never let a 6km brand hospital beat a 1–2km real hospital.
      */
     private List<Map<String, Object>> rankPlaces(
             List<Map<String, Object>> places, double lat, double lng, int lim, String typeLabel
     ) {
         if (places == null || places.isEmpty()) return List.of();
-        record Scored(Map<String, Object> place, double score) {}
+        List<Map<String, Object>> candidates = "HOSPITAL".equals(typeLabel)
+                ? filterHospitals(places)
+                : places;
+        if (candidates.isEmpty() && "HOSPITAL".equals(typeLabel)) return List.of();
+        record Scored(Map<String, Object> place, double distKm, double score) {}
         List<Scored> scored = new ArrayList<>();
-        for (Map<String, Object> p : places) {
+        for (Map<String, Object> p : candidates) {
             Double plat = asDouble(p.get("latitude"));
             Double plng = asDouble(p.get("longitude"));
             double dist = (plat != null && plng != null) ? haversineKm(lat, lng, plat, plng) : 50.0;
+            p.put("distanceKm", Math.round(dist * 10.0) / 10.0);
             String name = String.valueOf(p.getOrDefault("name", "")).toLowerCase(Locale.ROOT);
             String phone = p.get("phone") == null ? "" : String.valueOf(p.get("phone"));
             String source = String.valueOf(p.getOrDefault("source", ""));
+            // Distance dominates; tiny quality nudge only for near-ties
             double score = dist;
             if ("HOSPITAL".equals(typeLabel)) {
-                if (name.contains("hospital") || name.contains("medical college") || name.contains("multi special")) {
-                    score -= 4.0;
-                } else if (name.contains("clinic") || name.contains("dental") || name.contains("diagnostic")) {
-                    score += 6.0;
-                } else if (name.contains("doctor") || name.contains("pharmacy")) {
-                    score += 8.0;
+                if (name.contains("medical college") || name.contains("multi special")
+                        || name.contains("multispecial") || name.contains("trauma")
+                        || name.contains("emergency")) {
+                    score -= 0.2;
+                }
+                if (name.contains("nursing home") && !name.contains("hospital")) {
+                    score += 0.4;
                 }
             }
             if ("NATIONAL".equals(source) || "112".equals(phone) || "100".equals(phone) || "108".equals(phone)) {
-                score += 20.0;
+                score += 25.0; // national fallbacks last
             } else if (phone.isBlank()) {
-                score += 3.0;
+                score += 0.3;
             }
-            scored.add(new Scored(p, score));
+            scored.add(new Scored(p, dist, score));
         }
-        scored.sort(Comparator.comparingDouble(Scored::score));
+        scored.sort(Comparator.comparingDouble(Scored::score).thenComparingDouble(Scored::distKm));
+        // If we have hospitals within 3km, prefer those before far ones
+        if ("HOSPITAL".equals(typeLabel)) {
+            List<Scored> near = scored.stream().filter(s -> s.distKm <= 3.0).toList();
+            if (!near.isEmpty()) {
+                List<Scored> mid = scored.stream().filter(s -> s.distKm > 3.0 && s.distKm <= 8.0).toList();
+                List<Scored> ordered = new ArrayList<>(near);
+                ordered.addAll(mid);
+                if (ordered.size() < lim) {
+                    scored.stream().filter(s -> s.distKm > 8.0).forEach(ordered::add);
+                }
+                return ordered.stream().limit(lim).map(Scored::place).toList();
+            }
+        }
         return scored.stream().limit(lim).map(Scored::place).toList();
     }
 
@@ -345,17 +455,16 @@ public class NearbyPlacesService {
                     || lowerName.contains("police")
                     || lowerName.contains("thana");
             case "HOSPITAL" -> {
+                if (isRejectedHospitalName(name)) yield false;
                 boolean hospitalType = typesJoined.contains("hospital");
-                boolean weakType = typesJoined.contains("doctor") || typesJoined.contains("dentist")
-                        || typesJoined.contains("pharmacy");
-                boolean hospitalName = lowerName.contains("hospital")
-                        || lowerName.contains("medical college")
-                        || lowerName.contains("nursing home");
-                boolean weakName = lowerName.contains("clinic") || lowerName.contains("dental")
-                        || lowerName.contains("diagnostic") || lowerName.contains("pharmacy");
-                // Prefer true hospitals; allow clinic only if no hospital-type signal at all
-                yield (hospitalType || hospitalName) && !weakName
-                        || (!weakType && !weakName && (lowerName.contains("medical") || typesJoined.contains("health")));
+                boolean weakType = typesJoined.contains("doctor")
+                        || typesJoined.contains("dentist")
+                        || typesJoined.contains("pharmacy")
+                        || typesJoined.contains("drugstore")
+                        || typesJoined.contains("physiotherapist")
+                        || typesJoined.contains("veterinary_care");
+                // Hard rule: name must look like a real hospital (not clinic/chemist)
+                yield !weakType && isBigHospitalName(name) && (hospitalType || isBigHospitalName(name));
             }
             case "AMBULANCE" -> typesJoined.contains("ambulance")
                     || lowerName.contains("ambulance");
@@ -373,7 +482,11 @@ public class NearbyPlacesService {
             out.put("police", merge((List<Map<String, Object>>) out.get("police"), osmPolice, lim));
         }
         if (!osmHospitals.isEmpty()) {
-            out.put("hospitals", merge((List<Map<String, Object>>) out.get("hospitals"), osmHospitals, lim));
+            out.put("hospitals", merge(
+                    (List<Map<String, Object>>) out.get("hospitals"),
+                    filterHospitals(osmHospitals),
+                    lim
+            ));
         }
         if (!osmAmbulance.isEmpty()) {
             List<Map<String, Object>> amb = new ArrayList<>((List<Map<String, Object>>) out.get("ambulance"));

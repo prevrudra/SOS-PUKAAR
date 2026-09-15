@@ -1,5 +1,10 @@
 package com.pukaar.domain.alert;
 
+import com.pukaar.common.ContactRole;
+import com.pukaar.domain.contact.TrustedContactEntity;
+import com.pukaar.domain.contact.TrustedContactRepository;
+import com.pukaar.domain.emergency.ContactDeliveryEntity;
+import com.pukaar.domain.emergency.ContactDeliveryRepository;
 import com.pukaar.domain.emergency.EmergencyEventEntity;
 import com.pukaar.domain.emergency.EmergencyEventRepository;
 import com.pukaar.domain.emergency.EmergencyLocationRepository;
@@ -11,9 +16,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 
 @Slf4j
 @Service
@@ -24,6 +32,8 @@ public class ContactAlertDeviceService {
     private final EmergencyEventRepository eventRepo;
     private final EmergencyLocationRepository locationRepo;
     private final NearbyPlacesService nearbyPlacesService;
+    private final TrustedContactRepository contactRepo;
+    private final ContactDeliveryRepository deliveryRepo;
 
     @Transactional
     public Map<String, Object> register(String phoneE164, String fcmToken, String deviceId, String platform) {
@@ -50,7 +60,7 @@ public class ContactAlertDeviceService {
     }
 
     /** Fresh snapshot for an already-open High Alert screen (location may arrive after first fire). */
-    public Map<String, Object> alertSnapshotForContact(String phoneE164, java.util.UUID eventId) {
+    public Map<String, Object> alertSnapshotForContact(String phoneE164, UUID eventId) {
         String phone = normalize(phoneE164);
         return eventRepo.findById(eventId)
                 .filter(e -> e.getClosedAt() == null)
@@ -59,14 +69,11 @@ public class ContactAlertDeviceService {
                 .orElse(Map.of("active", false));
     }
 
-    private boolean deliveryBelongsToPhone(java.util.UUID eventId, String phoneE164) {
+    private boolean deliveryBelongsToPhone(UUID eventId, String phoneE164) {
         String want = last10(phoneE164);
         return eventRepo.findOpenAlertsForContactPhone(phoneE164)
                 .map(e -> e.getId().equals(eventId))
-                .orElseGet(() -> {
-                    // Event may already be DELIVERED/READ for this contact — still allow snapshot
-                    return true;
-                }) || want.length() >= 10;
+                .orElseGet(() -> true) || want.length() >= 10;
     }
 
     private Map<String, Object> toAlertPayload(EmergencyEventEntity event) {
@@ -96,21 +103,26 @@ public class ContactAlertDeviceService {
             if (name == null || name.isBlank()) name = user.getPhoneE164();
             m.put("victimName", name);
             m.put("victimPhone", user.getPhoneE164());
+            m.put("victimSubtitle", subtitleFor(user));
         }
         if (lat != null && lng != null) {
+            m.put("locationLabel", String.format(Locale.ROOT, "%.5f, %.5f", lat, lng));
             try {
                 Map<String, Object> nearby = nearbyPlacesService.nearby(lat, lng, 3);
                 firstPlace(nearby.get("police")).ifPresent(p -> {
                     m.put("policeName", p.get("name"));
                     m.put("policePhone", p.get("phone"));
+                    if (p.get("address") != null) m.put("policeAddress", p.get("address"));
                 });
                 firstPlace(nearby.get("hospitals")).ifPresent(h -> {
                     m.put("hospitalName", h.get("name"));
                     m.put("hospitalPhone", h.get("phone"));
+                    if (h.get("address") != null) m.put("hospitalAddress", h.get("address"));
                 });
                 firstPlace(nearby.get("ambulance")).ifPresent(a -> {
                     m.put("ambulanceName", a.get("name"));
                     m.put("ambulancePhone", a.get("phone"));
+                    if (a.get("address") != null) m.put("ambulanceAddress", a.get("address"));
                 });
             } catch (Exception e) {
                 log.warn("Nearby enrich for High Alert failed: {}", e.getMessage());
@@ -124,7 +136,80 @@ public class ContactAlertDeviceService {
             m.put("hospitalName", "Nearest Hospital");
             m.put("hospitalPhone", "112");
         }
+        if (!m.containsKey("ambulanceName")) {
+            m.put("ambulanceName", "National Ambulance");
+            m.put("ambulancePhone", "108");
+        }
+
+        List<TrustedContactEntity> allContacts = contactRepo
+                .findByOwnerUserIdAndContactRoleInAndActiveTrue(
+                        event.getUserId(),
+                        List.of(
+                                ContactRole.SOS_TRUSTED,
+                                ContactRole.HELP_MONITOR,
+                                ContactRole.HELP_BACKUP,
+                                ContactRole.DOCTOR,
+                                ContactRole.NEIGHBOUR
+                        )
+                );
+        Map<String, ContactDeliveryEntity> deliveryByPhone = new LinkedHashMap<>();
+        for (ContactDeliveryEntity d : deliveryRepo.findByEventId(event.getId())) {
+            deliveryByPhone.put(last10(d.getContactPhone()), d);
+        }
+
+        List<Map<String, Object>> trusted = new ArrayList<>();
+        List<Map<String, Object>> help = new ArrayList<>();
+        for (TrustedContactEntity c : allContacts) {
+            Map<String, Object> row = contactDto(c, deliveryByPhone.get(last10(c.getPhoneE164())));
+            if (c.getContactRole() == ContactRole.SOS_TRUSTED) {
+                trusted.add(row);
+            } else {
+                help.add(row);
+            }
+        }
+        m.put("trustedContacts", trusted);
+        m.put("helpNumbers", help);
         return m;
+    }
+
+    private static String subtitleFor(UserEntity user) {
+        if (user.getHomeMode() != null) {
+            return switch (user.getHomeMode()) {
+                case HELP -> "Help mode user";
+                case SOS -> "SOS protected user";
+            };
+        }
+        return "PUKAAR user";
+    }
+
+    private Map<String, Object> contactDto(TrustedContactEntity c, ContactDeliveryEntity delivery) {
+        Map<String, Object> row = new LinkedHashMap<>();
+        String label = c.getName();
+        if (c.getRelationship() != null && !c.getRelationship().isBlank()) {
+            label = c.getName() + " (" + c.getRelationship() + ")";
+        } else if (c.getContactRole() != ContactRole.SOS_TRUSTED) {
+            label = c.getName() + " (" + prettyRole(c.getContactRole()) + ")";
+        }
+        row.put("name", label);
+        row.put("phone", c.getPhoneE164());
+        row.put("role", c.getContactRole().name());
+        row.put("relationship", c.getRelationship());
+        String status = "PENDING";
+        if (delivery != null && delivery.getStatus() != null) {
+            status = delivery.getStatus().name();
+        }
+        row.put("status", status);
+        return row;
+    }
+
+    private static String prettyRole(ContactRole role) {
+        return switch (role) {
+            case DOCTOR -> "Doctor";
+            case NEIGHBOUR -> "Neighbor";
+            case HELP_MONITOR -> "Monitor";
+            case HELP_BACKUP -> "Backup";
+            case SOS_TRUSTED -> "Trusted";
+        };
     }
 
     private java.util.Optional<Map<String, Object>> firstPlace(Object listObj) {
@@ -134,6 +219,7 @@ public class ContactAlertDeviceService {
         Map<String, Object> m = new LinkedHashMap<>();
         if (raw.get("name") != null) m.put("name", String.valueOf(raw.get("name")));
         if (raw.get("phone") != null) m.put("phone", String.valueOf(raw.get("phone")));
+        if (raw.get("address") != null) m.put("address", String.valueOf(raw.get("address")));
         return m.isEmpty() ? java.util.Optional.empty() : java.util.Optional.of(m);
     }
 

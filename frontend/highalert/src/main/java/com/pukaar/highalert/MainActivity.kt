@@ -222,6 +222,10 @@ class MainActivity : ComponentActivity() {
                                     Spacer(Modifier.height(16.dp))
                                     PrimaryButton("Fix alert permissions") { enableGrabbing() }
                             Spacer(Modifier.height(8.dp))
+                            PrimaryButton("View sample alert UI") {
+                                startActivity(Intent(this@MainActivity, SamplePreviewActivity::class.java))
+                            }
+                            Spacer(Modifier.height(8.dp))
                             TextButton(onClick = {
                                 scope.launch {
                                     HighAlertApp.instance.session.clear()

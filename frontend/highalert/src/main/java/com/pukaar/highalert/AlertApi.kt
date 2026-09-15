@@ -39,13 +39,24 @@ data class RegisterDeviceRequest(val phone: String, val fcmToken: String? = null
 data class AcknowledgeRequest(val eventId: String, val status: String = "READ")
 
 @JsonClass(generateAdapter = true)
+data class AlertContactDto(
+    val name: String? = null,
+    val phone: String? = null,
+    val role: String? = null,
+    val relationship: String? = null,
+    val status: String? = null
+)
+
+@JsonClass(generateAdapter = true)
 data class PendingAlertResponse(
     val active: Boolean? = false,
     val eventId: String? = null,
     val victimName: String? = null,
     val victimPhone: String? = null,
+    val victimSubtitle: String? = null,
     val latitude: Double? = null,
     val longitude: Double? = null,
+    val locationLabel: String? = null,
     val batteryPct: Int? = null,
     val networkType: String? = null,
     val mockDrill: Boolean? = false,
@@ -53,8 +64,13 @@ data class PendingAlertResponse(
     val startedAt: String? = null,
     val policeName: String? = null,
     val policePhone: String? = null,
+    val policeAddress: String? = null,
     val hospitalName: String? = null,
     val hospitalPhone: String? = null,
+    val hospitalAddress: String? = null,
     val ambulanceName: String? = null,
-    val ambulancePhone: String? = null
+    val ambulancePhone: String? = null,
+    val ambulanceAddress: String? = null,
+    val trustedContacts: List<AlertContactDto>? = null,
+    val helpNumbers: List<AlertContactDto>? = null
 )
