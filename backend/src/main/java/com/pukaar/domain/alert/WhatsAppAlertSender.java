@@ -1,5 +1,6 @@
 package com.pukaar.domain.alert;
 
+import com.pukaar.common.PhoneNumbers;
 import com.pukaar.config.PukaarProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -37,7 +38,7 @@ public class WhatsAppAlertSender {
     private boolean sendEmergencyTemplateOnce(String toPhoneE164, List<String> bodyParams) {
         if (!isConfigured()) return false;
         try {
-            String phone = digitsOnly(toPhoneE164);
+            String phone = PhoneNumbers.forWhatsApp(toPhoneE164);
             var wa = props.getAlerts().getWhatsapp();
             String url = "https://graph.facebook.com/v26.0/" + wa.getPhoneNumberId() + "/messages";
             String templateName = wa.getTemplateName() == null || wa.getTemplateName().isBlank()
@@ -94,7 +95,7 @@ public class WhatsAppAlertSender {
     public boolean sendText(String toPhoneE164, String body) {
         if (!isConfigured()) return false;
         try {
-            String phone = digitsOnly(toPhoneE164);
+            String phone = PhoneNumbers.forWhatsApp(toPhoneE164);
             var wa = props.getAlerts().getWhatsapp();
             String url = "https://graph.facebook.com/v26.0/" + wa.getPhoneNumberId() + "/messages";
             HttpHeaders headers = new HttpHeaders();
@@ -114,10 +115,6 @@ public class WhatsAppAlertSender {
             log.error("WhatsApp text send failed for {}", toPhoneE164, e);
             return false;
         }
-    }
-
-    private static String digitsOnly(String phone) {
-        return phone == null ? "" : phone.replaceAll("[^0-9]", "");
     }
 
     private static List<String> padParams(List<String> in, int n) {

@@ -557,7 +557,7 @@ public class EmergencyOrchestrator {
                     .eventId(event.getId())
                     .contactId(c.getId())
                     .contactName(c.getName())
-                    .contactPhone(c.getPhoneE164())
+                    .contactPhone(com.pukaar.common.PhoneNumbers.toE164(c.getPhoneE164()))
                     .status(DeliveryStatus.PENDING)
                     .build();
             delivery = deliveryRepo.save(delivery);

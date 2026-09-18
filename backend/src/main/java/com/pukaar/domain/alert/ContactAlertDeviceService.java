@@ -114,7 +114,7 @@ public class ContactAlertDeviceService {
             String name = user.getFullName();
             if (name == null || name.isBlank()) name = user.getPhoneE164();
             m.put("victimName", name);
-            m.put("victimPhone", user.getPhoneE164());
+            m.put("victimPhone", formatPhone(user.getPhoneE164()));
             m.put("victimSubtitle", subtitleFor(user));
         }
         if (lat != null && lng != null) {
@@ -203,7 +203,7 @@ public class ContactAlertDeviceService {
             label = c.getName() + " (" + prettyRole(c.getContactRole()) + ")";
         }
         row.put("name", label);
-        row.put("phone", c.getPhoneE164());
+        row.put("phone", formatPhone(c.getPhoneE164()));
         row.put("role", c.getContactRole().name());
         row.put("relationship", c.getRelationship());
         String status = "PENDING";
@@ -237,6 +237,15 @@ public class ContactAlertDeviceService {
 
     private String normalize(String phone) {
         return com.pukaar.common.PhoneNumbers.toE164(phone);
+    }
+
+    private static String formatPhone(String raw) {
+        if (raw == null || raw.isBlank()) return raw;
+        try {
+            return com.pukaar.common.PhoneNumbers.toE164(raw);
+        } catch (Exception e) {
+            return raw.trim();
+        }
     }
 
     private static String last10(String phone) {

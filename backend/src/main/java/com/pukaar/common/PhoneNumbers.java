@@ -43,4 +43,23 @@ public final class PhoneNumbers {
     public static String digitsOnly(String e164) {
         return toE164(e164).substring(1);
     }
+
+    /** Meta WhatsApp Cloud API `to` field — digits only, always with country code. */
+    public static String forWhatsApp(String raw) {
+        return digitsOnly(raw);
+    }
+
+    /** Last 10 digits for matching phones stored in mixed formats. */
+    public static String last10(String raw) {
+        if (raw == null) return "";
+        String digits = raw.replaceAll("[^0-9]", "");
+        return digits.length() <= 10 ? digits : digits.substring(digits.length() - 10);
+    }
+
+    public static boolean sameNumber(String a, String b) {
+        if (a == null || b == null || a.isBlank() || b.isBlank()) return false;
+        String la = last10(a);
+        String lb = last10(b);
+        return la.length() >= 10 && la.equals(lb);
+    }
 }

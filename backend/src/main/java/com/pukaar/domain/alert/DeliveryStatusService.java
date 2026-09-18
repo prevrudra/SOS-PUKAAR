@@ -101,7 +101,7 @@ public class DeliveryStatusService {
 
         int waSent = 0;
         for (ContactDeliveryEntity d : deliveryRepo.findByEventId(eventId)) {
-            var device = alertDeviceRepo.findFirstByPhoneE164AndActiveTrueOrderByUpdatedAtDesc(d.getContactPhone());
+            var device = findAlertDevice(d.getContactPhone());
             if (device.isPresent() && device.get().getFcmToken() != null) {
                 fcm.sendHighPriority(device.get().getFcmToken(), "PUKAAR — User Safe", message, pushData);
             }
@@ -145,9 +145,18 @@ public class DeliveryStatusService {
     }
 
     private static String last10(String phone) {
-        if (phone == null) return "";
-        String digits = phone.replaceAll("[^0-9]", "");
-        return digits.length() <= 10 ? digits : digits.substring(digits.length() - 10);
+        return PhoneNumbers.last10(phone);
+    }
+
+    private java.util.Optional<ContactAlertDeviceEntity> findAlertDevice(String phone) {
+        if (phone == null || phone.isBlank()) return java.util.Optional.empty();
+        try {
+            String normalized = PhoneNumbers.toE164(phone);
+            return alertDeviceRepo.findFirstByPhoneE164AndActiveTrueOrderByUpdatedAtDesc(normalized)
+                    .or(() -> alertDeviceRepo.findActiveByPhoneLast10(normalized));
+        } catch (Exception e) {
+            return alertDeviceRepo.findActiveByPhoneLast10(phone);
+        }
     }
 
     public record StatusUpdate(String phone, String status) {}

@@ -1037,7 +1037,7 @@ private fun TextStyle.scaled(scale: Float): TextStyle =
     if (scale == 1f) this else copy(fontSize = fontSize * scale, lineHeight = lineHeight * scale)
 
 private const val MinTextScale = 0.62f
-private const val SmallCallWidthFraction = 0.67f
+private const val SmallCallWidthFraction = 0.88f
 
 private val CardShape = RoundedCornerShape(8.dp)
 private val ButtonShape = RoundedCornerShape(5.dp)

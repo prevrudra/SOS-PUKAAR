@@ -5,7 +5,7 @@
 | File | App | Version |
 |------|-----|---------|
 | `pukaar-1.18.3-40.aab` | PUKAAR (`pukaar.com`) | 1.18.3 (40) |
-| `highalert-1.13.4-34.aab` | High Alert (`com.pukaar.highalert`) | 1.13.4 (34) |
+| `highalert-1.13.5-35.aab` | High Alert (`com.pukaar.highalert`) | 1.13.5 (35) |
 
 Signed with `deploy/secrets/pukaar-upload.jks`.
 
@@ -17,10 +17,9 @@ Signed with `deploy/secrets/pukaar-upload.jks`.
 
 ## High Alert — internal testing
 
-- **Internal testing:** completed versionCode **34** (`1.13.4`)
-- Fix: full contact/police/hospital data no longer blocked by ring debounce
-- Fix: snapshot fetch retries 5× before showing thin FCM payload
-- Fix: pending poll keeps working after DELIVERED ack (server-side)
+- **Internal testing:** completed versionCode **35** (`1.13.5`)
+- Fix: Stop alert no longer loops — silences locally + server READ ack
+- Fix: watchdog/FCM skip dismissed events; no re-arm on data enrich
 
 ## Re-upload later
 

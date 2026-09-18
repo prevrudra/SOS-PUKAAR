@@ -21,7 +21,11 @@ object AlertUiMapper {
             phone.isNotBlank() -> phone
             else -> "PUKAAR user"
         }
-        val displayShort = shortDisplayName(name, phone)
+        val headlineLabel = when {
+            !rawName.isNullOrBlank() && !looksLikePhone(rawName) -> rawName.trim()
+            phone.isNotBlank() -> phone
+            else -> "PUKAAR user"
+        }
         val lat = alert.latitude ?: 0.0
         val lng = alert.longitude ?: 0.0
         val (dateLabel, timeLabel) = formatStarted(alert.startedAt)
@@ -31,14 +35,14 @@ object AlertUiMapper {
             else -> AlertType.SOS
         }
         val headline = when {
-            mockDrill -> "$displayShort — practice alert"
-            type == AlertType.HELP -> "$displayShort needs help"
-            else -> "$displayShort is in danger!"
+            mockDrill -> "$headlineLabel — practice alert"
+            type == AlertType.HELP -> "$headlineLabel needs help"
+            else -> "$headlineLabel is in danger!"
         }
         val message = when {
-            mockDrill -> "$displayShort activated a PUKAAR practice alert. Please confirm they are safe."
-            type == AlertType.HELP -> "$displayShort has activated HELP in PUKAAR. Please check on them."
-            else -> "$displayShort has pressed SOS in PUKAAR. Please check on them immediately."
+            mockDrill -> "$headlineLabel activated a PUKAAR practice alert. Please confirm they are safe."
+            type == AlertType.HELP -> "$headlineLabel has activated HELP in PUKAAR. Please check on them."
+            else -> "$headlineLabel has pressed SOS in PUKAAR. Please check on them immediately."
         }
         val locationText = when {
             !alert.locationLabel.isNullOrBlank() -> alert.locationLabel!!

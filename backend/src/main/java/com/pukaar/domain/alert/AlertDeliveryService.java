@@ -1,6 +1,7 @@
 package com.pukaar.domain.alert;
 
 import com.pukaar.common.ContactRole;
+import com.pukaar.common.PhoneNumbers;
 import com.pukaar.common.DeliveryStatus;
 import com.pukaar.common.InactivityLevel;
 import com.pukaar.domain.contact.TrustedContactEntity;
@@ -61,7 +62,8 @@ public class AlertDeliveryService {
             return;
         }
 
-        String phone = delivery.getContactPhone();
+        String phone = normalizeContactPhone(delivery.getContactPhone());
+        delivery.setContactPhone(phone);
         delivery.setAttempts(delivery.getAttempts() + 1);
         boolean highPriority = level == InactivityLevel.URGENT;
         boolean alreadyWa = channelHasWhatsApp(delivery);
@@ -102,7 +104,8 @@ public class AlertDeliveryService {
             return;
         }
 
-        String phone = delivery.getContactPhone();
+        String phone = normalizeContactPhone(delivery.getContactPhone());
+        delivery.setContactPhone(phone);
         delivery.setAttempts(delivery.getAttempts() + 1);
         boolean alreadyWa = channelHasWhatsApp(delivery);
 
@@ -295,7 +298,7 @@ public class AlertDeliveryService {
             boolean fullScreen,
             InactivityLevel inactivityLevel
     ) {
-        var device = alertDeviceRepo.findFirstByPhoneE164AndActiveTrueOrderByUpdatedAtDesc(phone);
+        var device = findAlertDevice(phone);
         if (device.isEmpty() || device.get().getFcmToken() == null) return false;
         Map<String, String> pushData = new java.util.LinkedHashMap<>();
         boolean inactivity = event.getTriggerType() == com.pukaar.common.TriggerType.INACTIVITY;
@@ -345,7 +348,7 @@ public class AlertDeliveryService {
     /** New Meta template "pukaar_sos" (18 body variables). */
     private List<String> buildPukaarSosParams(UserEntity user, EmergencyEventEntity event) {
         String who = displayName(user);
-        String userPhone = user.getPhoneE164() != null ? user.getPhoneE164() : "-";
+        String userPhone = formatPhoneParam(user.getPhoneE164());
         String when = event.getStartedAt() != null
                 ? SOS_TIME.format(event.getStartedAt().atZone(IST))
                 : SOS_TIME.format(java.time.Instant.now().atZone(IST));
@@ -395,7 +398,7 @@ public class AlertDeliveryService {
     /** Legacy approved template "emergency" (19 body variables). */
     private List<String> buildLegacyEmergencyParams(UserEntity user, EmergencyEventEntity event) {
         String who = displayName(user);
-        String userPhone = user.getPhoneE164() != null ? user.getPhoneE164() : "-";
+        String userPhone = formatPhoneParam(user.getPhoneE164());
         String maps = mapsLink(event);
         // Template body already includes "%" after the battery variable.
         String battery = event.getBatteryPct() != null
@@ -411,15 +414,15 @@ public class AlertDeliveryService {
         String c1n = "-", c1p = "-", c2n = "-", c2p = "-", c3n = "-", c3p = "-";
         if (contacts.size() > 0) {
             c1n = contactNameWithRelation(contacts.get(0));
-            c1p = contacts.get(0).getPhoneE164();
+            c1p = formatPhoneParam(contacts.get(0).getPhoneE164());
         }
         if (contacts.size() > 1) {
             c2n = contactNameWithRelation(contacts.get(1));
-            c2p = contacts.get(1).getPhoneE164();
+            c2p = formatPhoneParam(contacts.get(1).getPhoneE164());
         }
         if (contacts.size() > 2) {
             c3n = contactNameWithRelation(contacts.get(2));
-            c3p = contacts.get(2).getPhoneE164();
+            c3p = formatPhoneParam(contacts.get(2).getPhoneE164());
         }
 
         NearbySnapshot nearby = resolveNearby(event);
@@ -513,7 +516,31 @@ public class AlertDeliveryService {
         TrustedContactEntity c = list.get(index);
         String rel = c.getRelationship() != null && !c.getRelationship().isBlank()
                 ? c.getRelationship() : roleLabel(c.getContactRole());
-        return c.getName() + " — " + rel + " — " + c.getPhoneE164();
+        return c.getName() + " — " + rel + " — " + formatPhoneParam(c.getPhoneE164());
+    }
+
+    private static String formatPhoneParam(String raw) {
+        if (raw == null || raw.isBlank()) return "-";
+        try {
+            return PhoneNumbers.toE164(raw);
+        } catch (Exception e) {
+            return raw.trim();
+        }
+    }
+
+    private static String normalizeContactPhone(String raw) {
+        if (raw == null || raw.isBlank()) return raw;
+        try {
+            return PhoneNumbers.toE164(raw);
+        } catch (Exception e) {
+            return raw.trim();
+        }
+    }
+
+    private java.util.Optional<ContactAlertDeviceEntity> findAlertDevice(String phone) {
+        String normalized = normalizeContactPhone(phone);
+        return alertDeviceRepo.findFirstByPhoneE164AndActiveTrueOrderByUpdatedAtDesc(normalized)
+                .or(() -> alertDeviceRepo.findActiveByPhoneLast10(normalized));
     }
 
     private static String contactNameWithRelation(TrustedContactEntity c) {
