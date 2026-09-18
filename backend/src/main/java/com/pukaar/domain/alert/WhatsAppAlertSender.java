@@ -26,11 +26,15 @@ public class WhatsAppAlertSender {
     }
 
     /**
-     * Sends the configured WhatsApp SOS template.
-     * Param count follows the list built by AlertDeliveryService
-     * ({@code emergency}=19, {@code pukaar_sos}=18).
+     * Sends the configured WhatsApp SOS template once.
+     * Do not retry here — Meta may accept the message while returning a transient
+     * error, and retries produced 3–4 duplicate SOS WhatsApps per contact.
      */
     public boolean sendEmergencyTemplate(String toPhoneE164, List<String> bodyParams) {
+        return sendEmergencyTemplateOnce(toPhoneE164, bodyParams);
+    }
+
+    private boolean sendEmergencyTemplateOnce(String toPhoneE164, List<String> bodyParams) {
         if (!isConfigured()) return false;
         try {
             String phone = digitsOnly(toPhoneE164);
@@ -71,9 +75,16 @@ public class WhatsAppAlertSender {
             ResponseEntity<String> resp = restTemplate.exchange(
                     url, HttpMethod.POST, new HttpEntity<>(payload, headers), String.class);
             boolean ok = resp.getStatusCode().is2xxSuccessful();
-            if (ok) log.info("WhatsApp emergency template sent to {}", phone);
-            else log.warn("WhatsApp template failed {} -> {}", phone, resp.getBody());
+            if (ok) {
+                log.info("WhatsApp emergency template sent to {} — meta: {}", phone, resp.getBody());
+            } else {
+                log.warn("WhatsApp template failed {} -> {}", phone, resp.getBody());
+            }
             return ok;
+        } catch (org.springframework.web.client.HttpStatusCodeException e) {
+            log.error("WhatsApp template HTTP {} for {}: {}",
+                    e.getStatusCode().value(), toPhoneE164, e.getResponseBodyAsString());
+            return false;
         } catch (Exception e) {
             log.error("WhatsApp template send failed for {}", toPhoneE164, e);
             return false;

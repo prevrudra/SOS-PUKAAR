@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -145,6 +146,55 @@ fun SosCountdownOverlay(
                     letterSpacing = 0.8.sp
                 )
             }
+        }
+    }
+}
+
+/**
+ * Covers home while the emergency API / GPS finish after countdown.
+ * Prevents a flash of the home screen before SOS/HELP active.
+ */
+@Composable
+fun EmergencySendingOverlay(
+    mode: HomeMode,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Black.copy(alpha = 0.96f))
+            .clickable(enabled = false) {},
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = stringResource(
+                    if (mode == HomeMode.SOS) R.string.countdown_sos_title else R.string.countdown_help_title
+                ).uppercase(),
+                color = mode.accent,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.2.sp
+            )
+            Spacer(modifier = Modifier.height(28.dp))
+            CircularProgressIndicator(color = mode.accent, strokeWidth = 3.dp)
+            Spacer(modifier = Modifier.height(24.dp))
+            Text(
+                text = stringResource(R.string.emergency_sending_alert),
+                color = TextPrimary,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 32.dp)
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = stringResource(R.string.emergency_sending_alert_hint),
+                color = TextSecondary,
+                fontSize = 14.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 40.dp)
+            )
         }
     }
 }

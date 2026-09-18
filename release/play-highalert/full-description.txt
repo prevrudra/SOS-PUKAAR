@@ -1,0 +1,16 @@
+PUKAAR High Alert receives emergency SOS from your loved ones.
+
+When they trigger PUKAAR, this app:
+• Wakes the phone and rings like an alarm clock
+• Shows over the lock screen
+• Displays live location, battery, and help numbers
+• Keeps re-ringing until you respond
+
+Built for reliability on real phones (including Oppo and Xiaomi):
+• Instant FCM push wake
+• Background guard + polling if push is delayed
+• Works even if you have not opened the app for a long time
+
+Sign in once with the phone number saved as a trusted contact in PUKAAR. Then leave Alert Guard on and set battery to Unrestricted.
+
+PUKAAR High Alert is the trusted-contact companion to the PUKAAR personal safety app.

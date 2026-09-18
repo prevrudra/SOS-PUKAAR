@@ -14,8 +14,14 @@ object AlertUiMapper {
     private val ist = ZoneId.of("Asia/Kolkata")
 
     fun fromPending(alert: PendingAlertResponse, mockDrill: Boolean = alert.mockDrill == true): SosAlert {
-        val name = alert.victimName?.takeIf { it.isNotBlank() } ?: "Someone"
-        val phone = alert.victimPhone.orEmpty()
+        val phone = formatPhone(alert.victimPhone)
+        val rawName = alert.victimName?.takeIf { it.isNotBlank() }
+        val name = when {
+            !rawName.isNullOrBlank() && !looksLikePhone(rawName) -> rawName.trim()
+            phone.isNotBlank() -> phone
+            else -> "PUKAAR user"
+        }
+        val displayShort = shortDisplayName(name, phone)
         val lat = alert.latitude ?: 0.0
         val lng = alert.longitude ?: 0.0
         val (dateLabel, timeLabel) = formatStarted(alert.startedAt)
@@ -25,13 +31,14 @@ object AlertUiMapper {
             else -> AlertType.SOS
         }
         val headline = when {
-            mockDrill -> "$name — practice alert"
-            type == AlertType.HELP -> "$name needs help"
-            else -> "$name is in danger!"
+            mockDrill -> "$displayShort — practice alert"
+            type == AlertType.HELP -> "$displayShort needs help"
+            else -> "$displayShort is in danger!"
         }
         val message = when {
-            mockDrill -> "$name activated a PUKAAR practice SOS. Please confirm they are safe."
-            else -> "$name has pressed SOS in PUKAAR. Please check on them immediately."
+            mockDrill -> "$displayShort activated a PUKAAR practice alert. Please confirm they are safe."
+            type == AlertType.HELP -> "$displayShort has activated HELP in PUKAAR. Please check on them."
+            else -> "$displayShort has pressed SOS in PUKAAR. Please check on them immediately."
         }
         val locationText = when {
             !alert.locationLabel.isNullOrBlank() -> alert.locationLabel!!
@@ -154,5 +161,30 @@ object AlertUiMapper {
             n == "—" || n.isBlank() -> "—"
             else -> "OK"
         }
+    }
+
+    private fun looksLikePhone(value: String): Boolean {
+        val digits = value.filter { it.isDigit() }
+        return digits.length >= 8 && value.any { it == '+' || it.isDigit() } &&
+            value.count { it.isLetter() } <= 1
+    }
+
+    private fun formatPhone(raw: String?): String {
+        val value = raw?.trim().orEmpty()
+        if (value.isBlank()) return ""
+        val digits = value.filter { it.isDigit() }
+        return when {
+            value.startsWith("+") -> value
+            digits.length == 10 -> "+91$digits"
+            digits.length > 10 -> "+$digits"
+            else -> value
+        }
+    }
+
+    /** Prefer a readable short label in headlines when the identity is only a phone. */
+    private fun shortDisplayName(name: String, phone: String): String {
+        if (!looksLikePhone(name)) return name
+        val digits = name.filter { it.isDigit() }.ifBlank { phone.filter { it.isDigit() } }
+        return if (digits.length >= 4) "…${digits.takeLast(4)}" else name
     }
 }

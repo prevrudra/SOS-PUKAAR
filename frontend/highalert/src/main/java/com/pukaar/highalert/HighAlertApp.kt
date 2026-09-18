@@ -1,7 +1,6 @@
 package com.pukaar.highalert
 
 import android.app.Application
-import kotlinx.coroutines.launch
 
 class HighAlertApp : Application() {
     lateinit var session: AlertSession
@@ -11,16 +10,9 @@ class HighAlertApp : Application() {
         super.onCreate()
         instance = this
         session = AlertSession(this)
-        // Re-arm OEM survival paths after process death
-        runCatching {
-            kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-                if (!session.token().isNullOrBlank()) {
-                    MonitorWatchdogReceiver.schedule(this@HighAlertApp)
-                    MonitorKeepAliveWorker.enqueue(this@HighAlertApp)
-                    AlertMonitorService.start(this@HighAlertApp)
-                }
-            }
-        }
+        // Do NOT start foreground services here — Android 12+ kills the process with
+        // ForegroundServiceStartNotAllowedException when the app is not in the foreground.
+        // Monitoring is armed from MainActivity after login.
     }
 
     companion object {

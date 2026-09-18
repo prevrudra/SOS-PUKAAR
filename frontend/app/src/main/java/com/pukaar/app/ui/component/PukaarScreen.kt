@@ -1,5 +1,7 @@
 package com.pukaar.app.ui.component
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -40,6 +42,7 @@ fun PukaarScreen(
     title: String?,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    scrollable: Boolean = false,
     bottomBar: @Composable (() -> Unit)? = null,
     content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit
 ) {
@@ -70,7 +73,9 @@ fun PukaarScreen(
         }
 
         Column(
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .then(if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier),
             verticalArrangement = Arrangement.spacedBy(10.dp),
             content = content
         )

@@ -117,6 +117,9 @@ interface PukaarApi {
     @POST("api/v1/elderly/heartbeat")
     suspend fun heartbeat(@Body body: OkResponse = OkResponse()): OkResponse
 
+    @POST("api/v1/elderly/inactivity/acknowledge")
+    suspend fun acknowledgeInactivity(@Body body: OkResponse = OkResponse()): OkResponse
+
     @POST("api/v1/emergencies/mock-drills/latest/complete")
     suspend fun completeLatestDrill(@Body body: DrillCompleteRequest): DrillCompleteResponse
 }

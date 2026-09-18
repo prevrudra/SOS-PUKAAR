@@ -55,6 +55,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
@@ -225,34 +226,40 @@ private fun AlertBanner(alert: SosAlert) {
             .fillMaxWidth()
             .clip(CardShape)
             .background(AlertBannerPink)
-            .padding(start = 9.dp, end = 8.dp, top = 6.dp, bottom = 7.dp)
+            .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {
-        Row(verticalAlignment = Alignment.Top) {
-            AlertBellIcon(
-                modifier = Modifier
-                    .padding(top = 3.dp)
-                    .size(width = 78.dp, height = 46.dp)
-            )
-            Spacer(Modifier.width(13.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AlertBellIcon(modifier = Modifier.size(width = 42.dp, height = 36.dp))
+            Spacer(Modifier.width(10.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.Top) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        FitText(text = "PUKAAR ALERT", style = BannerTitle)
-                        FitText(text = "${alert.dateLabel}  |  ${alert.timeLabel}", style = BannerDate)
-                    }
-                    Spacer(Modifier.width(6.dp))
-                    SosBadge(label = alert.type.label, modifier = Modifier.padding(top = 3.dp))
-                }
-                FitText(text = alert.headline, style = BannerHeadline)
+                Text(text = "PUKAAR ALERT", style = BannerTitle, maxLines = 1)
+                Text(
+                    text = "${alert.dateLabel}  |  ${alert.timeLabel}",
+                    style = BannerDate,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
+            Spacer(Modifier.width(8.dp))
+            SosBadge(label = alert.type.label)
         }
-        FitText(
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = alert.headline,
+            style = BannerHeadline,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.fillMaxWidth()
+        )
+        Spacer(Modifier.height(4.dp))
+        Text(
             text = alert.message,
             style = BannerMessage,
-            textAlign = TextAlign.Center,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 3.dp)
+            textAlign = TextAlign.Start,
+            modifier = Modifier.fillMaxWidth()
         )
     }
 }
@@ -274,29 +281,54 @@ private fun SosBadge(label: String, modifier: Modifier = Modifier) {
 
 @Composable
 private fun SenderCard(alert: SosAlert, onCall: () -> Unit) {
+    val nameDigits = alert.senderName.filter { it.isDigit() }
+    val phoneDigits = alert.senderPhone.filter { it.isDigit() }
+    val nameLooksLikePhone = nameDigits.length >= 8 &&
+        (phoneDigits.isEmpty() || phoneDigits.takeLast(8) == nameDigits.takeLast(8))
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clip(CardShape)
             .background(AlertSenderSurface)
-            .padding(start = 7.dp, end = 8.dp, top = 3.dp, bottom = 3.dp),
+            .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Avatar(name = alert.senderName, photoRes = alert.senderPhotoRes, size = 57.dp)
-        Spacer(Modifier.width(14.dp))
+        Avatar(name = alert.senderName, photoRes = alert.senderPhotoRes, size = 48.dp)
+        Spacer(Modifier.width(10.dp))
         Column(modifier = Modifier.weight(1f)) {
-            FitText(text = alert.senderName, style = SenderName)
-            FitText(text = alert.senderPhone, style = SenderPhone)
-            FitText(text = alert.senderSubtitle, style = SenderSubtitle)
+            Text(
+                text = alert.senderName,
+                style = SenderName,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis
+            )
+            if (alert.senderPhone.isNotBlank() && !nameLooksLikePhone) {
+                Text(
+                    text = alert.senderPhone,
+                    style = SenderPhone,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Text(
+                text = alert.senderSubtitle,
+                style = SenderSubtitle,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
-        Spacer(Modifier.width(6.dp))
+        Spacer(Modifier.width(8.dp))
+        // Keep label short — embedding a phone number here crushed the name column.
         CallButton(
-            label = "Call ${alert.senderName}",
+            label = "Call",
             onClick = onCall,
             labelStyle = SenderCallLabel,
-            height = 32.dp,
-            iconSize = 19.dp,
-            iconGap = 10.dp,
+            height = 36.dp,
+            iconSize = 18.dp,
+            iconGap = 6.dp,
             horizontalPadding = 14.dp
         )
     }
@@ -458,14 +490,30 @@ private fun ContactColumns(
                             Text(
                                 text = buildAnnotatedString {
                                     append(contact.name)
-                                    withStyle(SpanStyle(fontWeight = FontWeight.Normal, color = AlertInkSoft)) {
-                                        append(" (${contact.relation})")
+                                    if (contact.relation.isNotBlank()) {
+                                        withStyle(SpanStyle(fontWeight = FontWeight.Normal, color = AlertInkSoft)) {
+                                            append(" (${contact.relation})")
+                                        }
                                     }
                                 },
-                                style = ContactName.scaled(scale)
+                                style = ContactName.scaled(scale),
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
                             )
-                            Text(text = contact.phone, style = ContactDetail.scaled(scale))
-                            Text(text = contact.place, style = ContactDetail.scaled(scale))
+                            Text(
+                                text = contact.phone,
+                                style = ContactDetail.scaled(scale),
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = contact.place,
+                                style = ContactDetail.scaled(scale),
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
                     }
                     Spacer(Modifier.weight(1f))
@@ -535,7 +583,11 @@ private fun LocationCard(senderName: String, location: AlertLocation, onOpenMap:
             LocationPin(modifier = Modifier.size(32.dp), color = AlertServiceRed)
             Spacer(Modifier.width(9.dp))
             BoxWithConstraints(modifier = Modifier.weight(1f)) {
-                val title = "$senderName's Location"
+                val title = if (looksLikePhoneUi(senderName)) {
+                    "Location"
+                } else {
+                    "$senderName's Location"
+                }
                 val scale = rememberFitScale(
                     listOf(FitLine(title, LocationTitle)) +
                         location.addressLines.map { FitLine(it, LocationAddress) },
@@ -859,7 +911,7 @@ private fun Avatar(name: String, @DrawableRes photoRes: Int?, size: Dp) {
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = name.take(1).uppercase(),
+                text = avatarInitial(name),
                 fontSize = (size.value * 0.42f).sp,
                 fontWeight = FontWeight.Bold,
                 color = PukaarRed
@@ -931,9 +983,24 @@ private fun FitText(
             text = text,
             style = style.scaled(scale),
             textAlign = textAlign,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis,
             modifier = if (textAlign != null) Modifier.fillMaxWidth() else Modifier
         )
     }
+}
+
+/** Prefer a letter/digit over "+" so phone-as-name avatars don't show a plus sign. */
+
+private fun looksLikePhoneUi(value: String): Boolean {
+    val digits = value.filter { it.isDigit() }
+    return digits.length >= 8 && value.count { it.isLetter() } <= 1
+}
+
+private fun avatarInitial(name: String): String {
+    val ch = name.firstOrNull { it.isLetterOrDigit() } ?: return "?"
+    return ch.uppercaseChar().toString()
 }
 
 private data class FitLine(val text: AnnotatedString, val style: TextStyle) {
@@ -969,7 +1036,7 @@ private fun rememberFitScale(
 private fun TextStyle.scaled(scale: Float): TextStyle =
     if (scale == 1f) this else copy(fontSize = fontSize * scale, lineHeight = lineHeight * scale)
 
-private const val MinTextScale = 0.8f
+private const val MinTextScale = 0.62f
 private const val SmallCallWidthFraction = 0.67f
 
 private val CardShape = RoundedCornerShape(8.dp)
@@ -985,19 +1052,19 @@ private val ServiceGlyphGap = 6.dp
 private val HeaderTitle = TextStyle(fontSize = 18.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold, color = AlertInk)
 
 private val BannerTitle = TextStyle(
-    fontSize = 21.sp,
-    lineHeight = 24.sp,
+    fontSize = 18.sp,
+    lineHeight = 22.sp,
     fontWeight = FontWeight.SemiBold,
     letterSpacing = 0.3.sp,
     color = AlertTitleRed
 )
 private val BannerDate = TextStyle(fontSize = 12.sp, lineHeight = 15.sp, color = AlertGrey)
-private val BannerHeadline = TextStyle(fontSize = 22.sp, lineHeight = 26.sp, fontWeight = FontWeight.SemiBold, color = AlertHeadlineRed)
-private val BannerMessage = TextStyle(fontSize = 11.5.sp, lineHeight = 14.sp, color = AlertInk)
-private val SosLabel = TextStyle(fontSize = 16.sp, lineHeight = 19.sp, fontWeight = FontWeight.Medium, color = SurfaceWhite)
+private val BannerHeadline = TextStyle(fontSize = 20.sp, lineHeight = 24.sp, fontWeight = FontWeight.SemiBold, color = AlertHeadlineRed)
+private val BannerMessage = TextStyle(fontSize = 12.sp, lineHeight = 16.sp, color = AlertInk)
+private val SosLabel = TextStyle(fontSize = 14.sp, lineHeight = 17.sp, fontWeight = FontWeight.Medium, color = SurfaceWhite)
 
-private val SenderName = TextStyle(fontSize = 20.sp, lineHeight = 23.sp, fontWeight = FontWeight.Medium, color = AlertInk)
-private val SenderPhone = TextStyle(fontSize = 17.sp, lineHeight = 20.sp, color = AlertGrey)
+private val SenderName = TextStyle(fontSize = 17.sp, lineHeight = 21.sp, fontWeight = FontWeight.Medium, color = AlertInk)
+private val SenderPhone = TextStyle(fontSize = 14.sp, lineHeight = 18.sp, color = AlertGrey)
 private val SenderSubtitle = TextStyle(fontSize = 12.sp, lineHeight = 15.sp, color = AlertGrey)
 private val SenderCallLabel = TextStyle(fontSize = 15.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium, color = SurfaceWhite)
 

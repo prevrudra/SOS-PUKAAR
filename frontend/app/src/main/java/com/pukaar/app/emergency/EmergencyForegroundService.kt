@@ -46,8 +46,29 @@ class EmergencyForegroundService : Service() {
             return START_NOT_STICKY
         }
         eventId = intent?.getStringExtra(EXTRA_EVENT_ID)
-        val isSos = intent?.getBooleanExtra(EXTRA_IS_SOS, true) != false
-        val recordAudio = intent?.getBooleanExtra(EXTRA_RECORD_AUDIO, isSos) == true
+            ?: EmergencySessionStore.activeEventId(this)
+        val isSos = intent?.getBooleanExtra(EXTRA_IS_SOS, true)
+            ?: EmergencySessionStore.isSos(this)
+        val recordAudio = if (intent?.hasExtra(EXTRA_RECORD_AUDIO) == true) {
+            intent.getBooleanExtra(EXTRA_RECORD_AUDIO, isSos)
+        } else {
+            EmergencySessionStore.recordAudio(this)
+        }
+        if (eventId.isNullOrBlank()) {
+            android.util.Log.e("PUKAAR", "Emergency FGS started with no eventId — stopping")
+            stopSelfSafe()
+            return START_NOT_STICKY
+        }
+        EmergencySessionStore.save(
+            this,
+            eventId = eventId!!,
+            isSos = isSos,
+            mockDrill = EmergencySessionStore.isMock(this),
+            serverSynced = !eventId!!.startsWith("local-"),
+            latitude = EmergencySessionStore.latitude(this),
+            longitude = EmergencySessionStore.longitude(this),
+            recordAudio = recordAudio
+        )
         return try {
             startAsForeground(isSos, recordAudio)
             acquireWakeLock()
@@ -232,6 +253,7 @@ class EmergencyForegroundService : Service() {
         scope.cancel()
         audio?.release()
         wakeLock?.let { if (it.isHeld) it.release() }
+        EmergencySessionStore.clear(this)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }

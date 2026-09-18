@@ -4,7 +4,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
-import com.pukaar.app.PukaarApp
 
 /**
  * Approximate hardware trigger using screen on/off cadence.
@@ -24,12 +23,8 @@ class PowerButtonTriggerReceiver : BroadcastReceiver() {
             lastEventMs = now
             if (pressCount >= 5) {
                 pressCount = 0
-                Log.w("PUKAAR", "Hardware-like trigger detected via $action — launching SOS activity")
-                val launch = Intent(context, Class.forName("com.pukaar.app.MainActivity")).apply {
-                    setAction(PukaarApp.ACTION_SOS)
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                }
-                context.startActivity(launch)
+                Log.w("PUKAAR", "Hardware-like trigger via $action — headless SOS")
+                VolumeTriggerController.fireHeadlessSos(context)
             }
         }
     }

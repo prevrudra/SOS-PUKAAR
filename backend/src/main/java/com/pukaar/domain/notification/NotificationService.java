@@ -1,5 +1,6 @@
 package com.pukaar.domain.notification;
 
+import com.pukaar.common.InactivityLevel;
 import com.pukaar.domain.alert.AlertDeliveryService;
 import com.pukaar.domain.alert.DeliveryStatusService;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +20,11 @@ public class NotificationService {
     @Async
     public void enqueueEmergencyAlert(UUID userId, UUID eventId, UUID deliveryId) {
         alertDeliveryService.deliverEmergencyAlert(userId, eventId, deliveryId);
+    }
+
+    @Async
+    public void enqueueInactivityAlert(UUID userId, UUID eventId, UUID deliveryId, InactivityLevel level) {
+        alertDeliveryService.deliverInactivityAlert(userId, eventId, deliveryId, level);
     }
 
     @Async

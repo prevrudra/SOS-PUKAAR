@@ -106,7 +106,9 @@ pukaar:
   notification:
     retry-max: 5
     retry-backoff-ms: 2000
-    sms-fallback-enabled: ${SMS_FALLBACK:false}
+    retry-scan-ms: 15000
+    sms-escalate-ms: 15000
+    sms-fallback-enabled: ${SMS_FALLBACK:true}
   razorpay:
     key-id: ${RAZORPAY_KEY_ID:}
     key-secret: ${RAZORPAY_KEY_SECRET:}
@@ -132,6 +134,8 @@ pukaar:
       otp-template: ${YOURBULKSMS_OTP_TEMPLATE:Dear user , Your OTP is {#var#}. Use this to verify your Axispoint account within 10 minutes. For your security, do not share this code with anyone.}
     fcm:
       server-key: ${FCM_SERVER_KEY:}
+      service-account-path: ${FCM_SERVICE_ACCOUNT:}
+      project-id: ${FCM_PROJECT_ID:sos-pukar-c74d9}
 
 logging:
   level:

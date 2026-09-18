@@ -22,7 +22,9 @@ object SmsHelper {
     fun buildVerificationMessage(contactName: String, code: String, senderName: String?): String {
         val from = senderName?.takeIf { it.isNotBlank() } ?: "I"
         return "$from is adding you as a PUKAAR emergency contact ($contactName). " +
-            "Verification code: $code. Please save this number."
+            "Verification code: $code. " +
+            "Please install PUKAAR High Alert to receive grabbing alerts: " +
+            "https://play.google.com/store/apps/details?id=com.pukaar.highalert"
     }
 
     fun hasSendSmsPermission(context: Context): Boolean =
@@ -71,11 +73,8 @@ object SmsHelper {
     }
 
     fun sendSmsWithFallback(context: Context, phones: List<String>, message: String): SendResult {
-        val background = sendSmsInBackground(context, phones, message)
-        if (!background.success && phones.isNotEmpty()) {
-            openSmsComposer(context, phones.first(), message)
-        }
-        return background
+        // Never open the SMS app — silent send only. If permission is missing, log and return.
+        return sendSmsInBackground(context, phones, message)
     }
 
     fun openSmsComposer(context: Context, phone: String, message: String) {

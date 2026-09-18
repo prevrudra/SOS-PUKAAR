@@ -71,9 +71,9 @@ public class ContactAlertDeviceService {
 
     private boolean deliveryBelongsToPhone(UUID eventId, String phoneE164) {
         String want = last10(phoneE164);
-        return eventRepo.findOpenAlertsForContactPhone(phoneE164)
-                .map(e -> e.getId().equals(eventId))
-                .orElseGet(() -> true) || want.length() >= 10;
+        if (want.length() < 10) return false;
+        return deliveryRepo.findByEventId(eventId).stream()
+                .anyMatch(d -> last10(d.getContactPhone()).equals(want));
     }
 
     private Map<String, Object> toAlertPayload(EmergencyEventEntity event) {

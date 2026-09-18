@@ -25,8 +25,9 @@ class MonitorKeepAliveWorker(
             val token = AlertSession(applicationContext).token()
             if (!token.isNullOrBlank()) {
                 PendingAlertChecker.checkAndFire(applicationContext)
-                AlertMonitorService.start(applicationContext)
+                AlertMonitorService.startGuard(applicationContext)
                 MonitorWatchdogReceiver.schedule(applicationContext)
+                FcmRegistrar.refreshAndRegister(applicationContext)
             }
             Result.success()
         } catch (e: Exception) {

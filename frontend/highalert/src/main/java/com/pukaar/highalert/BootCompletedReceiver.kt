@@ -16,8 +16,7 @@ class BootCompletedReceiver : BroadcastReceiver() {
         ) return
         val token = runBlocking { AlertSession(context).token() }
         if (!token.isNullOrBlank()) {
-            AlertMonitorService.start(context)
-            MonitorWatchdogReceiver.schedule(context)
+            AlertReliabilityEngine.armAll(context, allowForegroundService = false)
         }
     }
 }

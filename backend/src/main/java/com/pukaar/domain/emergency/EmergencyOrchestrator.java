@@ -67,10 +67,11 @@ public class EmergencyOrchestrator {
                         "mockDrill", mockDrill
                 ));
             } else {
-                // Resume existing emergency instead of failing with HTTP 400
+                // Resume existing emergency — re-fire any undelivered alerts
                 if (lat != null && lng != null) {
                     applyLocation(active, lat, lng, accuracy);
                 }
+                reNotifyFailedDeliveries(active);
                 Map<String, Object> dto = toEventDto(active, true);
                 dto.put("resumed", true);
                 return dto;
@@ -98,7 +99,7 @@ public class EmergencyOrchestrator {
         event = eventRepo.save(event);
         audit(event.getId(), userId, "CONTACTS_NOTIFIED", Map.of());
 
-        if (!mockDrill && triggerType != TriggerType.HELP) {
+        if (!mockDrill && triggerType != TriggerType.HELP && triggerType != TriggerType.INACTIVITY) {
             event.setStatus(EmergencyStatus.AUDIO_RECORDING_ACTIVE);
             event.setCall112Status(Call112Status.INITIATED);
             event.setStatus(EmergencyStatus.WAITING_SAFE);
@@ -400,7 +401,125 @@ public class EmergencyOrchestrator {
         audit(event.getId(), event.getUserId(), "LOCATION_UPDATED", Map.of("lat", lat, "lng", lng));
     }
 
+    /**
+     * Delivers an inactivity alert to one trusted contact (by priority order).
+     * Reuses the emergency delivery pipeline with {@link TriggerType#INACTIVITY}.
+     */
+    @Transactional
+    public UUID deliverInactivityContactAlert(
+            UUID userId,
+            UUID existingEventId,
+            int priorityOrder,
+            InactivityLevel level
+    ) {
+        List<ContactRole> roles = List.of(ContactRole.HELP_BACKUP);
+        List<TrustedContactEntity> atPriority = contactRepo
+                .findByOwnerUserIdAndContactRoleInAndActiveTrue(userId, roles)
+                .stream()
+                .filter(c -> c.getPriorityOrder() == priorityOrder)
+                .toList();
+        if (atPriority.isEmpty()) {
+            atPriority = contactRepo.findByOwnerUserIdAndActiveTrueOrderByPriorityOrderAsc(userId)
+                    .stream()
+                    .filter(c -> c.getContactRole() == ContactRole.HELP_BACKUP)
+                    .filter(c -> c.getPriorityOrder() == priorityOrder)
+                    .toList();
+        }
+        if (atPriority.isEmpty()) {
+            return existingEventId;
+        }
+        TrustedContactEntity contact = atPriority.stream()
+                .filter(TrustedContactEntity::isVerified)
+                .findFirst()
+                .orElse(atPriority.get(0));
+
+        EmergencyEventEntity event = null;
+        if (existingEventId != null) {
+            event = eventRepo.findById(existingEventId).orElse(null);
+        }
+        if (event == null) {
+            event = EmergencyEventEntity.builder()
+                    .userId(userId)
+                    .triggerType(TriggerType.INACTIVITY)
+                    .status(EmergencyStatus.TRIGGERED)
+                    .mockDrill(false)
+                    .build();
+            event = eventRepo.save(event);
+            audit(event.getId(), userId, "INACTIVITY_TRIGGERED", Map.of("level", level.name()));
+            event.setStatus(EmergencyStatus.WAITING_SAFE);
+            event = eventRepo.save(event);
+        }
+
+        UUID contactId = contact.getId();
+        boolean already = deliveryRepo.findByEventId(event.getId()).stream()
+                .anyMatch(d -> contactId.equals(d.getContactId()));
+        if (already) {
+            return event.getId();
+        }
+
+        ContactDeliveryEntity delivery = ContactDeliveryEntity.builder()
+                .eventId(event.getId())
+                .contactId(contact.getId())
+                .contactName(contact.getName())
+                .contactPhone(contact.getPhoneE164())
+                .status(DeliveryStatus.PENDING)
+                .build();
+        delivery = deliveryRepo.save(delivery);
+
+        UUID finalEventId = event.getId();
+        UUID deliveryId = delivery.getId();
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    notificationService.enqueueInactivityAlert(userId, finalEventId, deliveryId, level);
+                }
+            });
+        } else {
+            notificationService.enqueueInactivityAlert(userId, finalEventId, deliveryId, level);
+        }
+        return event.getId();
+    }
+
+    /** Re-queue FAILED/PENDING deliveries when user re-triggers while SOS is still open. */
+    private void reNotifyFailedDeliveries(EmergencyEventEntity event) {
+        List<ContactDeliveryEntity> deliveries = deliveryRepo.findByEventId(event.getId());
+        int requeued = 0;
+        for (ContactDeliveryEntity d : deliveries) {
+            if (d.getStatus() == DeliveryStatus.FAILED
+                    || d.getStatus() == DeliveryStatus.PENDING
+                    || d.getStatus() == DeliveryStatus.UNKNOWN) {
+                d.setStatus(DeliveryStatus.PENDING);
+                d.setLastError(null);
+                deliveryRepo.save(d);
+                UUID userId = event.getUserId();
+                UUID eventId = event.getId();
+                UUID deliveryId = d.getId();
+                if (TransactionSynchronizationManager.isSynchronizationActive()) {
+                    TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() {
+                            notificationService.enqueueEmergencyAlert(userId, eventId, deliveryId);
+                        }
+                    });
+                } else {
+                    notificationService.enqueueEmergencyAlert(userId, eventId, deliveryId);
+                }
+                requeued++;
+            }
+        }
+        if (requeued > 0) {
+            audit(event.getId(), event.getUserId(), "RESUME_RENNOTIFY", Map.of("requeued", requeued));
+        } else if (deliveries.isEmpty()) {
+            userRepo.findById(event.getUserId()).ifPresent(u -> notifyContacts(u, event));
+        }
+    }
+
     private void notifyContacts(UserEntity user, EmergencyEventEntity event) {
+        // SOS → SOS_TRUSTED only. HELP_MONITOR / help numbers are listed on the
+        // alert for coordination; they do not receive the High Alert tone.
+        // HELP trigger → HELP_MONITOR + HELP_BACKUP.
+        // INACTIVITY uses deliverInactivityContactAlert() instead of this path.
         List<ContactRole> roles = event.getTriggerType() == TriggerType.HELP
                 ? List.of(ContactRole.HELP_MONITOR, ContactRole.HELP_BACKUP)
                 : List.of(ContactRole.SOS_TRUSTED);
@@ -409,14 +528,31 @@ public class EmergencyOrchestrator {
                 .stream()
                 .filter(TrustedContactEntity::isVerified)
                 .toList();
-        // No fallback to every contact — SMS alert restrictions: only verified matching roles
+        // Older contacts may never have been marked verified — still alert them
+        // rather than silently dropping the SOS.
+        if (contacts.isEmpty()) {
+            contacts = contactRepo
+                    .findByOwnerUserIdAndContactRoleInAndActiveTrue(user.getId(), roles);
+            if (!contacts.isEmpty()) {
+                audit(event.getId(), user.getId(), "ALERT_FALLBACK_UNVERIFIED_CONTACTS", Map.of(
+                        "count", contacts.size(),
+                        "trigger", event.getTriggerType().name()
+                ));
+            }
+        }
         if (contacts.isEmpty()) {
             audit(event.getId(), user.getId(), "NO_VERIFIED_CONTACTS_FOR_ALERT", Map.of(
                     "trigger", event.getTriggerType().name()
             ));
             return;
         }
+        // One delivery per unique phone — duplicate contacts must not fan out alerts.
+        java.util.Set<String> phonesSeen = new java.util.LinkedHashSet<>();
         for (TrustedContactEntity c : contacts) {
+            String phoneKey = com.pukaar.common.PhoneNumbers.digitsOnly(c.getPhoneE164());
+            if (!phonesSeen.add(phoneKey)) {
+                continue;
+            }
             ContactDeliveryEntity delivery = ContactDeliveryEntity.builder()
                     .eventId(event.getId())
                     .contactId(c.getId())

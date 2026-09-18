@@ -7,7 +7,6 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.PowerManager
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -50,7 +49,15 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import com.pukaar.highalert.ui.HomeScreen
+import com.pukaar.highalert.ui.theme.PukaarAlertTheme
+import com.pukaar.highalert.ui.theme.PukaarRed
+import com.pukaar.highalert.ui.theme.SurfaceWhite
+import com.pukaar.highalert.ui.theme.TextMuted
+import com.pukaar.highalert.ui.theme.TextPrimary
+import com.pukaar.highalert.ui.theme.TextSecondary
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 
 class MainActivity : ComponentActivity() {
     private val notifPermission = registerForActivityResult(
@@ -70,172 +77,167 @@ class MainActivity : ComponentActivity() {
             val phoneE164 = remember(phoneDigits) { toE164(phoneDigits) }
 
             LaunchedEffect(Unit) {
-                if (!HighAlertApp.instance.session.token().isNullOrBlank()) {
-                    activePhone = HighAlertApp.instance.session.phone().orEmpty()
-                    step = Step.Active
-                    // Only start monitor — do NOT open settings screens (causes Motorola crash loops)
-                    ensureMonitoring()
+                runCatching {
+                    val session = (application as HighAlertApp).session
+                    if (!session.token().isNullOrBlank()) {
+                        activePhone = session.phone().orEmpty()
+                        step = Step.Active
+                        ensureMonitoring()
+                    }
+                }.onFailure {
+                    android.util.Log.e("HighAlert", "Startup session read failed: ${it.message}", it)
                 }
             }
 
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .background(Color.Black)
-                    .statusBarsPadding()
-                    .navigationBarsPadding()
-                    .imePadding()
-                    .padding(24.dp)
-            ) {
-                Column(Modifier.fillMaxWidth()) {
-                    Text("PUKAAR", color = Color(0xFFEF4444), fontSize = 36.sp, fontWeight = FontWeight.Black)
-                    Text("High Alert", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        when (step) {
-                            Step.Phone -> "Sign in with your phone to receive loud SOS alerts from people who trust you."
-                            Step.Otp -> "Enter the 6-digit code we sent by SMS."
-                            Step.Active -> "Monitoring is on. You will get a full-screen alert with map, call, police and hospital."
-                        },
-                        color = Color(0xFF9CA3AF),
-                        fontSize = 14.sp,
-                        lineHeight = 20.sp
-                    )
-                    Spacer(Modifier.height(28.dp))
-
-                    when (step) {
-                        Step.Phone -> {
-                            FieldLabel("Phone number")
-                            SimpleBoxField(
-                                value = phoneDigits,
-                                onValueChange = {
-                                    phoneDigits = it.filter(Char::isDigit).take(10)
-                                    error = null
-                                },
-                                placeholder = "10-digit mobile",
-                                keyboardType = KeyboardType.Phone,
-                                prefix = "+91"
-                            )
-                            error?.let { Err(it) }
-                            Spacer(Modifier.height(20.dp))
-                            PrimaryButton(
-                                text = if (loading) "Sending…" else "Continue",
-                                enabled = phoneDigits.length == 10 && !loading
-                            ) {
-                                scope.launch {
-                                    loading = true
-                                    error = null
-                                    try {
-                                        AlertNetwork.api { null }.requestOtp(OtpRequest(phoneE164))
-                                        otp = ""
-                                        step = Step.Otp
-                                    } catch (e: Exception) {
-                                        error = friendlyError(e)
-                                    } finally {
-                                        loading = false
-                                    }
-                                }
-                            }
-                            Spacer(Modifier.height(12.dp))
-                            Text(
-                                "One SMS code confirms this phone is yours so alerts go to the right person.",
-                                color = Color(0xFF6B7280),
-                                fontSize = 12.sp,
-                                lineHeight = 17.sp
-                            )
-                        }
-
-                        Step.Otp -> {
-                            FieldLabel("OTP code")
-                            SimpleBoxField(
-                                value = otp,
-                                onValueChange = {
-                                    otp = it.filter(Char::isDigit).take(6)
-                                    error = null
-                                },
-                                placeholder = "6 digits",
-                                keyboardType = KeyboardType.NumberPassword
-                            )
-                            error?.let { Err(it) }
-                            Spacer(Modifier.height(20.dp))
-                            PrimaryButton(
-                                text = if (loading) "Starting…" else "Start alerts",
-                                enabled = otp.length == 6 && !loading
-                            ) {
-                                scope.launch {
-                                    loading = true
-                                    error = null
-                                    try {
-                                        val api = AlertNetwork.api { null }
-                                        val resp = api.verifyOtp(OtpVerifyRequest(phoneE164, otp))
-                                        val token = resp.accessToken ?: error("Could not sign in")
-                                        HighAlertApp.instance.session.save(token, phoneE164)
-                                        AlertNetwork.api { token }.registerDevice(
-                                            RegisterDeviceRequest(
-                                                phone = phoneE164,
-                                                deviceId = "ha-${System.currentTimeMillis()}"
-                                            )
-                                        )
-                                        activePhone = phoneE164
-                                        ensureMonitoring()
-                                        step = Step.Active
-                                    } catch (e: Exception) {
-                                        error = friendlyError(e)
-                                    } finally {
-                                        loading = false
-                                    }
-                                }
-                            }
-                            TextButton(onClick = {
-                                step = Step.Phone
-                                otp = ""
-                                error = null
-                            }) {
-                                Text("Change number", color = Color(0xFF9CA3AF))
-                            }
-                        }
-
-                        Step.Active -> {
-                            Box(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .background(Color(0xFF052E16), RoundedCornerShape(14.dp))
-                                    .border(1.dp, Color(0xFF166534), RoundedCornerShape(14.dp))
-                                    .padding(16.dp)
-                            ) {
-                                Column {
-                                    Text("Monitoring ON", color = Color(0xFF22C55E), fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                                    Spacer(Modifier.height(6.dp))
-                                    Text(
-                                        activePhone.ifBlank { "This phone is ready" },
-                                        color = Color.White,
-                                        fontSize = 14.sp
-                                    )
-                                }
-                            }
-                                    Text(
-                                        "Keep the green “Watching…” notification on. On Motorola/Xiaomi tap Fix alert permissions and set battery to Unrestricted / allow auto-start.",
-                                        color = Color(0xFF9CA3AF),
-                                        fontSize = 13.sp,
-                                        lineHeight = 18.sp
-                                    )
-                                    Spacer(Modifier.height(16.dp))
-                                    PrimaryButton("Fix alert permissions") { enableGrabbing() }
-                            Spacer(Modifier.height(8.dp))
-                            PrimaryButton("View sample alert UI") {
+            PukaarAlertTheme {
+                when (step) {
+                    Step.Active -> {
+                        HomeScreen(
+                            onOpenSampleAlert = {
                                 startActivity(Intent(this@MainActivity, SamplePreviewActivity::class.java))
-                            }
-                            Spacer(Modifier.height(8.dp))
-                            TextButton(onClick = {
+                            },
+                            monitoringPhone = activePhone.ifBlank { "Ready" },
+                            onFixPermissions = { enableGrabbing() },
+                            onSignOut = {
                                 scope.launch {
-                                    HighAlertApp.instance.session.clear()
-                                    AlertMonitorService.stop(this@MainActivity)
+                                    (application as HighAlertApp).session.clear()
+                                    AlertReliabilityEngine.disarm(this@MainActivity)
                                     step = Step.Phone
                                     phoneDigits = ""
                                     otp = ""
+                                    activePhone = ""
                                 }
-                            }) {
-                                Text("Sign out", color = Color(0xFF9CA3AF))
+                            },
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .statusBarsPadding()
+                                .navigationBarsPadding()
+                        )
+                    }
+
+                    else -> {
+                        Box(
+                            Modifier
+                                .fillMaxSize()
+                                .background(SurfaceWhite)
+                                .statusBarsPadding()
+                                .navigationBarsPadding()
+                                .imePadding()
+                                .padding(24.dp)
+                        ) {
+                            Column(Modifier.fillMaxWidth()) {
+                                Text("PUKAAR", color = PukaarRed, fontSize = 36.sp, fontWeight = FontWeight.Black)
+                                Text("ALERT", color = TextPrimary, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    when (step) {
+                                        Step.Phone -> "Sign in with your phone to receive loud SOS alerts from people who trust you."
+                                        Step.Otp -> "Enter the 6-digit code we sent by SMS."
+                                        Step.Active -> ""
+                                    },
+                                    color = TextSecondary,
+                                    fontSize = 14.sp,
+                                    lineHeight = 20.sp
+                                )
+                                Spacer(Modifier.height(28.dp))
+
+                                when (step) {
+                                    Step.Phone -> {
+                                        FieldLabel("Phone number")
+                                        SimpleBoxField(
+                                            value = phoneDigits,
+                                            onValueChange = {
+                                                phoneDigits = it.filter(Char::isDigit).take(10)
+                                                error = null
+                                            },
+                                            placeholder = "10-digit mobile",
+                                            keyboardType = KeyboardType.Phone,
+                                            prefix = "+91"
+                                        )
+                                        error?.let { Err(it) }
+                                        Spacer(Modifier.height(20.dp))
+                                        PrimaryButton(
+                                            text = if (loading) "Sending…" else "Continue",
+                                            enabled = phoneDigits.length == 10 && !loading
+                                        ) {
+                                            scope.launch {
+                                                loading = true
+                                                error = null
+                                                try {
+                                                    AlertNetwork.api { null }.requestOtp(OtpRequest(phoneE164))
+                                                    otp = ""
+                                                    step = Step.Otp
+                                                } catch (e: Exception) {
+                                                    error = friendlyError(e)
+                                                } finally {
+                                                    loading = false
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    Step.Otp -> {
+                                        FieldLabel("OTP code")
+                                        SimpleBoxField(
+                                            value = otp,
+                                            onValueChange = {
+                                                otp = it.filter(Char::isDigit).take(6)
+                                                error = null
+                                            },
+                                            placeholder = "6 digits",
+                                            keyboardType = KeyboardType.NumberPassword
+                                        )
+                                        error?.let { Err(it) }
+                                        Spacer(Modifier.height(20.dp))
+                                        PrimaryButton(
+                                            text = if (loading) "Starting…" else "Start alerts",
+                                            enabled = otp.length == 6 && !loading
+                                        ) {
+                                            scope.launch {
+                                                loading = true
+                                                error = null
+                                                try {
+                                                    val api = AlertNetwork.api { null }
+                                                    val resp = api.verifyOtp(OtpVerifyRequest(phoneE164, otp))
+                                                    val token = resp.accessToken ?: error("Could not sign in")
+                                                    (application as HighAlertApp).session.save(token, phoneE164)
+                                                    val fcmToken = if (FcmRegistrar.isAvailable()) {
+                                                        runCatching {
+                                                            com.google.firebase.messaging.FirebaseMessaging
+                                                                .getInstance().token.await()
+                                                        }.getOrNull()
+                                                    } else null
+                                                    AlertNetwork.api { token }.registerDevice(
+                                                        RegisterDeviceRequest(
+                                                            phone = phoneE164,
+                                                            fcmToken = fcmToken,
+                                                            deviceId = "ha-${System.currentTimeMillis()}"
+                                                        )
+                                                    )
+                                                    if (fcmToken != null) {
+                                                        FcmRegistrar.registerToken(this@MainActivity, fcmToken)
+                                                    }
+                                                    activePhone = phoneE164
+                                                    ensureMonitoring()
+                                                    step = Step.Active
+                                                } catch (e: Exception) {
+                                                    error = friendlyError(e)
+                                                } finally {
+                                                    loading = false
+                                                }
+                                            }
+                                        }
+                                        TextButton(onClick = {
+                                            step = Step.Phone
+                                            otp = ""
+                                            error = null
+                                        }) {
+                                            Text("Change number", color = TextMuted)
+                                        }
+                                    }
+
+                                    Step.Active -> Unit
+                                }
                             }
                         }
                     }
@@ -244,15 +246,14 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** Safe: start monitoring only — never opens Settings (avoids Motorola crash loops). */
     private fun ensureMonitoring() {
         runCatching {
-            AlertMonitorService.start(this)
-            MonitorWatchdogReceiver.schedule(this)
-            MonitorKeepAliveWorker.enqueue(this)
+            AlertReliabilityEngine.armAll(this, allowForegroundService = true)
         }.onFailure {
             android.util.Log.e("HighAlert", "ensureMonitoring failed: ${it.message}", it)
         }
+        // Only auto-ask notification permission — battery/fullscreen stay on "Fix permissions"
+        // so login feels like a normal alarm app, not a permission gauntlet.
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
             != PackageManager.PERMISSION_GRANTED
@@ -261,11 +262,14 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** User-tapped: request at most one settings screen so we don't crash-loop on resume. */
+    /**
+     * Critical for Oppo/Xiaomi/Vivo — without unrestricted battery, 60s alarms
+     * are deferred and High Alert never wakes for SOS.
+     */
     private fun enableGrabbing() {
         ensureMonitoring()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val pm = getSystemService(PowerManager::class.java)
+            val pm = getSystemService(android.os.PowerManager::class.java)
             if (pm != null && !pm.isIgnoringBatteryOptimizations(packageName)) {
                 runCatching {
                     startActivity(
@@ -306,7 +310,6 @@ class MainActivity : ComponentActivity() {
                 return
             }
         }
-        // Motorola / OEM: open app details so user can allow auto-start / unrestricted battery
         runCatching {
             startActivity(
                 Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
@@ -319,10 +322,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Soft re-assert only — never open Settings from here
         runCatching {
             kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
-                val token = HighAlertApp.instance.session.token()
+                val token = (application as HighAlertApp).session.token()
                 if (!token.isNullOrBlank()) {
                     ensureMonitoring()
                 }
@@ -357,7 +359,7 @@ private fun friendlyError(e: Exception): String {
 private fun FieldLabel(text: String) {
     Text(
         text.uppercase(),
-        color = Color(0xFF9CA3AF),
+        color = TextMuted,
         fontSize = 12.sp,
         fontWeight = FontWeight.SemiBold,
         modifier = Modifier.padding(bottom = 8.dp)
@@ -376,15 +378,15 @@ private fun SimpleBoxField(
         Modifier
             .fillMaxWidth()
             .height(56.dp)
-            .background(Color(0xFF111827), RoundedCornerShape(12.dp))
-            .border(1.dp, Color(0xFF374151), RoundedCornerShape(12.dp))
+            .background(Color(0xFFF3F4F6), RoundedCornerShape(12.dp))
+            .border(1.dp, Color(0xFFD1D5DB), RoundedCornerShape(12.dp))
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (prefix != null) {
-            Text(prefix, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Text(prefix, color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
             Spacer(Modifier.width(10.dp))
-            Box(Modifier.width(1.dp).height(22.dp).background(Color(0xFF4B5563)))
+            Box(Modifier.width(1.dp).height(22.dp).background(Color(0xFFD1D5DB)))
             Spacer(Modifier.width(10.dp))
         }
         BasicTextField(
@@ -392,12 +394,12 @@ private fun SimpleBoxField(
             onValueChange = onValueChange,
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-            cursorBrush = SolidColor(Color(0xFF22C55E)),
-            textStyle = TextStyle(color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
+            cursorBrush = SolidColor(PukaarRed),
+            textStyle = TextStyle(color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
             modifier = Modifier.fillMaxWidth(),
             decorationBox = { inner ->
                 if (value.isEmpty()) {
-                    Text(placeholder, color = Color(0xFF6B7280), fontSize = 16.sp)
+                    Text(placeholder, color = TextMuted, fontSize = 16.sp)
                 }
                 inner()
             }
@@ -413,8 +415,8 @@ private fun PrimaryButton(text: String, enabled: Boolean = true, onClick: () -> 
         modifier = Modifier.fillMaxWidth().height(56.dp),
         shape = RoundedCornerShape(14.dp),
         colors = ButtonDefaults.buttonColors(
-            containerColor = Color(0xFFDC2626),
-            disabledContainerColor = Color(0xFF7F1D1D)
+            containerColor = PukaarRed,
+            disabledContainerColor = Color(0xFFFECACA)
         )
     ) {
         Text(text, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
@@ -423,5 +425,5 @@ private fun PrimaryButton(text: String, enabled: Boolean = true, onClick: () -> 
 
 @Composable
 private fun Err(msg: String) {
-    Text(msg, color = Color(0xFFF87171), fontSize = 13.sp, modifier = Modifier.padding(top = 10.dp), lineHeight = 18.sp)
+    Text(msg, color = Color(0xFFDC2626), fontSize = 13.sp, modifier = Modifier.padding(top = 10.dp), lineHeight = 18.sp)
 }

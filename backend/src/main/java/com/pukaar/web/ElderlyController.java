@@ -3,6 +3,7 @@ package com.pukaar.web;
 import com.pukaar.common.ApiException;
 import com.pukaar.domain.elderly.ElderlySettingsEntity;
 import com.pukaar.domain.elderly.ElderlySettingsRepository;
+import com.pukaar.domain.elderly.InactivityService;
 import com.pukaar.domain.user.UserEntity;
 import com.pukaar.domain.user.UserRepository;
 import com.pukaar.security.SecurityUtils;
@@ -20,6 +21,7 @@ import java.util.Map;
 public class ElderlyController {
     private final ElderlySettingsRepository settingsRepo;
     private final UserRepository userRepo;
+    private final InactivityService inactivityService;
 
     @GetMapping("/settings")
     public Map<String, Object> get() {
@@ -50,7 +52,19 @@ public class ElderlyController {
                 .orElseThrow(() -> new ApiException("USER_NOT_FOUND", "User not found"));
         user.setLastActivityAt(Instant.now());
         userRepo.save(user);
+        inactivityService.onUserActivity(user.getId());
         return Map.of("lastActivityAt", user.getLastActivityAt());
+    }
+
+    /** User tapped "I'm OK" on the inactivity soft check-in notification. */
+    @PostMapping("/inactivity/acknowledge")
+    public Map<String, Object> acknowledgeInactivity() {
+        UserEntity user = userRepo.findById(SecurityUtils.currentUserId())
+                .orElseThrow(() -> new ApiException("USER_NOT_FOUND", "User not found"));
+        user.setLastActivityAt(Instant.now());
+        userRepo.save(user);
+        inactivityService.onUserActivity(user.getId());
+        return Map.of("ok", true, "lastActivityAt", user.getLastActivityAt());
     }
 
     private ElderlySettingsEntity settings() {

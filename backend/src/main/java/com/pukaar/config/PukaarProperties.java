@@ -121,6 +121,9 @@ public class PukaarProperties {
         @Data
         public static class Fcm {
             private String serverKey = "";
+            /** Path to Firebase Admin SDK JSON for HTTP v1 push. */
+            private String serviceAccountPath = "";
+            private String projectId = "sos-pukar-c74d9";
         }
     }
 }

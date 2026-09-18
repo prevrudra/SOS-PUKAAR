@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "162982026314",
+    "project_id": "sos-pukar-c74d9",
+    "storage_bucket": "sos-pukar-c74d9.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:162982026314:android:e29f92a4f4f72a588d5ab3",
+        "android_client_info": {
+          "package_name": "com.pukaar.highalert"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCRX-qynDG4TTDyDiocatVtsbjz-cEMAzs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:162982026314:android:91e32bac400ba3dd8d5ab3",
+        "android_client_info": {
+          "package_name": "com.pukaar.highalert.debug"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCRX-qynDG4TTDyDiocatVtsbjz-cEMAzs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

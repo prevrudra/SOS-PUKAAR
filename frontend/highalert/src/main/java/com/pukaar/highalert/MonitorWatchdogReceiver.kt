@@ -25,9 +25,9 @@ class MonitorWatchdogReceiver : BroadcastReceiver() {
             try {
                 val token = AlertSession(appCtx).token()
                 if (!token.isNullOrBlank()) {
-                    Log.i(TAG, "Watchdog tick — check pending + restart monitor")
+                    Log.i(TAG, "Watchdog tick — check pending")
                     PendingAlertChecker.checkAndFire(appCtx)
-                    AlertMonitorService.start(appCtx)
+                    // Do NOT start FGS from alarm receiver — Android 12+ crashes the app.
                 }
             } catch (t: Throwable) {
                 Log.w(TAG, "Watchdog failed: ${t.message}")
@@ -40,16 +40,32 @@ class MonitorWatchdogReceiver : BroadcastReceiver() {
 
     companion object {
         private const val TAG = "HighAlertWatchdog"
-        private const val REQ = 9101
-        /** Short chain of exact alarms — critical for phones that kill the FGS. */
-        private const val INTERVAL_MS = 60_000L
+        private const val REQ_PRIMARY = 9101
+        private const val REQ_BACKUP = 9102
+        /** 5s primary + 15s backup — was 15/45; cut delay when FCM is late. */
+        private const val INTERVAL_MS = 5_000L
+        private const val BACKUP_INTERVAL_MS = 15_000L
 
         fun schedule(context: Context) {
+            scheduleAlarm(context, REQ_PRIMARY, INTERVAL_MS)
+            scheduleAlarm(context, REQ_BACKUP, BACKUP_INTERVAL_MS)
+        }
+
+        fun cancel(context: Context) {
             runCatching {
                 val appCtx = context.applicationContext
                 val am = appCtx.getSystemService(AlarmManager::class.java) ?: return
-                val pi = pending(appCtx)
-                val trigger = SystemClock.elapsedRealtime() + INTERVAL_MS
+                am.cancel(pending(appCtx, REQ_PRIMARY))
+                am.cancel(pending(appCtx, REQ_BACKUP))
+            }
+        }
+
+        private fun scheduleAlarm(context: Context, reqCode: Int, intervalMs: Long) {
+            runCatching {
+                val appCtx = context.applicationContext
+                val am = appCtx.getSystemService(AlarmManager::class.java) ?: return
+                val pi = pending(appCtx, reqCode)
+                val trigger = SystemClock.elapsedRealtime() + intervalMs
                 val canExact = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                     am.canScheduleExactAlarms()
                 } else {
@@ -57,28 +73,18 @@ class MonitorWatchdogReceiver : BroadcastReceiver() {
                 }
                 if (canExact && Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                     am.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, trigger, pi)
-                } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    am.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, trigger, pi)
                 } else {
-                    am.set(AlarmManager.ELAPSED_REALTIME_WAKEUP, trigger, pi)
+                    am.setExact(AlarmManager.ELAPSED_REALTIME_WAKEUP, trigger, pi)
                 }
             }.onFailure {
-                Log.w(TAG, "Schedule failed: ${it.message}")
+                Log.w(TAG, "Schedule failed (req=$reqCode): ${it.message}")
             }
         }
 
-        fun cancel(context: Context) {
-            runCatching {
-                val appCtx = context.applicationContext
-                val am = appCtx.getSystemService(AlarmManager::class.java) ?: return
-                am.cancel(pending(appCtx))
-            }
-        }
-
-        private fun pending(context: Context): PendingIntent {
+        private fun pending(context: Context, reqCode: Int): PendingIntent {
             val i = Intent(context, MonitorWatchdogReceiver::class.java)
             return PendingIntent.getBroadcast(
-                context, REQ, i,
+                context, reqCode, i,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
         }

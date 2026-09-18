@@ -14,8 +14,8 @@ android {
         applicationId = "pukaar.com"
         minSdk = 26
         targetSdk = 36
-        versionCode = 23
-        versionName = "1.14.1"
+        versionCode = 40
+        versionName = "1.18.3"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // Emulator default; debug override points at LAN Mac IP for physical devices
         buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8080/\"")
@@ -104,6 +104,9 @@ dependencies {
 
     // Razorpay payments
     implementation("com.razorpay:checkout:1.6.40")
+
+    // Emergency Card QR (from Ritik UI)
+    implementation("com.google.zxing:core:3.5.3")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")

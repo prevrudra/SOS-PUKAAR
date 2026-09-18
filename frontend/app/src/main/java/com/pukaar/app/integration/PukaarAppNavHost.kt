@@ -26,9 +26,9 @@ import com.pukaar.app.ui.navigation.Route
 import com.pukaar.app.ui.screen.contacts.ContactDraft
 import com.pukaar.app.ui.screen.contacts.ContactUiModel
 import com.pukaar.app.ui.screen.emergency.EmergencyActiveScreen
-import com.pukaar.app.ui.screen.onboarding.OnboardingConsentScreen
 import com.pukaar.app.ui.screen.home.HomeMode
 import com.pukaar.app.ui.screen.home.SosCountdownOverlay
+import com.pukaar.app.ui.screen.home.EmergencySendingOverlay
 import com.pukaar.app.ui.screen.splash.SplashScreen
 import com.pukaar.app.ui.theme.PukaarTheme
 import com.pukaar.app.util.EmergencyAlertHelper
@@ -44,7 +44,9 @@ fun PukaarAppNavHost() {
     var authed by remember { mutableStateOf<Boolean?>(null) }
     var onboardingDone by remember { mutableStateOf<Boolean?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
-  var countdownMode by remember { mutableStateOf<HomeMode?>(null) }
+    var countdownMode by remember { mutableStateOf<HomeMode?>(null) }
+    /** Keeps home covered after countdown until SOS/HELP active screen opens. */
+    var sendingMode by remember { mutableStateOf<HomeMode?>(null) }
     val emergencyNav = rememberNavController()
 
     var showDeviceRestore by remember { mutableStateOf(false) }
@@ -87,13 +89,8 @@ fun PukaarAppNavHost() {
             }
         }
         onboardingDone == null -> SplashScreen()
-        onboardingDone == false -> PukaarTheme {
-            OnboardingConsentScreen {
-                onboardingDone = true
-                com.pukaar.app.emergency.PukaarGuardService.start(context, hasSession = true)
-            }
-        }
         else -> PukaarTheme {
+            val forceQuickOnboarding = onboardingDone == false
             val permissionLauncher = rememberLauncherForActivityResult(
                 ActivityResultContracts.RequestMultiplePermissions()
             ) { }
@@ -116,6 +113,8 @@ fun PukaarAppNavHost() {
                     context = context,
                     scope = scope,
                     onEmergency = { id, isMock ->
+                        sendingMode = null
+                        countdownMode = null
                         runCatching {
                             emergencyNav.navigate("emergency/$id?mock=$isMock") {
                                 launchSingleTop = true
@@ -124,7 +123,19 @@ fun PukaarAppNavHost() {
                             error = "Could not open emergency screen"
                         }
                     },
-                    onError = { error = it }
+                    onError = {
+                        sendingMode = null
+                        error = it
+                    },
+                    onContactsChanged = {
+                        scope.launch {
+                            contacts = ContactRepositoryBridge.loadContacts()
+                        }
+                    },
+                    onOnboardingFinished = {
+                        onboardingDone = true
+                        com.pukaar.app.emergency.PukaarGuardService.start(context, hasSession = true)
+                    }
                 )
             }
 
@@ -191,6 +202,11 @@ fun PukaarAppNavHost() {
                         PukaarNavHost(
                             actions = actions,
                             contacts = contacts,
+                            startDestination = if (forceQuickOnboarding) {
+                                Route.QuickOnboarding
+                            } else {
+                                Route.Splash
+                            },
                             onSaveContact = { draft, onDone ->
                                 scope.launch {
                                     val name = runCatching { PukaarApp.instance.repository.me().fullName }.getOrNull()
@@ -250,6 +266,8 @@ fun PukaarAppNavHost() {
                     SosCountdownOverlay(
                         mode = mode,
                         onComplete = {
+                            // Stay full-screen while API + GPS finish — avoid home flash.
+                            sendingMode = mode
                             countdownMode = null
                             when (mode) {
                                 HomeMode.SOS -> actions.triggerSos()
@@ -258,6 +276,11 @@ fun PukaarAppNavHost() {
                         },
                         onCancel = { countdownMode = null }
                     )
+                }
+                if (countdownMode == null) {
+                    sendingMode?.let { mode ->
+                        EmergencySendingOverlay(mode = mode)
+                    }
                 }
             }
         }

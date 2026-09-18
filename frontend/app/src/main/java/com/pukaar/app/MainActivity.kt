@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import com.pukaar.app.emergency.InactivityMonitor
 import com.pukaar.app.emergency.VolumeTriggerController
 import com.pukaar.app.integration.PukaarAppNavHost
 import com.pukaar.app.payment.RazorpayPaymentBridge
@@ -32,6 +33,11 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        InactivityMonitor.recordActivity(this)
     }
 
     override fun onNewIntent(intent: Intent) {

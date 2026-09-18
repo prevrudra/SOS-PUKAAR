@@ -16,12 +16,16 @@ import com.pukaar.app.ui.component.PukaarScreen
 import com.pukaar.app.ui.component.SectionCard
 import com.pukaar.app.ui.theme.PukaarTheme
 
-/** The languages Pukaar ships with. `tag` is the BCP-47 code used by the locale. */
+/**
+ * The languages Pukaar ships with. `tag` is the BCP-47 code used by the locale.
+ *
+ * English and Hindi only. Offering a language the app has no strings for is worse
+ * than not offering it: somebody picks Punjabi, the app stays in English, and the
+ * setting looks broken. The others come back when their translations do.
+ */
 enum class AppLanguage(@StringRes val labelRes: Int, val tag: String) {
     ENGLISH(R.string.language_english, "en"),
-    HINDI(R.string.language_hindi, "hi"),
-    PUNJABI(R.string.language_punjabi, "pa"),
-    MARATHI(R.string.language_marathi, "mr")
+    HINDI(R.string.language_hindi, "hi")
 }
 
 /** Menu item 9. */

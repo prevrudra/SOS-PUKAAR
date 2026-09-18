@@ -2,6 +2,7 @@ package com.pukaar.domain.alert;
 
 import com.pukaar.common.ContactRole;
 import com.pukaar.common.DeliveryStatus;
+import com.pukaar.common.InactivityLevel;
 import com.pukaar.domain.contact.TrustedContactEntity;
 import com.pukaar.domain.contact.TrustedContactRepository;
 import com.pukaar.domain.emergency.ContactDeliveryEntity;
@@ -41,8 +42,51 @@ public class AlertDeliveryService {
     private final RichAlertMessageBuilder messageBuilder;
     private final FcmPushSender fcm;
     private final WhatsAppAlertSender whatsApp;
+    private final WhatsAppSosDedupService waDedup;
+    private final YourBulkSmsSender smsSender;
     private final NearbyPlacesService nearbyPlacesService;
     private final PukaarProperties props;
+
+    @Transactional
+    public void deliverInactivityAlert(UUID userId, UUID eventId, UUID deliveryId, InactivityLevel level) {
+        ContactDeliveryEntity delivery = deliveryRepo.findById(deliveryId).orElse(null);
+        if (delivery == null) {
+            log.warn("Inactivity delivery {} missing", deliveryId);
+            return;
+        }
+        EmergencyEventEntity event = eventRepo.findById(eventId).orElse(null);
+        UserEntity user = userRepo.findById(userId).orElse(null);
+        if (event == null || user == null) {
+            markFailed(delivery, "Event or user missing");
+            return;
+        }
+
+        String phone = delivery.getContactPhone();
+        delivery.setAttempts(delivery.getAttempts() + 1);
+        boolean highPriority = level == InactivityLevel.URGENT;
+        boolean alreadyWa = channelHasWhatsApp(delivery);
+        // FCM first — do not wait on Places/WhatsApp. Save once at end (avoid WA retry race).
+        boolean fcmSent = tryPush(user, event, eventId, phone, highPriority, level);
+        boolean waSent = alreadyWa || tryWhatsApp(user, event, phone, delivery);
+        boolean smsSent = false;
+
+        if (!waSent && !fcmSent) {
+            smsSent = trySmsFallback(user, event, phone, delivery);
+        }
+
+        if (waSent || fcmSent || smsSent) {
+            String channel = channelLabel(fcmSent, waSent, smsSent);
+            delivery.setChannel(channel);
+            delivery.setChannelUsed(waSent ? "WHATSAPP" : (smsSent ? "SMS" : "FCM"));
+            delivery.setStatus(DeliveryStatus.SENT);
+            delivery.setLastError(waSent ? null : "WhatsApp failed — used " + delivery.getChannelUsed());
+            deliveryRepo.save(delivery);
+            log.info("Inactivity alert to {} via {}", phone, channel);
+            return;
+        }
+
+        markFailed(delivery, "Inactivity alert delivery failed (FCM+WhatsApp+SMS)");
+    }
 
     @Transactional
     public void deliverEmergencyAlert(UUID userId, UUID eventId, UUID deliveryId) {
@@ -60,44 +104,202 @@ public class AlertDeliveryService {
 
         String phone = delivery.getContactPhone();
         delivery.setAttempts(delivery.getAttempts() + 1);
+        boolean alreadyWa = channelHasWhatsApp(delivery);
 
-        if (whatsApp.isConfigured()) {
-            List<String> params = buildEmergencyTemplateParams(user, event);
-            if (whatsApp.sendEmergencyTemplate(phone, params)) {
-                delivery.setChannel("WHATSAPP");
-                delivery.setChannelUsed("WHATSAPP");
-                delivery.setStatus(DeliveryStatus.SENT);
-                delivery.setLastError(null);
-                deliveryRepo.save(delivery);
-                log.info("WhatsApp emergency alert sent to {}", phone);
-                tryPush(user, event, eventId, phone);
-                return;
-            }
-            log.warn("WhatsApp send failed for {}, trying FCM fallback", phone);
+        // FCM FIRST — never block on WhatsApp / Places.
+        // Do NOT mid-save FCM-only: that made the retry scheduler re-fire WhatsApp
+        // while this call was still sending (duplicate SOS WhatsApps).
+        boolean fcmSent = tryPush(user, event, eventId, phone, true, null);
+        boolean waSent = alreadyWa || tryWhatsApp(user, event, phone, delivery);
+        boolean smsSent = false;
+        if (!waSent && !fcmSent) {
+            smsSent = trySmsFallback(user, event, phone, delivery);
         }
 
-        if (tryPush(user, event, eventId, phone)) {
-            delivery.setChannel("FCM");
-            delivery.setChannelUsed("FCM");
+        if (waSent || fcmSent || smsSent) {
+            String channel = channelLabel(fcmSent, waSent, smsSent);
+            delivery.setChannel(channel);
+            delivery.setChannelUsed(waSent ? "WHATSAPP" : (smsSent ? "SMS" : "FCM"));
             delivery.setStatus(DeliveryStatus.SENT);
-            delivery.setLastError(null);
+            delivery.setLastError(waSent ? null : "WhatsApp failed — used " + delivery.getChannelUsed());
             deliveryRepo.save(delivery);
+            log.info("Emergency alert to {} via {} (fcm={} wa={} sms={})",
+                    phone, channel, fcmSent, waSent, smsSent);
             return;
         }
 
         delivery.setChannel("WHATSAPP");
         delivery.setChannelUsed("WHATSAPP");
         delivery.setStatus(DeliveryStatus.FAILED);
-        delivery.setLastError("WhatsApp/FCM delivery failed");
+        delivery.setLastError("WhatsApp/FCM/SMS delivery failed");
         deliveryRepo.save(delivery);
         log.warn("All alert channels failed for {}", phone);
     }
 
-    private boolean tryPush(UserEntity user, EmergencyEventEntity event, UUID eventId, String phone) {
+    /** One WhatsApp template per event+phone — no follow-up text, no send retries. */
+    private boolean tryWhatsApp(
+            UserEntity user,
+            EmergencyEventEntity event,
+            String phone,
+            ContactDeliveryEntity delivery
+    ) {
+        if (!whatsApp.isConfigured()) {
+            log.warn("WhatsApp not configured — skipping for {}", phone);
+            return false;
+        }
+        if (channelHasWhatsApp(delivery) || waDedup.alreadySent(event.getId(), phone)) {
+            return true;
+        }
+        // DB claim — multiple delivery rows for the same phone cannot all send.
+        if (!waDedup.tryClaim(event.getId(), phone)) {
+            log.info("WhatsApp already claimed for event {} phone {}", event.getId(), phone);
+            return true;
+        }
+
+        List<String> params = buildEmergencyTemplateParams(user, event);
+        if (!whatsApp.sendEmergencyTemplate(phone, params)) {
+            log.warn("WhatsApp template failed for {}", phone);
+            return false;
+        }
+        return true;
+    }
+
+    private static boolean channelHasWhatsApp(ContactDeliveryEntity delivery) {
+        String ch = delivery.getChannel();
+        String used = delivery.getChannelUsed();
+        return (ch != null && ch.toUpperCase(Locale.ROOT).contains("WHATSAPP"))
+                || (used != null && used.toUpperCase(Locale.ROOT).contains("WHATSAPP"));
+    }
+
+    private static String channelLabel(boolean fcm, boolean wa, boolean sms) {
+        StringBuilder sb = new StringBuilder();
+        if (fcm) sb.append("FCM");
+        if (wa) {
+            if (!sb.isEmpty()) sb.append('+');
+            sb.append("WHATSAPP");
+        }
+        if (sms) {
+            if (!sb.isEmpty()) sb.append('+');
+            sb.append("SMS");
+        }
+        return sb.isEmpty() ? "NONE" : sb.toString();
+    }
+
+    /** Called by DeliveryRetryScheduler when contact has not acked within 30s. */
+    @Transactional
+    public void forceSmsFallback(UUID userId, UUID eventId, UUID deliveryId) {
+        ContactDeliveryEntity delivery = deliveryRepo.findById(deliveryId).orElse(null);
+        if (delivery == null) return;
+        if (delivery.getAcknowledgedAt() != null) return;
+        if ("SMS".equalsIgnoreCase(delivery.getChannelUsed())) return;
+        EmergencyEventEntity event = eventRepo.findById(eventId).orElse(null);
+        UserEntity user = userRepo.findById(userId).orElse(null);
+        if (event == null || user == null) return;
+        trySmsFallback(user, event, delivery.getContactPhone(), delivery);
+    }
+
+    /** SMS when WhatsApp and FCM both miss — Meta API can return 200 before handset delivery. */
+    private boolean trySmsFallback(
+            UserEntity user,
+            EmergencyEventEntity event,
+            String phone,
+            ContactDeliveryEntity delivery
+    ) {
+        if (!props.getNotification().isSmsFallbackEnabled() || !smsSender.isConfigured()) {
+            return false;
+        }
+        String who = displayName(user);
+        String maps = mapsLink(event);
+        String body = "PUKAAR SOS ALERT: " + who + " needs help NOW. "
+                + maps + " Open PUKAAR High Alert app. Call them immediately.";
+        if (smsSender.send(phone, body)) {
+            delivery.setChannel("SMS");
+            delivery.setChannelUsed("SMS");
+            delivery.setStatus(DeliveryStatus.SENT);
+            delivery.setLastError(null);
+            deliveryRepo.save(delivery);
+            log.info("SMS fallback alert sent to {}", phone);
+            return true;
+        }
+        return false;
+    }
+
+    private String buildAlertFollowUpMessage(UserEntity user, EmergencyEventEntity event) {
+        if (user == null || event == null) return null;
+        String who = displayName(user);
+        boolean help = event.getTriggerType() == com.pukaar.common.TriggerType.HELP;
+        boolean inactivity = event.getTriggerType() == com.pukaar.common.TriggerType.INACTIVITY;
+        NearbySnapshot n = resolveNearby(event);
+        List<TrustedContactEntity> all = contactRepo
+                .findByOwnerUserIdAndActiveTrueOrderByPriorityOrderAsc(user.getId());
+        List<TrustedContactEntity> helpContacts = all.stream()
+                .filter(c -> c.getContactRole() == ContactRole.DOCTOR
+                        || c.getContactRole() == ContactRole.NEIGHBOUR
+                        || c.getContactRole() == ContactRole.HELP_MONITOR)
+                .toList();
+
+        StringBuilder sb = new StringBuilder();
+        if (inactivity) {
+            sb.append("*PUKAAR INACTIVITY ALERT*\n");
+            sb.append(who).append(" has not used their phone for a long time.\n");
+            sb.append("Please call and check on ").append(who).append(" now.\n\n");
+        } else if (help) {
+            sb.append("*PUKAAR HELP — ASSISTANCE*\n");
+            sb.append(who).append(" has activated HELP and may need assistance.\n");
+            sb.append("Please check on ").append(who).append(" now.\n\n");
+        } else {
+            sb.append("*PUKAAR SOS — DETAILS*\n");
+            sb.append("Please check on ").append(who).append(" immediately.\n\n");
+        }
+
+        sb.append("HELP / DOCTOR / NEIGHBOUR NUMBERS\n");
+        if (helpContacts.isEmpty()) {
+            sb.append("- (none added)\n");
+        } else {
+            for (TrustedContactEntity c : helpContacts.stream().limit(5).toList()) {
+                String rel = c.getRelationship() != null && !c.getRelationship().isBlank()
+                        ? c.getRelationship() : roleLabel(c.getContactRole());
+                sb.append("👤 ").append(c.getName()).append(" (").append(rel).append(") - ")
+                        .append(c.getPhoneE164()).append("\n");
+            }
+        }
+        sb.append("\n");
+        sb.append("NEAREST SERVICES — FULL ADDRESS\n");
+        sb.append("🚔 Police: ").append(n.policeName()).append("\n");
+        sb.append("Address: ").append(blankToDash(n.policeAddress())).append("\n");
+        sb.append("Phone: ").append(blankToDash(n.policePhone())).append("\n\n");
+        sb.append("🚑 Ambulance: ").append(n.ambName()).append("\n");
+        sb.append("Address: ").append(blankToDash(n.ambAddress())).append("\n");
+        sb.append("Phone: ").append(blankToDash(n.ambPhone())).append("\n\n");
+        sb.append("🏥 Hospital: ").append(n.hospitalName()).append("\n");
+        sb.append("Address: ").append(blankToDash(n.hospitalAddress())).append("\n");
+        sb.append("Phone: ").append(blankToDash(n.hospitalPhone())).append("\n");
+        sb.append("🆘 National Emergency: 112");
+        return sb.toString();
+    }
+
+    private String buildNearbyAddressFollowUp(EmergencyEventEntity event) {
+        UserEntity u = userRepo.findById(event.getUserId()).orElse(null);
+        return buildAlertFollowUpMessage(u, event);
+    }
+
+    private static String blankToDash(String s) {
+        return s == null || s.isBlank() || "null".equals(s) ? "-" : s;
+    }
+
+    private boolean tryPush(
+            UserEntity user,
+            EmergencyEventEntity event,
+            UUID eventId,
+            String phone,
+            boolean fullScreen,
+            InactivityLevel inactivityLevel
+    ) {
         var device = alertDeviceRepo.findFirstByPhoneE164AndActiveTrueOrderByUpdatedAtDesc(phone);
         if (device.isEmpty() || device.get().getFcmToken() == null) return false;
         Map<String, String> pushData = new java.util.LinkedHashMap<>();
-        pushData.put("type", "EMERGENCY_ALERT");
+        boolean inactivity = event.getTriggerType() == com.pukaar.common.TriggerType.INACTIVITY;
+        pushData.put("type", inactivity && !fullScreen ? "INACTIVITY_ALERT" : "EMERGENCY_ALERT");
         pushData.put("eventId", eventId.toString());
         pushData.put("victimName", user.getFullName() != null ? user.getFullName() : "");
         pushData.put("victimPhone", user.getPhoneE164());
@@ -107,15 +309,20 @@ public class AlertDeliveryService {
         if (event.getNetworkType() != null) pushData.put("networkType", event.getNetworkType());
         pushData.put("mockDrill", Boolean.toString(event.isMockDrill()));
         pushData.put("triggerType", event.getTriggerType().name());
-        NearbySnapshot nearby = resolveNearby(event);
-        pushData.put("policeName", nearby.policeName);
-        pushData.put("policePhone", nearby.policePhone);
-        pushData.put("hospitalName", nearby.hospitalName);
-        pushData.put("hospitalPhone", nearby.hospitalPhone);
+        if (inactivityLevel != null) {
+            pushData.put("inactivityLevel", inactivityLevel.name());
+            pushData.put("alertStyle", fullScreen ? "high" : "soft");
+        }
+        // Do NOT call Places here — Google Places can hang ~30–60s and delay the entire SOS.
+        // National defaults are enough for the push wake; WhatsApp enriches nearby separately.
+        pushData.put("policeName", "Police");
+        pushData.put("policePhone", "100");
+        pushData.put("hospitalName", "Hospital");
+        pushData.put("hospitalPhone", "112");
         return fcm.sendHighPriority(
                 device.get().getFcmToken(),
-                messageBuilder.buildPushTitle(event),
-                messageBuilder.buildPushBody(user, event),
+                messageBuilder.buildPushTitle(event, inactivityLevel),
+                messageBuilder.buildPushBody(user, event, inactivityLevel),
                 pushData
         );
     }
@@ -143,7 +350,8 @@ public class AlertDeliveryService {
                 ? SOS_TIME.format(event.getStartedAt().atZone(IST))
                 : SOS_TIME.format(java.time.Instant.now().atZone(IST));
         String maps = mapsLink(event);
-        String battery = event.getBatteryPct() != null ? event.getBatteryPct() + "%" : "-";
+        String battery = event.getBatteryPct() != null
+                ? String.valueOf(event.getBatteryPct()) : "-";
         String network = event.getNetworkType() != null && !event.getNetworkType().isBlank()
                 ? event.getNetworkType() : "-";
 
@@ -152,11 +360,11 @@ public class AlertDeliveryService {
         List<TrustedContactEntity> trusted = all.stream()
                 .filter(c -> c.getContactRole() == ContactRole.SOS_TRUSTED)
                 .toList();
+        // Help numbers are display-only on the alert — never the alerted party.
         List<TrustedContactEntity> emergency = all.stream()
                 .filter(c -> c.getContactRole() == ContactRole.DOCTOR
                         || c.getContactRole() == ContactRole.NEIGHBOUR
-                        || c.getContactRole() == ContactRole.HELP_MONITOR
-                        || c.getContactRole() == ContactRole.HELP_BACKUP)
+                        || c.getContactRole() == ContactRole.HELP_MONITOR)
                 .toList();
 
         NearbySnapshot nearby = resolveNearby(event);
@@ -166,7 +374,7 @@ public class AlertDeliveryService {
         params.add(when);                // 2
         params.add(userPhone);           // 3
         params.add(maps);                // 4
-        params.add(battery);             // 5
+        params.add(battery);             // 5 (template already has % suffix — do not send "12%")
         params.add(network);             // 6
         params.add(contactLine(trusted, 0));   // 7
         params.add(contactLine(trusted, 1));   // 8
@@ -174,11 +382,12 @@ public class AlertDeliveryService {
         params.add(contactLine(emergency, 0)); // 10
         params.add(contactLine(emergency, 1)); // 11
         params.add(contactLine(emergency, 2)); // 12
-        params.add(nearby.policeName);         // 13
+        // Template is "Name - Phone" — put full address on the name side so it shows.
+        params.add(serviceNameWithAddress(nearby.policeName, nearby.policeAddress)); // 13
         params.add(nearby.policePhone);        // 14
-        params.add(nearby.ambName);            // 15
+        params.add(serviceNameWithAddress(nearby.ambName, nearby.ambAddress));       // 15
         params.add(nearby.ambPhone);           // 16
-        params.add(nearby.hospitalName);       // 17
+        params.add(serviceNameWithAddress(nearby.hospitalName, nearby.hospitalAddress)); // 17
         params.add(nearby.hospitalPhone);      // 18
         return params;
     }
@@ -188,12 +397,17 @@ public class AlertDeliveryService {
         String who = displayName(user);
         String userPhone = user.getPhoneE164() != null ? user.getPhoneE164() : "-";
         String maps = mapsLink(event);
-        String battery = event.getBatteryPct() != null ? event.getBatteryPct() + "%" : "-";
+        // Template body already includes "%" after the battery variable.
+        String battery = event.getBatteryPct() != null
+                ? String.valueOf(event.getBatteryPct()) : "-";
         String network = event.getNetworkType() != null && !event.getNetworkType().isBlank()
                 ? event.getNetworkType() : "-";
 
         List<TrustedContactEntity> contacts = contactRepo
-                .findByOwnerUserIdAndActiveTrueOrderByPriorityOrderAsc(user.getId());
+                .findByOwnerUserIdAndActiveTrueOrderByPriorityOrderAsc(user.getId())
+                .stream()
+                .filter(c -> c.getContactRole() == ContactRole.SOS_TRUSTED)
+                .toList();
         String c1n = "-", c1p = "-", c2n = "-", c2p = "-", c3n = "-", c3p = "-";
         if (contacts.size() > 0) {
             c1n = contactNameWithRelation(contacts.get(0));
@@ -222,11 +436,11 @@ public class AlertDeliveryService {
         params.add(c2p);
         params.add(c3n);
         params.add(c3p);
-        params.add(nearby.policeName);
+        params.add(serviceNameWithAddress(nearby.policeName, nearby.policeAddress));
         params.add(nearby.policePhone);
-        params.add(nearby.ambName);
+        params.add(serviceNameWithAddress(nearby.ambName, nearby.ambAddress));
         params.add(nearby.ambPhone);
-        params.add(nearby.hospitalName);
+        params.add(serviceNameWithAddress(nearby.hospitalName, nearby.hospitalAddress));
         params.add(nearby.hospitalPhone);
         params.add("112");
         params.add(who);
@@ -235,31 +449,56 @@ public class AlertDeliveryService {
 
     private NearbySnapshot resolveNearby(EmergencyEventEntity event) {
         NearbySnapshot n = new NearbySnapshot(
-                "Police Emergency", "100",
-                "National Ambulance", "108",
-                "Nearest Hospital", "112"
+                "Police Emergency", "100", "-",
+                "National Ambulance", "108", "-",
+                "Nearest Hospital", "112", "-"
         );
         if (event.getLatitude() == null || event.getLongitude() == null) return n;
         try {
-            Map<String, Object> nearby = nearbyPlacesService.nearby(
-                    event.getLatitude(), event.getLongitude(), 3);
+            // Hard timeout so WhatsApp never waits ~60s on Places.
+            java.util.concurrent.Future<Map<String, Object>> future =
+                    java.util.concurrent.Executors.newSingleThreadExecutor().submit(() ->
+                            nearbyPlacesService.nearby(event.getLatitude(), event.getLongitude(), 3));
+            Map<String, Object> nearby = future.get(2, java.util.concurrent.TimeUnit.SECONDS);
             n = new NearbySnapshot(
                     firstName(nearby.get("police"), n.policeName),
                     firstPhone(nearby.get("police"), n.policePhone),
+                    firstAddressOrMaps(nearby.get("police"), n.policeAddress),
                     firstNameLiveAmbulance(nearby.get("ambulance"), n.ambName),
                     firstPhoneLiveAmbulance(nearby.get("ambulance"), n.ambPhone),
+                    firstAddressOrMapsLiveAmbulance(nearby.get("ambulance"), n.ambAddress),
                     firstName(nearby.get("hospitals"), n.hospitalName),
-                    firstPhone(nearby.get("hospitals"), n.hospitalPhone)
+                    firstPhone(nearby.get("hospitals"), n.hospitalPhone),
+                    firstAddressOrMaps(nearby.get("hospitals"), n.hospitalAddress)
             );
         } catch (Exception e) {
-            log.warn("Nearby lookup for WhatsApp template failed: {}", e.getMessage());
+            log.warn("Nearby lookup for WhatsApp template failed/timed out: {}", e.getMessage());
         }
         return n;
     }
 
+    /** Name + full street address for WhatsApp "Name - Phone" template lines. */
+    private static String serviceNameWithAddress(String name, String address) {
+        String n = name != null && !name.isBlank() ? name.trim() : "-";
+        if (address == null || address.isBlank() || "-".equals(address) || "null".equals(address)) {
+            return n;
+        }
+        return n + " | Addr: " + address.trim();
+    }
+
+    /** @deprecated use {@link #serviceNameWithAddress} */
+    private static String nameWithAddress(String name, String address) {
+        return serviceNameWithAddress(name, address);
+    }
+
     private static String displayName(UserEntity user) {
-        return user.getFullName() != null && !user.getFullName().isBlank()
-                ? user.getFullName() : "PUKAAR user";
+        if (user.getFullName() != null && !user.getFullName().isBlank()) {
+            return user.getFullName().trim();
+        }
+        if (user.getPhoneE164() != null && !user.getPhoneE164().isBlank()) {
+            return user.getPhoneE164();
+        }
+        return "PUKAAR user";
     }
 
     private static String mapsLink(EmergencyEventEntity event) {
@@ -312,6 +551,33 @@ public class AlertDeliveryService {
         return fallback;
     }
 
+    private String firstAddress(Object listObj, String fallback) {
+        if (!(listObj instanceof List<?> list) || list.isEmpty()) return fallback;
+        Object first = list.get(0);
+        if (first instanceof Map<?, ?> m && m.get("address") != null) {
+            String address = String.valueOf(m.get("address"));
+            if (!address.isBlank() && !"null".equals(address)) return address;
+        }
+        return fallback;
+    }
+
+    /** Prefer street address; if missing, use the place's Google Maps pin. */
+    private String firstAddressOrMaps(Object listObj, String fallback) {
+        String address = firstAddress(listObj, null);
+        if (address != null) return address;
+        if (!(listObj instanceof List<?> list) || list.isEmpty()) return fallback;
+        Object first = list.get(0);
+        if (first instanceof Map<?, ?> m) {
+            Object lat = m.get("latitude");
+            Object lng = m.get("longitude");
+            if (lat instanceof Number && lng instanceof Number) {
+                return "https://maps.google.com/?q="
+                        + ((Number) lat).doubleValue() + "," + ((Number) lng).doubleValue();
+            }
+        }
+        return fallback;
+    }
+
     private String firstNameLiveAmbulance(Object listObj, String fallback) {
         if (!(listObj instanceof List<?> list)) return fallback;
         for (Object item : list) {
@@ -334,6 +600,38 @@ public class AlertDeliveryService {
         return firstPhone(listObj, fallback);
     }
 
+    private String firstAddressLiveAmbulance(Object listObj, String fallback) {
+        if (!(listObj instanceof List<?> list)) return fallback;
+        for (Object item : list) {
+            if (item instanceof Map<?, ?> m && !"NATIONAL".equals(String.valueOf(m.get("source")))
+                    && m.get("address") != null) {
+                String address = String.valueOf(m.get("address"));
+                if (!address.isBlank() && !"null".equals(address)) return address;
+            }
+        }
+        return firstAddress(listObj, fallback);
+    }
+
+    private String firstAddressOrMapsLiveAmbulance(Object listObj, String fallback) {
+        if (!(listObj instanceof List<?> list)) return firstAddressOrMaps(listObj, fallback);
+        for (Object item : list) {
+            if (!(item instanceof Map<?, ?> m) || "NATIONAL".equals(String.valueOf(m.get("source")))) {
+                continue;
+            }
+            if (m.get("address") != null) {
+                String address = String.valueOf(m.get("address"));
+                if (!address.isBlank() && !"null".equals(address)) return address;
+            }
+            Object lat = m.get("latitude");
+            Object lng = m.get("longitude");
+            if (lat instanceof Number && lng instanceof Number) {
+                return "https://maps.google.com/?q="
+                        + ((Number) lat).doubleValue() + "," + ((Number) lng).doubleValue();
+            }
+        }
+        return firstAddressOrMaps(listObj, fallback);
+    }
+
     private void markFailed(ContactDeliveryEntity delivery, String error) {
         delivery.setStatus(DeliveryStatus.FAILED);
         delivery.setLastError(error);
@@ -345,9 +643,12 @@ public class AlertDeliveryService {
     private record NearbySnapshot(
             String policeName,
             String policePhone,
+            String policeAddress,
             String ambName,
             String ambPhone,
+            String ambAddress,
             String hospitalName,
-            String hospitalPhone
+            String hospitalPhone,
+            String hospitalAddress
     ) {}
 }

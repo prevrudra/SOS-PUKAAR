@@ -81,7 +81,10 @@ private fun styleFor(tone: AlertTone) = when (tone) {
 @Composable
 fun HomeScreen(
     onOpenSampleAlert: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    monitoringPhone: String? = null,
+    onFixPermissions: (() -> Unit)? = null,
+    onSignOut: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val preferences = remember { TonePreferences(context) }
@@ -123,6 +126,30 @@ fun HomeScreen(
             fontSize = 15.sp,
             color = TextSecondary
         )
+
+        if (!monitoringPhone.isNullOrBlank()) {
+            Spacer(Modifier.height(14.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0xFFECFDF5))
+                    .border(1.dp, Color(0xFF86EFAC), RoundedCornerShape(14.dp))
+                    .padding(14.dp)
+            ) {
+                Column {
+                    Text("PUKAAR High Alert is active", color = Color(0xFF15803D), fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Spacer(Modifier.height(4.dp))
+                    Text(monitoringPhone, color = TextPrimary, fontSize = 14.sp)
+                    Text(
+                        "Checks for emergency alerts about every minute. Tap “Allow background alerts” so Oppo/Xiaomi do not block them.",
+                        color = TextSecondary,
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp
+                    )
+                }
+            }
+        }
 
         Spacer(Modifier.height(16.dp))
         TriggerExplainerCard()
@@ -189,6 +216,30 @@ fun HomeScreen(
                 )
             }
         )
+
+        if (onFixPermissions != null) {
+            Spacer(Modifier.height(12.dp))
+            Button(
+                onClick = onFixPermissions,
+                modifier = Modifier.fillMaxWidth().height(48.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = PukaarRed)
+            ) {
+                Text("Allow background alerts", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+            }
+        }
+        if (onSignOut != null) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "Sign out",
+                color = TextMuted,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(onClick = onSignOut)
+                    .padding(8.dp)
+            )
+        }
 
         Spacer(Modifier.height(22.dp))
         Text(

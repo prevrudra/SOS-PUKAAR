@@ -1,10 +1,10 @@
 package com.pukaar.app.ui.screen.contacts
 
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.AlertDialog
@@ -17,8 +17,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -34,6 +34,7 @@ import com.pukaar.app.ui.component.SectionCard
 import com.pukaar.app.ui.component.SelectionRow
 import com.pukaar.app.ui.theme.PukaarTheme
 import com.pukaar.app.ui.theme.PukaarRed
+import com.pukaar.app.ui.theme.TextSecondary
 import com.pukaar.app.ui.theme.TextTertiary
 
 private val RELATIONSHIP_SUGGESTIONS = listOf(
@@ -43,6 +44,8 @@ private val RELATIONSHIP_SUGGESTIONS = listOf(
 
 /**
  * Add or edit a contact — same form for both, with all fields editable.
+ * Alert category (SOS / Help / Inactivity / Doctor / Neighbour) is near the top
+ * so it is reachable while scrolling.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -54,6 +57,7 @@ fun ContactFormScreen(
     initial: ContactDraft? = null,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val isEdit = initial?.id != null
     var name by remember { mutableStateOf(initial?.name.orEmpty()) }
     var dialCode by remember { mutableStateOf(initial?.dialCode ?: "+91") }
@@ -64,28 +68,50 @@ fun ContactFormScreen(
     var priority by remember { mutableIntStateOf(initial?.priorityOrder ?: 1) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
+    fun trySave() {
+        val trimmedName = name.trim()
+        val trimmedMobile = mobile.trim()
+        when {
+            trimmedName.isBlank() -> {
+                Toast.makeText(context, context.getString(R.string.add_contact_name_required), Toast.LENGTH_SHORT).show()
+            }
+            trimmedMobile.length < 8 -> {
+                Toast.makeText(context, context.getString(R.string.add_contact_mobile_required), Toast.LENGTH_SHORT).show()
+            }
+            else -> onSave(
+                ContactDraft(
+                    id = initial?.id,
+                    name = trimmedName,
+                    mobile = trimmedMobile,
+                    dialCode = dialCode,
+                    relationship = relationship.trim(),
+                    notes = notes.trim(),
+                    type = type,
+                    priorityOrder = priority
+                )
+            )
+        }
+    }
+
     PukaarScreen(
         title = stringResource(if (isEdit) R.string.edit_contact_title else R.string.add_contact_title),
         onBack = onBack,
         modifier = modifier,
+        scrollable = true,
         bottomBar = {
             androidx.compose.foundation.layout.Column {
+                Text(
+                    text = stringResource(
+                        R.string.add_contact_selected_category,
+                        stringResource(type.labelRes)
+                    ),
+                    color = type.accent,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
                 PrimaryButton(
                     text = stringResource(if (isEdit) R.string.edit_contact_save else R.string.add_contact_save),
-                    onClick = {
-                        onSave(
-                            ContactDraft(
-                                id = initial?.id,
-                                name = name.trim(),
-                                mobile = mobile.trim(),
-                                dialCode = dialCode,
-                                relationship = relationship.trim(),
-                                notes = notes.trim(),
-                                type = type,
-                                priorityOrder = priority
-                            )
-                        )
-                    }
+                    onClick = { trySave() }
                 )
                 if (onResendVerification != null) {
                     Spacer(modifier = Modifier.height(8.dp))
@@ -120,6 +146,27 @@ fun ContactFormScreen(
                 onNationalChange = { mobile = it },
                 placeholder = stringResource(R.string.add_contact_mobile_hint)
             )
+            Spacer(modifier = Modifier.height(16.dp))
+
+            FieldLabel(text = stringResource(R.string.add_contact_category))
+            Text(
+                text = stringResource(R.string.add_contact_category_hint),
+                color = TextTertiary,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+            ContactType.entries.forEachIndexed { index, entry ->
+                SelectionRow(
+                    icon = entry.icon,
+                    iconTint = entry.accent,
+                    title = stringResource(entry.labelRes),
+                    subtitle = stringResource(entry.descriptionRes),
+                    selected = entry == type,
+                    onSelect = { type = entry }
+                )
+                if (index != ContactType.entries.lastIndex) RowDivider()
+            }
+
             Spacer(modifier = Modifier.height(14.dp))
             LabeledTextField(
                 label = stringResource(R.string.add_contact_relationship),
@@ -145,6 +192,12 @@ fun ContactFormScreen(
             )
             Spacer(modifier = Modifier.height(14.dp))
             FieldLabel(text = stringResource(R.string.contact_priority))
+            Text(
+                text = stringResource(R.string.contact_priority_hint),
+                color = TextSecondary,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
             (1..3).forEach { level ->
                 SelectionRow(
                     icon = type.icon,
@@ -156,25 +209,7 @@ fun ContactFormScreen(
                 )
                 if (level < 3) RowDivider()
             }
-            Spacer(modifier = Modifier.height(16.dp))
-            FieldLabel(text = stringResource(R.string.add_contact_category))
-            Text(
-                text = stringResource(R.string.add_contact_category_hint),
-                color = TextTertiary,
-                fontSize = 11.sp,
-                modifier = Modifier.padding(bottom = 2.dp)
-            )
-            ContactType.entries.forEachIndexed { index, entry ->
-                SelectionRow(
-                    icon = entry.icon,
-                    iconTint = entry.accent,
-                    title = stringResource(entry.labelRes),
-                    subtitle = stringResource(entry.descriptionRes),
-                    selected = entry == type,
-                    onSelect = { type = entry }
-                )
-                if (index != ContactType.entries.lastIndex) RowDivider()
-            }
+            Spacer(modifier = Modifier.height(32.dp))
         }
     }
 

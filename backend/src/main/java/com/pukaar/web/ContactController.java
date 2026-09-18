@@ -9,6 +9,7 @@ import com.pukaar.security.SecurityUtils;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.*;
@@ -31,26 +32,12 @@ public class ContactController {
         String phone = normalize(req.getPhone());
         ContactRole role = req.getRole() == null ? ContactRole.SOS_TRUSTED : req.getRole();
 
-        var existingActive = contactRepo.findByOwnerUserIdAndPhoneE164AndContactRoleAndActiveTrue(ownerId, phone, role);
-        if (existingActive.isPresent()) {
-            TrustedContactEntity c = existingActive.get();
-            if (req.getName() != null) c.setName(req.getName());
-            if (req.getRelationship() != null) c.setRelationship(req.getRelationship());
-            if (req.getNotes() != null) c.setNotes(req.getNotes());
-            if (req.getPriorityOrder() != null) c.setPriorityOrder(req.getPriorityOrder());
-            return toDto(contactRepo.save(c));
-        }
-
-        var inactive = contactRepo.findByOwnerUserIdAndPhoneE164AndContactRole(ownerId, phone, role)
-                .filter(c -> !c.isActive());
-        if (inactive.isPresent()) {
-            TrustedContactEntity c = inactive.get();
+        Optional<TrustedContactEntity> match = findMatching(ownerId, phone, role);
+        if (match.isPresent()) {
+            TrustedContactEntity c = match.get();
+            applyRequest(c, req, phone, role);
             c.setActive(true);
-            c.setVerified(false);
-            if (req.getName() != null) c.setName(req.getName());
-            if (req.getRelationship() != null) c.setRelationship(req.getRelationship());
-            if (req.getNotes() != null) c.setNotes(req.getNotes());
-            if (req.getPriorityOrder() != null) c.setPriorityOrder(req.getPriorityOrder());
+            c.setVerified(true);
             return toDto(contactRepo.save(c));
         }
 
@@ -60,13 +47,25 @@ public class ContactController {
         TrustedContactEntity c = TrustedContactEntity.builder()
                 .ownerUserId(ownerId)
                 .name(req.getName())
-                .phoneE164(normalize(req.getPhone()))
-                .contactRole(req.getRole() == null ? ContactRole.SOS_TRUSTED : req.getRole())
+                .phoneE164(phone)
+                .contactRole(role)
                 .relationship(req.getRelationship())
                 .notes(req.getNotes())
                 .priorityOrder(req.getPriorityOrder() == null ? 1 : req.getPriorityOrder())
+                .verified(true)
+                .active(true)
                 .build();
-        return toDto(contactRepo.save(c));
+        try {
+            return toDto(contactRepo.save(c));
+        } catch (DataIntegrityViolationException ex) {
+            // Soft-deleted or race: reuse the conflicting row instead of 409.
+            TrustedContactEntity existing = findMatching(ownerId, phone, role)
+                    .orElseThrow(() -> new ApiException("CONTACT_EXISTS", "This contact already exists"));
+            applyRequest(existing, req, phone, role);
+            existing.setActive(true);
+            existing.setVerified(true);
+            return toDto(contactRepo.save(existing));
+        }
     }
 
     @PostMapping("/{id}/verify")
@@ -79,13 +78,43 @@ public class ContactController {
     @PutMapping("/{id}")
     public Map<String, Object> update(@PathVariable UUID id, @RequestBody ContactRequest req) {
         TrustedContactEntity c = owned(id);
-        if (req.getName() != null) c.setName(req.getName());
-        if (req.getPhone() != null) c.setPhoneE164(normalize(req.getPhone()));
-        if (req.getRole() != null) c.setContactRole(req.getRole());
-        if (req.getRelationship() != null) c.setRelationship(req.getRelationship());
-        if (req.getNotes() != null) c.setNotes(req.getNotes());
-        if (req.getPriorityOrder() != null) c.setPriorityOrder(req.getPriorityOrder());
-        return toDto(contactRepo.save(c));
+        UUID ownerId = SecurityUtils.currentUserId();
+        String newPhone = req.getPhone() != null ? normalize(req.getPhone()) : c.getPhoneE164();
+        ContactRole newRole = req.getRole() != null ? req.getRole() : c.getContactRole();
+
+        Optional<TrustedContactEntity> conflict = findMatching(ownerId, newPhone, newRole)
+                .filter(other -> !other.getId().equals(c.getId()));
+        if (conflict.isPresent()) {
+            // Phone/role already on another row — merge into that row and retire this one.
+            TrustedContactEntity other = conflict.get();
+            applyRequest(other, req, newPhone, newRole);
+            if (req.getName() == null) other.setName(c.getName());
+            if (req.getRelationship() == null && c.getRelationship() != null) {
+                other.setRelationship(c.getRelationship());
+            }
+            if (req.getNotes() == null && c.getNotes() != null) other.setNotes(c.getNotes());
+            other.setActive(true);
+            other.setVerified(true);
+            c.setActive(false);
+            contactRepo.save(c);
+            return toDto(contactRepo.save(other));
+        }
+
+        applyRequest(c, req, newPhone, newRole);
+        c.setActive(true);
+        try {
+            return toDto(contactRepo.save(c));
+        } catch (DataIntegrityViolationException ex) {
+            TrustedContactEntity existing = findMatching(ownerId, newPhone, newRole)
+                    .filter(other -> !other.getId().equals(c.getId()))
+                    .orElseThrow(() -> new ApiException("CONTACT_EXISTS", "This contact already exists"));
+            applyRequest(existing, req, newPhone, newRole);
+            existing.setActive(true);
+            existing.setVerified(true);
+            c.setActive(false);
+            contactRepo.save(c);
+            return toDto(contactRepo.save(existing));
+        }
     }
 
     @DeleteMapping("/{id}")
@@ -94,6 +123,41 @@ public class ContactController {
         c.setActive(false);
         contactRepo.save(c);
         return Map.of("deleted", true);
+    }
+
+    private void applyRequest(TrustedContactEntity c, ContactRequest req, String phone, ContactRole role) {
+        if (req.getName() != null) c.setName(req.getName());
+        c.setPhoneE164(phone);
+        c.setContactRole(role);
+        if (req.getRelationship() != null) c.setRelationship(req.getRelationship());
+        if (req.getNotes() != null) c.setNotes(req.getNotes());
+        if (req.getPriorityOrder() != null) c.setPriorityOrder(req.getPriorityOrder());
+    }
+
+    /**
+     * Match by exact E.164 + role, then by last-10-digit suffix + role
+     * (covers formatting drift and soft-deleted rows).
+     */
+    private Optional<TrustedContactEntity> findMatching(UUID ownerId, String phone, ContactRole role) {
+        Optional<TrustedContactEntity> exact =
+                contactRepo.findByOwnerUserIdAndPhoneE164AndContactRole(ownerId, phone, role);
+        if (exact.isPresent()) return exact;
+
+        String digits = phone.startsWith("+") ? phone.substring(1) : phone;
+        String suffix = digits.length() >= 10 ? digits.substring(digits.length() - 10) : digits;
+        if (suffix.isBlank()) return Optional.empty();
+
+        List<TrustedContactEntity> all = contactRepo.findByOwnerUserId(ownerId);
+        return all.stream()
+                .filter(c -> c.getContactRole() == role)
+                .filter(c -> {
+                    String p = c.getPhoneE164() == null ? "" : c.getPhoneE164();
+                    String d = p.startsWith("+") ? p.substring(1) : p.replaceAll("\\D", "");
+                    return d.equals(digits) || (suffix.length() >= 10 && d.endsWith(suffix));
+                })
+                .max(Comparator.comparing(TrustedContactEntity::isActive)
+                        .thenComparing(TrustedContactEntity::getUpdatedAt,
+                                Comparator.nullsLast(Comparator.naturalOrder())));
     }
 
     private TrustedContactEntity owned(UUID id) {

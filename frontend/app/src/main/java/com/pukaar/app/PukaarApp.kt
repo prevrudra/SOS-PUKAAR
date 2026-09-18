@@ -50,6 +50,14 @@ class PukaarApp : Application() {
         appScope.launch {
             if (sessionStore.token() != null) {
                 PukaarGuardService.start(this@PukaarApp, hasSession = true)
+                runCatching {
+                    val s = repository.elderlySettings()
+                    com.pukaar.app.emergency.InactivityMonitor.syncFromServer(
+                        this@PukaarApp,
+                        s.softHours ?: 6,
+                        s.inactivityMonitoringEnabled != false
+                    )
+                }
             }
         }
     }

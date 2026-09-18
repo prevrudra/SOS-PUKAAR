@@ -93,6 +93,7 @@ class PukaarRepository(private val sessionStore: SessionStore) {
     suspend fun elderlySettings() = api.elderlySettings()
     suspend fun updateElderlySettings(settings: ElderlySettingsDto) = api.updateElderlySettings(settings)
     suspend fun heartbeat() = api.heartbeat()
+    suspend fun acknowledgeInactivity() = api.acknowledgeInactivity()
     suspend fun completeLatestDrill(confirmed: Boolean = true): DrillCompleteResponse =
         api.completeLatestDrill(DrillCompleteRequest(contactsConfirmed = confirmed))
 }

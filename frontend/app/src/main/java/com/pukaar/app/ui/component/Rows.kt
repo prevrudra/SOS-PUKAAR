@@ -169,7 +169,7 @@ fun ValueRow(
     }
 }
 
-/** Tappable label with a chevron — used by Emergency Info, FAQ and Help Video. */
+/** Tappable label with a chevron — used by Emergency Info and FAQ. */
 @Composable
 fun NavigationRow(
     title: String,
@@ -204,7 +204,7 @@ fun NavigationRow(
     }
 }
 
-/** Single-choice row used by Language and the Elderly Help intervals. */
+/** Single-choice row used by Language and the inactivity intervals. */
 @Composable
 fun ChoiceRow(
     title: String,

@@ -1,14 +1,12 @@
 package com.pukaar.app.ui.navigation
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -16,80 +14,96 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.pukaar.app.PukaarApp
 import com.pukaar.app.R
-import com.pukaar.app.ui.navigation.SubscriptionUi
+import com.pukaar.app.ui.component.SuccessScreen
+import com.pukaar.app.ui.screen.contacts.ViewContactsScreen
+import com.pukaar.app.ui.screen.emergencycard.CardQrStyle
+import com.pukaar.app.ui.screen.emergencycard.CardReadyScreen
+import com.pukaar.app.ui.screen.emergencycard.DownloadCardScreen
+import com.pukaar.app.ui.screen.emergencycard.EmergencyCardDraft
+import com.pukaar.app.ui.screen.emergencycard.EmergencyCardFlowScreen
+import com.pukaar.app.ui.screen.emergencycard.LockScreenCardScreen
+import com.pukaar.app.ui.screen.emergencycard.PlanInactiveDialog
+import com.pukaar.app.ui.screen.emergencycard.PrintOptions
+import com.pukaar.app.ui.screen.emergencycard.PrintableCardScreen
+import com.pukaar.app.ui.screen.faq.FaqScreen
+import com.pukaar.app.ui.screen.general.GeneralSettingsScreen
+import com.pukaar.app.ui.screen.home.HomeScreen
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import com.pukaar.app.PukaarApp
+import com.pukaar.app.ui.screen.contacts.ContactFormScreen
+import com.pukaar.app.ui.screen.contacts.alertContactsOnly
+import com.pukaar.app.ui.screen.contacts.asPreSavedNumbers
+import com.pukaar.app.ui.screen.contacts.toDraft
+import com.pukaar.app.ui.screen.home.HomeMode
+import com.pukaar.app.ui.screen.splash.SplashRoute
+import com.pukaar.app.ui.share.rememberInviteAction
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import com.pukaar.app.ui.component.SuccessScreen
-import com.pukaar.app.ui.screen.about.AboutScreen
-import com.pukaar.app.ui.screen.aftersos.WhatHappensAfterSosScreen
-import com.pukaar.app.ui.screen.contacts.ContactFormScreen
-import com.pukaar.app.ui.screen.contacts.ViewContactsScreen
-import com.pukaar.app.ui.screen.contacts.toDraft
-import com.pukaar.app.ui.screen.elderlyhelp.ElderlyHelpScreen
-import com.pukaar.app.ui.screen.elderlyworks.HowElderlyHelpWorksScreen
-import com.pukaar.app.ui.screen.emergencyinfo.EmergencyInfoScreen
-import com.pukaar.app.ui.screen.faq.FaqScreen
-import com.pukaar.app.ui.screen.helpvideo.HelpVideoScreen
-import com.pukaar.app.ui.screen.home.HomeMode
-import com.pukaar.app.ui.screen.home.HomeScreen
-import com.pukaar.app.ui.screen.homemodeguide.HomeModeGuideScreen
-import com.pukaar.app.ui.screen.howitworks.HowThisWorksScreen
-import com.pukaar.app.ui.screen.inactivity.InactivityFeatureScreen
+import com.pukaar.app.ui.screen.home.SosNotActiveDialog
+import com.pukaar.app.ui.screen.howitworks.EmergencyCardGuideScreen
+import com.pukaar.app.ui.screen.howitworks.HowItWorksHubScreen
+import com.pukaar.app.ui.screen.howitworks.InactivityGuideScreen
+import com.pukaar.app.ui.screen.howitworks.SosGuideScreen
+import com.pukaar.app.ui.screen.howitworks.SafeArrivalGuideScreen
+import com.pukaar.app.ui.screen.howitworks.WhenToUseScreen
 import com.pukaar.app.ui.screen.language.LanguageScreen
-import com.pukaar.app.ui.screen.legal.LegalTermsScreen
+import com.pukaar.app.ui.screen.menu.MenuItem
 import com.pukaar.app.ui.screen.menu.MenuScreen
-import com.pukaar.app.ui.screen.mockdrill.MockDrillScreen
-import com.pukaar.app.ui.screen.notifications.NotificationsScreen
-import com.pukaar.app.ui.screen.payment.PaymentReferralScreen
-import com.pukaar.app.ui.screen.recordings.RecordingsScreen
-import com.pukaar.app.ui.screen.privacy.PrivacySecurityScreen
-import com.pukaar.app.ui.screen.notifications.NotificationPreferences
-import com.pukaar.app.ui.screen.sossettings.SosSettingsForm
-import com.pukaar.app.ui.screen.sossettings.SosSettingsScreen
-import com.pukaar.app.ui.screen.splash.SplashRoute
+import com.pukaar.app.ui.screen.mockdrill.MockDrillChooserScreen
+import com.pukaar.app.ui.screen.mockdrill.SosDrillScreen
+import com.pukaar.app.ui.screen.onboarding.BeforeYouStartDialog
+import com.pukaar.app.ui.screen.onboarding.CouponDialog
+import com.pukaar.app.ui.screen.onboarding.InactivityOnboardingScreen
+import com.pukaar.app.ui.screen.onboarding.OnboardingHubScreen
+import com.pukaar.app.ui.screen.onboarding.SosOnboardingScreen
+import com.pukaar.app.ui.screen.payment.PlansScreen
+import com.pukaar.app.ui.screen.protection.ProtectionType
 import com.pukaar.app.ui.screen.success.SuccessType
+import com.pukaar.app.ui.screen.tripshield.TripShieldScreen
+import com.pukaar.app.ui.screen.whoispukaarfor.WhoIsPukaarForScreen
 
 /**
  * The app's single navigation graph.
  *
  * Screens are added here and nowhere else, so the set of reachable destinations
- * stays readable in one file. All behaviour arrives through [actions]; swap
- * [NoOpPukaarActions] for a real implementation to bring the app to life.
+ * stays readable in one file. All behaviour arrives through [actions] — by default
+ * [InMemoryPukaarActions], which remembers what the setups collect for as long as
+ * the app is running; swap in a repository-backed one to make it outlive that.
  */
 @Composable
 fun PukaarNavHost(
     modifier: Modifier = Modifier,
     navController: NavHostController = rememberNavController(),
-    actions: PukaarActions = NoOpPukaarActions,
+    actions: PukaarActions = InMemoryPukaarActions,
     startDestination: Route = Route.Splash,
     contacts: List<com.pukaar.app.ui.screen.contacts.ContactUiModel> = emptyList(),
     onSaveContact: ((com.pukaar.app.ui.screen.contacts.ContactDraft, () -> Unit) -> Unit)? = null,
     onDeleteContact: ((String, () -> Unit) -> Unit)? = null,
     onResendVerification: ((com.pukaar.app.ui.screen.contacts.ContactUiModel) -> Unit)? = null,
     onContactsRefresh: (() -> Unit)? = null,
-    onRequestEmergency: (HomeMode) -> Unit = { mode ->
-        when (mode) {
-            HomeMode.SOS -> actions.triggerSos()
-            HomeMode.HELP -> actions.triggerHelp()
-        }
+    onRequestEmergency: (com.pukaar.app.ui.screen.home.HomeMode) -> Unit = {
+        actions.triggerSos()
     },
-    onRequestMockDrill: (HomeMode) -> Unit = { mode ->
-        actions.startMockDrill(mode == HomeMode.SOS)
+    onRequestMockDrill: (com.pukaar.app.ui.screen.home.HomeMode) -> Unit = {
+        actions.startMockDrill(it == com.pukaar.app.ui.screen.home.HomeMode.SOS)
     }
 ) {
     // Every save in the mock-ups lands on the same confirmation panel.
     fun showSuccess(type: SuccessType) = navController.navigate(Route.Success.pathFor(type))
 
-    // The chosen mode belongs to the whole graph, not just Home: Mock Drill
-    // rehearses whichever of the two the user is currently in.
-    var mode by rememberSaveable { mutableStateOf(HomeMode.SOS) }
-
-    LaunchedEffect(Unit) {
-        val stored = PukaarApp.instance.sessionStore.homeMode.first()
-        mode = if (stored == "HELP") HomeMode.HELP else HomeMode.SOS
+    // The Emergency Card, held above the five destinations that read it. Seeded
+    // from whatever was last submitted so re-entering the flow is an edit.
+    var cardDraft by remember {
+        mutableStateOf(actions.loadEmergencyCard() ?: EmergencyCardDraft())
     }
+    var printOptions by remember { mutableStateOf(PrintOptions()) }
+
+    // Which of the two card faces is being looked at. Held here rather than on the
+    // finished-card screen so printing it and setting it as a wallpaper show the
+    // same face that was on screen when those were tapped.
+    var cardQrStyle by rememberSaveable { mutableStateOf(CardQrStyle.WITH_DETAILS) }
 
     NavHost(
         navController = navController,
@@ -97,43 +111,252 @@ fun PukaarNavHost(
         modifier = modifier
     ) {
         composable(Route.Splash.path) {
+            val scope = rememberCoroutineScope()
             SplashRoute(
                 onFinished = {
-                    navController.navigate(Route.Home.path) {
-                        popUpTo(Route.Splash.path) { inclusive = true }
+                    scope.launch {
+                        val passed = PukaarApp.instance.sessionStore.mockDrillPassed.first()
+                        val dest = if (passed) Route.Home.path else Route.MockDrill.path
+                        navController.navigate(dest) {
+                            popUpTo(Route.Splash.path) { inclusive = true }
+                        }
                     }
                 }
             )
         }
 
         composable(Route.Home.path) {
+            // Production SOS: always fire through the countdown overlay host.
+            // Plan gate is skipped so a real emergency is never blocked by UI.
             HomeScreen(
-                mode = mode,
-                onModeChange = { newMode ->
-                    mode = newMode
-                    actions.updateHomeMode(newMode)
-                },
-                onPrimaryAction = { active -> onRequestEmergency(active) },
+                onSosClick = { onRequestEmergency(HomeMode.SOS) },
                 onMenuClick = { navController.navigate(Route.Menu.path) }
             )
         }
 
         composable(Route.Menu.path) {
+            val invite = rememberInviteAction()
+
             MenuScreen(
-                onItemClick = { item -> navController.navigate(item.route.path) },
+                onItemClick = { item ->
+                    when (item) {
+                        // Hands the invite to WhatsApp and stays put; every other
+                        // tile is a destination.
+                        MenuItem.INVITE -> invite()
+                        else -> item.route?.let { navController.navigate(it.path) }
+                    }
+                },
                 onSettingsClick = { navController.navigate(Route.Settings.path) },
                 onClose = { navController.popBackStack() }
             )
         }
 
-        composable(Route.Settings.path) {
-            val context = androidx.compose.ui.platform.LocalContext.current
-            com.pukaar.app.ui.screen.settings.SettingsScreen(
+        composable(Route.WhoIsPukaarFor.path) {
+            WhoIsPukaarForScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(Route.HowItWorks.path) {
+            HowItWorksHubScreen(
+                onTypeSelected = { type -> navController.navigate(type.guideRoute.path) },
+                onEmergencyCardClick = {
+                    navController.navigate(Route.EmergencyCardGuide.path)
+                },
+                onWhenToUseClick = { navController.navigate(Route.WhenToUse.path) },
+                onSafeArrivalClick = { navController.navigate(Route.SafeArrivalGuide.path) },
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(Route.SafeArrivalGuide.path) {
+            SafeArrivalGuideScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(Route.WhenToUse.path) {
+            WhenToUseScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(Route.SosGuide.path) {
+            SosGuideScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(Route.InactivityGuide.path) {
+            InactivityGuideScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(Route.EmergencyCardGuide.path) {
+            EmergencyCardGuideScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(Route.MockDrill.path) {
+            MockDrillChooserScreen(
+                onDrillSelected = { drill ->
+                    // Production: selecting SOS also kicks off a live mock drill session.
+                    if (drill.route == Route.SosDrill) {
+                        onRequestMockDrill(HomeMode.SOS)
+                    }
+                    navController.navigate(drill.route.path)
+                },
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(Route.SosDrill.path) {
+            SosDrillScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(Route.TripShield.path) {
+            TripShieldScreen(
                 onBack = { navController.popBackStack() },
-                onBatteryOptimization = { com.pukaar.app.emergency.OemBatteryHelper.requestUnrestrictedBattery(context) },
-                onAutostart = { com.pukaar.app.emergency.OemBatteryHelper.openOemAutostartSettings(context) },
-                onOverlayPermission = { com.pukaar.app.emergency.OemBatteryHelper.requestOverlayPermission(context) },
-                onVolumeSosAccessibility = { com.pukaar.app.emergency.AccessibilityHelper.openAccessibilitySettings(context) }
+                // Straight out to the SOS screen, past the menu in between.
+                onBackToHome = {
+                    navController.popBackStack(Route.Home.path, inclusive = false)
+                }
+                // onItemClick is left at its no-op default: the rows press but
+                // nothing behind them is built yet.
+            )
+        }
+
+        composable(Route.PaymentReferral.path) {
+            PlansScreen(
+                onBack = { navController.popBackStack() },
+                onPlanSelected = { plan ->
+                    actions.upgradePlan(plan)
+                    showSuccess(SuccessType.PAYMENT_COMPLETED)
+                }
+            )
+        }
+
+        composable(Route.QuickOnboarding.path) {
+            // The notice gates the hub rather than sitting on it: whose phone this
+            // is decides everything the setups collect, and it cannot be changed
+            // from inside them. Saved against this back stack entry, so stepping
+            // into a setup and back does not ask again, while leaving for the menu
+            // and returning does.
+            var readTheNotice by rememberSaveable { mutableStateOf(false) }
+
+            // Which setup is waiting on a coupon; null when none has been picked.
+            var couponFor by rememberSaveable { mutableStateOf<ProtectionType?>(null) }
+
+            OnboardingHubScreen(
+                // Picking a protection opens its coupon gate rather than its first
+                // step — the code is asked for before any work, so a refused one
+                // costs nothing rather than an evening of verifying contacts.
+                onTypeSelected = { type -> couponFor = type },
+                onBack = { navController.popBackStack() }
+            )
+
+            if (!readTheNotice) {
+                BeforeYouStartDialog(
+                    onContinue = { name ->
+                        actions.saveUserDisplayName(name)
+                        readTheNotice = true
+                    },
+                    initialName = runCatching {
+                        kotlinx.coroutines.runBlocking {
+                            PukaarApp.instance.repository.me().fullName.orEmpty()
+                        }
+                    }.getOrDefault(""),
+                    onDismiss = {
+                        // First-run starts here — dismissing must still leave a usable app.
+                        if (!navController.popBackStack()) {
+                            navController.navigate(Route.Home.path) {
+                                popUpTo(Route.QuickOnboarding.path) { inclusive = true }
+                                launchSingleTop = true
+                            }
+                        }
+                    }
+                )
+            } else {
+                couponFor?.let { type ->
+                    CouponDialog(
+                        accent = type.accent,
+                        onProceed = { code ->
+                            actions.redeemCoupon(code, type)
+                            couponFor = null
+                            navController.navigate(type.setupRoute.path)
+                        },
+                        // Closing this one returns to the hub, not to the menu: the
+                        // notice has been read, and the other protection may still
+                        // be what they wanted.
+                        onDismiss = { couponFor = null }
+                    )
+                }
+            }
+        }
+
+        // Wait until contacts are saved+verified on the server before leaving.
+        fun finishOnboarding(result: com.pukaar.app.ui.screen.onboarding.OnboardingResult) {
+            actions.completeOnboarding(result) { ok ->
+                if (!ok) return@completeOnboarding
+                navController.navigate(Route.Home.path) {
+                    popUpTo(navController.graph.startDestinationId) { inclusive = true }
+                    launchSingleTop = true
+                }
+            }
+        }
+
+        composable(Route.SosOnboarding.path) {
+            SosOnboardingScreen(
+                onBack = { navController.popBackStack() },
+                onFinished = ::finishOnboarding,
+                onShareApp = actions::shareApp
+            )
+        }
+
+        composable(Route.InactivityOnboarding.path) {
+            InactivityOnboardingScreen(
+                onBack = { navController.popBackStack() },
+                onFinished = ::finishOnboarding,
+                onShareApp = actions::shareApp
+            )
+        }
+
+        composable(Route.ViewContacts.path) {
+            LaunchedEffect(Unit) { onContactsRefresh?.invoke() }
+            val listed = contacts.ifEmpty { actions.loadContacts() }
+            ViewContactsScreen(
+                contacts = listed.alertContactsOnly(),
+                preSavedNumbers = listed.asPreSavedNumbers() + actions.loadPreSavedNumbers(),
+                inactivityTiming = actions.loadInactivityTiming(),
+                onBack = { navController.popBackStack() },
+                onAddContact = { navController.navigate(Route.AddContact.path) },
+                onSaveContact = { contact ->
+                    val draft = contact.toDraft()
+                    if (onSaveContact != null) {
+                        onSaveContact(draft) { onContactsRefresh?.invoke() }
+                    } else {
+                        actions.saveContact(contact)
+                        onContactsRefresh?.invoke()
+                    }
+                },
+                onDeleteContact = { contact ->
+                    if (onDeleteContact != null) {
+                        onDeleteContact(contact.id) { onContactsRefresh?.invoke() }
+                    } else {
+                        actions.deleteContact(contact)
+                        onContactsRefresh?.invoke()
+                    }
+                },
+                onSavePreSavedNumber = { number ->
+                    val draft = number.toDraft()
+                    if (onSaveContact != null) {
+                        onSaveContact(draft) { onContactsRefresh?.invoke() }
+                    } else {
+                        actions.savePreSavedNumber(number)
+                        onContactsRefresh?.invoke()
+                    }
+                },
+                onDeletePreSavedNumber = { number ->
+                    if (onDeleteContact != null) {
+                        onDeleteContact(number.id) { onContactsRefresh?.invoke() }
+                    } else {
+                        actions.deletePreSavedNumber(number)
+                        onContactsRefresh?.invoke()
+                    }
+                },
+                onSaveInactivityTiming = { timing ->
+                    actions.saveInactivityTiming(timing)
+                }
             )
         }
 
@@ -142,9 +365,7 @@ fun PukaarNavHost(
                 onBack = { navController.popBackStack() },
                 onSave = { draft ->
                     if (onSaveContact != null) {
-                        onSaveContact(draft) {
-                            showSuccess(SuccessType.CONTACT_ADDED)
-                        }
+                        onSaveContact(draft) { showSuccess(SuccessType.CONTACT_ADDED) }
                     } else {
                         actions.saveContact(draft)
                         showSuccess(SuccessType.CONTACT_ADDED)
@@ -159,249 +380,144 @@ fun PukaarNavHost(
         ) { entry ->
             val contactId = entry.arguments?.getString(Route.EditContact.ARG_CONTACT_ID) ?: ""
             val contact = contacts.firstOrNull { it.id == contactId }
+                ?: actions.loadContacts().firstOrNull { it.id == contactId }
             if (contact != null) {
                 ContactFormScreen(
                     initial = contact.toDraft(),
                     onBack = { navController.popBackStack() },
                     onSave = { draft ->
                         if (onSaveContact != null) {
-                            onSaveContact(draft) {
-                                showSuccess(SuccessType.CONTACT_UPDATED)
-                            }
+                            onSaveContact(draft) { showSuccess(SuccessType.CONTACT_ADDED) }
                         } else {
                             actions.saveContact(draft)
-                            showSuccess(SuccessType.CONTACT_UPDATED)
+                            showSuccess(SuccessType.CONTACT_ADDED)
                         }
                     },
                     onDelete = {
-                        if (onDeleteContact != null) {
-                            onDeleteContact(contactId) {
-                                navController.popBackStack()
-                                showSuccess(SuccessType.CONTACT_DELETED)
-                            }
-                        }
+                        onDeleteContact?.invoke(contactId) { navController.popBackStack() }
                     },
-                    onResendVerification = {
-                        onResendVerification?.invoke(contact)
-                    }
+                    onResendVerification = { onResendVerification?.invoke(contact) }
                 )
             }
         }
 
-        composable(Route.SosSettings.path) {
-            var initial by remember { mutableStateOf<SosSettingsForm?>(null) }
-            LaunchedEffect(Unit) {
-                initial = actions.loadSosSettings()
-            }
-            if (initial != null) {
-                SosSettingsScreen(
-                    onBack = { navController.popBackStack() },
-                    initialForm = initial!!,
-                    onSave = { form ->
-                        actions.saveSosSettings(form)
-                        showSuccess(SuccessType.SOS_SETTINGS_SAVED)
-                    }
-                )
-            }
-        }
-
-        composable(Route.MockDrill.path) {
-            MockDrillScreen(
-                mode = mode,
+        composable(Route.Settings.path) {
+            val context = androidx.compose.ui.platform.LocalContext.current
+            com.pukaar.app.ui.screen.settings.SettingsScreen(
                 onBack = { navController.popBackStack() },
-                onStartLiveDrill = {
-                    onRequestMockDrill(mode)
-                }
+                onBatteryOptimization = { com.pukaar.app.emergency.OemBatteryHelper.requestUnrestrictedBattery(context) },
+                onAutostart = { com.pukaar.app.emergency.OemBatteryHelper.openOemAutostartSettings(context) },
+                onOverlayPermission = { com.pukaar.app.emergency.OemBatteryHelper.requestOverlayPermission(context) },
+                onVolumeSosAccessibility = { com.pukaar.app.emergency.AccessibilityHelper.openAccessibilitySettings(context) }
             )
         }
 
-        composable(Route.ViewContacts.path) {
-            val list = if (contacts.isNotEmpty()) contacts else actions.loadContacts()
-            ViewContactsScreen(
-                contacts = list,
+        composable(Route.GeneralSettings.path) {
+            GeneralSettingsScreen(
                 onBack = { navController.popBackStack() },
-                onAddContact = { navController.navigate(Route.AddContact.path) },
-                onEditContact = { contact ->
-                    navController.navigate(Route.EditContact.pathFor(contact.id))
+                onSave = { settings ->
+                    actions.saveGeneralSettings(settings)
+                    showSuccess(SuccessType.GENERAL_SETTINGS_SAVED)
                 }
-            )
-        }
-
-        composable(Route.ElderlyHelp.path) {
-            var initial by remember { mutableStateOf<Pair<com.pukaar.app.ui.screen.elderlyhelp.InactivityWindow, Boolean>?>(null) }
-            LaunchedEffect(Unit) {
-                initial = actions.loadElderlyHelp()
-            }
-            if (initial != null) {
-                ElderlyHelpScreen(
-                    onBack = { navController.popBackStack() },
-                    initialWindow = initial!!.first,
-                    initialMedicationReminder = initial!!.second,
-                    onSave = { window, medicationReminder ->
-                        actions.saveElderlyHelp(window, medicationReminder)
-                        showSuccess(SuccessType.ELDERLY_HELP_SAVED)
-                    }
-                )
-            }
-        }
-
-        composable(Route.EmergencyInfo.path) {
-            var form by remember { mutableStateOf<com.pukaar.app.ui.screen.emergencyinfo.EmergencyInfoForm?>(null) }
-            LaunchedEffect(Unit) {
-                form = actions.loadEmergencyInfo()
-            }
-            if (form != null) {
-                EmergencyInfoScreen(
-                    onBack = { navController.popBackStack() },
-                    initial = form!!,
-                    onSave = { updated ->
-                        actions.saveEmergencyInfo(updated)
-                        showSuccess(SuccessType.EMERGENCY_INFO_SAVED)
-                    }
-                )
-            }
-        }
-
-        composable(Route.Recordings.path) {
-            RecordingsScreen(onBack = { navController.popBackStack() })
-        }
-
-        composable(Route.PaymentReferral.path) {
-            var subUi by remember { mutableStateOf<SubscriptionUi?>(null) }
-            val context = LocalContext.current
-            LaunchedEffect(Unit) {
-                subUi = actions.loadSubscriptionUi()
-            }
-            val ui = subUi
-            if (ui != null) {
-                PaymentReferralScreen(
-                    planName = ui.planName,
-                    validTill = ui.validTill,
-                    referralCode = ui.referralCode,
-                    isActive = ui.isActive,
-                    individualPrice = ui.individualPrice,
-                    familyPrice = ui.familyPrice,
-                    referralCount = ui.referralCount,
-                    onBack = { navController.popBackStack() },
-                    onUpgradeIndividual = {
-                        actions.upgradePlan(
-                            plan = "INDIVIDUAL",
-                            onSuccess = { showSuccess(SuccessType.PAYMENT_COMPLETED) },
-                            onFailure = { msg ->
-                                android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
-                            }
-                        )
-                    },
-                    onUpgradeFamily = {
-                        actions.upgradePlan(
-                            plan = "FAMILY",
-                            onSuccess = { showSuccess(SuccessType.PAYMENT_COMPLETED) },
-                            onFailure = { msg ->
-                                android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
-                            }
-                        )
-                    },
-                    onViewHistory = actions::viewPaymentHistory,
-                    onShareReferral = actions::shareReferralCode
-                )
-            }
-        }
-
-        composable(Route.HelpVideo.path) {
-            HelpVideoScreen(
-                onBack = { navController.popBackStack() },
-                onPlayMainVideo = actions::playIntroVideo,
-                onTopicClick = actions::playTopic
             )
         }
 
         composable(Route.Language.path) {
-            var initial by remember { mutableStateOf<com.pukaar.app.ui.screen.language.AppLanguage?>(null) }
-            LaunchedEffect(Unit) {
-                initial = actions.loadLanguage()
-            }
-            if (initial != null) {
-                LanguageScreen(
-                    onBack = { navController.popBackStack() },
-                    initialLanguage = initial!!,
-                    onSave = { language ->
-                        actions.saveLanguage(language)
-                        showSuccess(SuccessType.LANGUAGE_SAVED)
-                    }
-                )
-            }
-        }
-
-        composable(Route.Notifications.path) {
-            var prefs by remember { mutableStateOf<NotificationPreferences?>(null) }
-            LaunchedEffect(Unit) {
-                prefs = actions.loadNotificationPreferences()
-            }
-            if (prefs != null) {
-                NotificationsScreen(
-                    onBack = { navController.popBackStack() },
-                    initialPreferences = prefs!!,
-                    onSave = { preferences ->
-                        actions.saveNotificationPreferences(preferences)
-                        showSuccess(SuccessType.NOTIFICATIONS_SAVED)
-                    }
-                )
-            }
+            LanguageScreen(
+                onBack = { navController.popBackStack() },
+                onSave = { language ->
+                    actions.saveLanguage(language)
+                    showSuccess(SuccessType.LANGUAGE_SAVED)
+                }
+            )
         }
 
         composable(Route.Faq.path) {
-            var selected by remember { mutableStateOf<com.pukaar.app.ui.screen.faq.FaqEntry?>(null) }
             FaqScreen(
                 onBack = { navController.popBackStack() },
-                onEntryClick = { selected = it }
+                onEntryClick = actions::openFaqEntry
             )
-            selected?.let { entry ->
-                androidx.compose.material3.AlertDialog(
-                    onDismissRequest = { selected = null },
-                    title = { androidx.compose.material3.Text(stringResource(entry.questionRes)) },
-                    text = { androidx.compose.material3.Text(stringResource(entry.answerRes)) },
-                    confirmButton = {
-                        androidx.compose.material3.TextButton(onClick = { selected = null }) {
-                            androidx.compose.material3.Text(stringResource(R.string.action_ok))
-                        }
+        }
+
+        composable(Route.EmergencyCard.path) {
+            // The gate sits on the form rather than in front of it: seeing the card
+            // they were about to make is the argument for paying for it.
+            var planGate by rememberSaveable { mutableStateOf(!actions.isPlanActive()) }
+
+            EmergencyCardFlowScreen(
+                draft = cardDraft,
+                onDraftChange = { cardDraft = it },
+                onGenerate = {
+                    actions.saveEmergencyCard(cardDraft)
+                    // Replaces the builder rather than stacking on it: Back from
+                    // the finished card returns to the menu, and "Edit Card" is
+                    // the way back into the form. launchSingleTop keeps a second
+                    // trip through the form from leaving two finished cards on
+                    // the stack.
+                    navController.navigate(Route.EmergencyCardReady.path) {
+                        popUpTo(Route.EmergencyCard.path) { inclusive = true }
+                        launchSingleTop = true
                     }
+                },
+                onExit = { navController.popBackStack() }
+            )
+
+            if (planGate) {
+                PlanInactiveDialog(
+                    onActivate = {
+                        planGate = false
+                        navController.navigate(Route.PaymentReferral.path)
+                    },
+                    // Left on the form rather than sent back: somebody who wants to
+                    // read the fields before deciding should be able to.
+                    onDismiss = { planGate = false }
                 )
             }
         }
 
-        composable(Route.About.path) {
-            AboutScreen(
-                versionName = stringResource(R.string.about_version),
+        composable(Route.EmergencyCardReady.path) {
+            CardReadyScreen(
+                draft = cardDraft,
+                style = cardQrStyle,
+                onStyleChange = { cardQrStyle = it },
+                onSaveQr = { actions.saveCardQr(cardDraft) },
+                onShareQr = { actions.shareCardQr(cardDraft) },
+                onDownload = { navController.navigate(Route.EmergencyCardDownload.path) },
+                onSetLockScreen = {
+                    navController.navigate(Route.EmergencyCardLockScreen.path)
+                },
+                onEdit = { navController.navigate(Route.EmergencyCard.path) },
                 onBack = { navController.popBackStack() }
             )
         }
 
-        composable(Route.HowThisWorks.path) {
-            HowThisWorksScreen(onBack = { navController.popBackStack() })
+        composable(Route.EmergencyCardDownload.path) {
+            DownloadCardScreen(
+                options = printOptions,
+                onOptionsChange = { printOptions = it },
+                onDownload = {
+                    actions.downloadCard(cardDraft, printOptions)
+                    navController.navigate(Route.EmergencyCardPrintable.path)
+                },
+                onBack = { navController.popBackStack() }
+            )
         }
 
-        composable(Route.WhatHappensAfterSos.path) {
-            WhatHappensAfterSosScreen(onBack = { navController.popBackStack() })
+        composable(Route.EmergencyCardPrintable.path) {
+            PrintableCardScreen(
+                draft = cardDraft,
+                size = printOptions.size,
+                onBack = { navController.popBackStack() },
+                style = cardQrStyle
+            )
         }
 
-        composable(Route.HomeModeGuide.path) {
-            HomeModeGuideScreen(onBack = { navController.popBackStack() })
-        }
-
-        composable(Route.LegalTerms.path) {
-            LegalTermsScreen(onBack = { navController.popBackStack() })
-        }
-
-        composable(Route.PrivacySecurity.path) {
-            PrivacySecurityScreen(onBack = { navController.popBackStack() })
-        }
-
-        composable(Route.HowElderlyHelpWorks.path) {
-            HowElderlyHelpWorksScreen(onBack = { navController.popBackStack() })
-        }
-
-        composable(Route.InactivityFeature.path) {
-            InactivityFeatureScreen(onBack = { navController.popBackStack() })
+        composable(Route.EmergencyCardLockScreen.path) {
+            LockScreenCardScreen(
+                draft = cardDraft,
+                onBack = { navController.popBackStack() },
+                style = cardQrStyle
+            )
         }
 
         composable(

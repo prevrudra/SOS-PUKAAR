@@ -6,8 +6,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /**
- * Shared pending-SOS check used by the foreground poller and OEM watchdog alarms.
- * Fires the alert UI even when [AlertMonitorService] was killed.
+ * Polls /pending and fires SOS. Re-fires while the server says the event is still
+ * active — tapping Stop only silences locally until the victim marks safe.
  */
 object PendingAlertChecker {
     private const val TAG = "HighAlertPending"
@@ -23,17 +23,23 @@ object PendingAlertChecker {
             val api = AlertNetwork.api { token }
             val alert = api.pendingAlert()
             val eventId = alert.eventId
-            if (alert.active != true || eventId.isNullOrBlank()) return false
-
-            if (session.handledEventIds().contains(eventId)) {
-                runCatching { api.acknowledge(AcknowledgeRequest(eventId, "DELIVERED")) }
+            if (alert.active != true || eventId.isNullOrBlank()) {
+                // Victim marked safe — stop any leftover ringing.
+                if (AlertRingState.isRinging(appCtx)) {
+                    AlertFireHelper.dismissRinging(appCtx)
+                }
                 return false
             }
 
             Log.i(TAG, "Pending SOS $eventId — firing alert")
             AlertFireHelper.fire(appCtx, alert)
-            session.markEventHandled(eventId)
-            runCatching { api.acknowledge(AcknowledgeRequest(eventId, "DELIVERED")) }
+            if (alert.trustedContacts.isNullOrEmpty() || alert.helpNumbers.isNullOrEmpty()) {
+                AlertDataFetcher.fetchEventSnapshot(appCtx, eventId)?.let { enriched ->
+                    if (enriched.active == true) {
+                        AlertFireHelper.updateAlertData(appCtx, enriched)
+                    }
+                }
+            }
             true
         } catch (e: Exception) {
             Log.w(TAG, "Pending check failed: ${e.message}")

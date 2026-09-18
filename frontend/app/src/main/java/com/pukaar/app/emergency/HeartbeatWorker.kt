@@ -9,6 +9,9 @@ import androidx.work.WorkerParameters
 import com.pukaar.app.PukaarApp
 import java.util.concurrent.TimeUnit
 
+/**
+ * Backup usage poll + flush pending heartbeats — never fakes activity.
+ */
 class HeartbeatWorker(
     context: Context,
     params: WorkerParameters
@@ -16,7 +19,8 @@ class HeartbeatWorker(
     override suspend fun doWork(): Result {
         return try {
             if (PukaarApp.instance.sessionStore.token() != null) {
-                PukaarApp.instance.repository.heartbeat()
+                PhoneUsageTracker.pollUsageStats(applicationContext)
+                PhoneUsageTracker.flushPendingHeartbeat(applicationContext)
             }
             Result.success()
         } catch (_: Exception) {
@@ -28,10 +32,10 @@ class HeartbeatWorker(
         private const val WORK_NAME = "pukaar_heartbeat"
 
         fun schedule(context: Context) {
-            val request = PeriodicWorkRequestBuilder<HeartbeatWorker>(30, TimeUnit.MINUTES).build()
+            val request = PeriodicWorkRequestBuilder<HeartbeatWorker>(15, TimeUnit.MINUTES).build()
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                 WORK_NAME,
-                ExistingPeriodicWorkPolicy.KEEP,
+                ExistingPeriodicWorkPolicy.UPDATE,
                 request
             )
         }

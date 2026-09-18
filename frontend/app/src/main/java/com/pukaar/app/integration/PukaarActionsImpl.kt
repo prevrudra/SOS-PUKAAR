@@ -12,6 +12,7 @@ import com.pukaar.app.payment.RazorpayPaymentBridge
 import com.pukaar.app.ui.navigation.PukaarActions
 import com.pukaar.app.ui.navigation.SubscriptionUi
 import com.pukaar.app.ui.screen.contacts.ContactDraft
+import com.pukaar.app.ui.screen.contacts.ContactType
 import com.pukaar.app.ui.screen.contacts.ContactUiModel
 import com.pukaar.app.ui.screen.elderlyhelp.InactivityWindow
 import com.pukaar.app.ui.screen.emergencyinfo.EmergencyInfoForm
@@ -27,6 +28,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.tasks.await
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
@@ -36,7 +38,9 @@ class PukaarActionsImpl(
     private val context: Context,
     private val scope: CoroutineScope,
     private val onEmergency: (String, Boolean) -> Unit,
-    private val onError: (String) -> Unit
+    private val onError: (String) -> Unit,
+    private val onContactsChanged: () -> Unit = {},
+    private val onOnboardingFinished: () -> Unit = {}
 ) : PukaarActions {
 
     override fun triggerSos() = triggerEmergency(isSos = true, mockDrill = false)
@@ -47,61 +51,39 @@ class PukaarActionsImpl(
     private fun triggerEmergency(isSos: Boolean, mockDrill: Boolean) {
         scope.launch {
             try {
-                val settings = PukaarApp.instance.sessionStore.sosSettings()
-                val loc = if (settings.location) {
-                    runCatching {
-                        val client = LocationServices.getFusedLocationProviderClient(context)
-                        client.getCurrentLocation(
-                            Priority.PRIORITY_HIGH_ACCURACY,
-                            CancellationTokenSource().token
-                        ).await()
-                    }.getOrNull()
-                } else null
-
-                val event = PukaarApp.instance.repository.trigger(
-                    TriggerRequest(
-                        triggerType = when {
-                            mockDrill -> "MOCK_DRILL"
-                            isSos -> "APP"
-                            else -> "HELP"
-                        },
-                        latitude = loc?.latitude,
-                        longitude = loc?.longitude,
-                        accuracyM = loc?.accuracy?.toDouble(),
-                        mockDrill = mockDrill,
-                        batteryPct = DeviceTelemetry.batteryPercent(context),
-                        networkType = DeviceTelemetry.networkType(context)
-                    )
-                )
-                val id = event.id ?: return@launch
-                // Keep live GPS flowing so nearest police/hospital stay local to the user
-                EmergencyForegroundService.start(
+                val result = com.pukaar.app.emergency.SosTriggerEngine.triggerNow(
                     context,
-                    id,
-                    isSos = isSos && !mockDrill,
-                    recordAudio = !mockDrill && isSos && settings.audio
+                    isSos = isSos,
+                    mockDrill = mockDrill,
+                    reason = "ui"
                 )
-                if (!mockDrill && isSos && settings.audio) {
+                val settings = PukaarApp.instance.sessionStore.sosSettings()
+                if (settings.audio && (isSos || mockDrill)) {
                     withContext(Dispatchers.Main) {
                         android.widget.Toast.makeText(
                             context,
-                            context.getString(com.pukaar.app.R.string.emergency_recording_started),
+                            context.getString(
+                                if (mockDrill) com.pukaar.app.R.string.emergency_recording_drill
+                                else com.pukaar.app.R.string.emergency_recording_started
+                            ),
                             android.widget.Toast.LENGTH_LONG
                         ).show()
                     }
                 }
-
-                // Alerts go via WhatsApp Cloud API on the server — no device SMS permission.
-                if (!mockDrill && settings.alertContacts) {
-                    android.util.Log.i("PUKAAR", "Trusted-contact alerts queued via WhatsApp on server")
+                if (!result.serverOk && !mockDrill) {
+                    withContext(Dispatchers.Main) {
+                        android.widget.Toast.makeText(
+                            context,
+                            if (result.smsSent > 0)
+                                "SOS sent via SMS — reconnecting to server…"
+                            else
+                                "SOS armed offline — will retry when online",
+                            android.widget.Toast.LENGTH_LONG
+                        ).show()
+                    }
                 }
-
-                if (!mockDrill && settings.autoCall && isSos) {
-                    EmergencyAlertHelper.call112InBackground(context)
-                }
-
                 withContext(Dispatchers.Main) {
-                    onEmergency(id, mockDrill)
+                    onEmergency(result.eventId, mockDrill)
                 }
             } catch (e: Exception) {
                 onError(e.message ?: "Could not start emergency")
@@ -173,15 +155,18 @@ class PukaarActionsImpl(
     override fun saveElderlyHelp(window: InactivityWindow, medicationReminder: Boolean) {
         scope.launch {
             runCatching {
+                val soft = (window.hours / 2).coerceAtLeast(2)
                 PukaarApp.instance.repository.updateElderlySettings(
                     ElderlySettingsDto(
-                        softHours = 6,
+                        softHours = soft,
                         mediumHours = window.hours,
-                        urgentHours = 12,
+                        urgentHours = window.hours + 2,
                         inactivityMonitoringEnabled = true,
                         medicationReminderEnabled = medicationReminder
                     )
                 )
+                com.pukaar.app.emergency.InactivityMonitor.syncFromServer(context, soft, true)
+                promptUsageAccessIfNeeded()
             }.onFailure { onError(it.message ?: "Could not save elderly settings") }
         }
     }
@@ -222,7 +207,22 @@ class PukaarActionsImpl(
         )
     }
 
-    override fun upgradePlan(plan: String, onSuccess: () -> Unit, onFailure: (String) -> Unit) {
+    override fun upgradePlan(plan: com.pukaar.app.ui.screen.payment.SubscriptionPlan) {
+        val apiPlan = when (plan) {
+            com.pukaar.app.ui.screen.payment.SubscriptionPlan.PERSONAL_GROUP,
+            com.pukaar.app.ui.screen.payment.SubscriptionPlan.GLOBAL_GROUP -> "FAMILY"
+            else -> "INDIVIDUAL"
+        }
+        upgradePlanInternal(apiPlan, onSuccess = {}, onFailure = { onError(it) })
+    }
+
+    fun upgradePlan(
+        plan: String = "INDIVIDUAL",
+        onSuccess: () -> Unit = {},
+        onFailure: (String) -> Unit = {}
+    ) = upgradePlanInternal(plan, onSuccess, onFailure)
+
+    private fun upgradePlanInternal(plan: String, onSuccess: () -> Unit, onFailure: (String) -> Unit) {
         scope.launch {
             try {
                 val config = runCatching { PukaarApp.instance.repository.paymentConfig() }.getOrNull()
@@ -264,6 +264,213 @@ class PukaarActionsImpl(
         }
     }
 
+    override fun startMockDrill() = startMockDrill(isSos = true)
+
+    override fun completeOnboarding(
+        result: com.pukaar.app.ui.screen.onboarding.OnboardingResult,
+        onDone: (ok: Boolean) -> Unit
+    ) {
+        scope.launch {
+            var ok = false
+            try {
+                val protectionType = when (result.type) {
+                    com.pukaar.app.ui.screen.protection.ProtectionType.SOS ->
+                        ContactType.SOS
+                    com.pukaar.app.ui.screen.protection.ProtectionType.INACTIVITY ->
+                        ContactType.INACTIVITY
+                }
+
+                // Replace existing contacts for this protection only.
+                val existing = ContactRepositoryBridge.loadContacts()
+                existing.filter { it.type == protectionType }.forEach { old ->
+                    ContactRepositoryBridge.deleteContact(old.id)
+                }
+                // Clear prior help/pre-saved rows for this protection.
+                existing.filter {
+                    it.type == ContactType.HELP ||
+                        it.type == ContactType.DOCTOR ||
+                        it.type == ContactType.NEIGHBOUR
+                }.filter {
+                    it.notes.contains("presaved:${protectionType.name}", ignoreCase = true) ||
+                        (protectionType == ContactType.SOS && it.notes.isBlank())
+                }.forEach { old ->
+                    ContactRepositoryBridge.deleteContact(old.id)
+                }
+
+                var order = 1
+                val trusted = result.primaryContacts + result.secondaryContacts
+                for (c in trusted) {
+                    val e164 = runCatching {
+                        com.pukaar.app.util.PhoneNumbers.toE164(c.phone)
+                    }.getOrElse {
+                        val digits = c.phone.filter { it.isDigit() }
+                        com.pukaar.app.util.PhoneNumbers.fromParts("+91", digits.takeLast(10))
+                    }
+                    val (dial, national) = com.pukaar.app.util.PhoneNumbers.splitE164(e164)
+                    val draft = ContactDraft(
+                        name = c.name.trim(),
+                        mobile = national,
+                        dialCode = dial,
+                        relationship = c.relation?.name
+                            ?.lowercase()
+                            ?.replaceFirstChar { it.titlecase() }
+                            .orEmpty(),
+                        type = protectionType,
+                        priorityOrder = order++
+                    )
+                    ContactRepositoryBridge.saveVerifiedQuiet(draft)
+                        .onFailure { throw it }
+                }
+
+                for (n in result.helpNumbers) {
+                    val helpType = when (n.relation) {
+                        com.pukaar.app.ui.screen.contacts.ContactRelation.NEIGHBOUR ->
+                            ContactType.NEIGHBOUR
+                        com.pukaar.app.ui.screen.contacts.ContactRelation.OTHER ->
+                            ContactType.DOCTOR
+                        else -> ContactType.HELP
+                    }
+                    val e164 = runCatching {
+                        com.pukaar.app.util.PhoneNumbers.toE164(n.phone)
+                    }.getOrElse {
+                        val digits = n.phone.filter { it.isDigit() }
+                        com.pukaar.app.util.PhoneNumbers.fromParts("+91", digits.takeLast(10))
+                    }
+                    val (dial, national) = com.pukaar.app.util.PhoneNumbers.splitE164(e164)
+                    val draft = ContactDraft(
+                        name = n.label.trim(),
+                        mobile = national,
+                        dialCode = dial,
+                        relationship = n.relation?.name
+                            ?.lowercase()
+                            ?.replaceFirstChar { it.titlecase() }
+                            .orEmpty(),
+                        notes = "presaved:${protectionType.name}",
+                        type = helpType,
+                        priorityOrder = 1
+                    )
+                    ContactRepositoryBridge.saveVerifiedQuiet(draft)
+                        .onFailure { throw it }
+                }
+
+                result.timing?.let { timing ->
+                    PukaarApp.instance.repository.updateElderlySettings(
+                        ElderlySettingsDto(
+                            softHours = timing.softCheckHours,
+                            mediumHours = timing.alertHours,
+                            urgentHours = timing.highAlertHours,
+                            inactivityMonitoringEnabled = true
+                        )
+                    )
+                    com.pukaar.app.emergency.InactivityMonitor.syncFromServer(
+                        context,
+                        timing.softCheckHours,
+                        true
+                    )
+                    promptUsageAccessIfNeeded()
+                }
+
+                runCatching {
+                    PukaarApp.instance.repository.updateProfile(
+                        ProfileUpdateRequest(
+                            consentTerms = true,
+                            consentLocation = true
+                        )
+                    )
+                    PukaarApp.instance.repository.completeOnboarding()
+                }
+
+                ok = true
+                withContext(Dispatchers.Main) {
+                    onContactsChanged()
+                    onOnboardingFinished()
+                    onDone(true)
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    onError(e.message ?: "Could not save onboarding contacts")
+                    onDone(false)
+                }
+            }
+        }
+    }
+    override fun redeemCoupon(code: String, type: com.pukaar.app.ui.screen.protection.ProtectionType) = Unit
+    override fun shareApp(phoneE164: String?) {
+        com.pukaar.app.ui.share.shareHighAlertApp(context, phoneE164)
+    }
+
+    override fun saveUserDisplayName(name: String) {
+        val trimmed = name.trim()
+        if (trimmed.length < 2) return
+        scope.launch {
+            runCatching {
+                PukaarApp.instance.repository.updateProfile(
+                    ProfileUpdateRequest(fullName = trimmed)
+                )
+            }.onFailure { onError(it.message ?: "Could not save your name") }
+        }
+    }
+
+    override fun loadPreSavedNumbers() = emptyList<com.pukaar.app.ui.screen.contacts.PreSavedNumberUiModel>()
+    override fun saveContact(contact: ContactUiModel) = Unit
+    override fun deleteContact(contact: ContactUiModel) = Unit
+    override fun savePreSavedNumber(number: com.pukaar.app.ui.screen.contacts.PreSavedNumberUiModel) = Unit
+    override fun deletePreSavedNumber(number: com.pukaar.app.ui.screen.contacts.PreSavedNumberUiModel) = Unit
+    override fun loadInactivityTiming(): com.pukaar.app.ui.screen.onboarding.InactivityTiming {
+        return runCatching {
+            val s = kotlinx.coroutines.runBlocking {
+                PukaarApp.instance.repository.elderlySettings()
+            }
+            com.pukaar.app.ui.screen.onboarding.InactivityTiming(
+                softCheckHours = s.softHours ?: 6,
+                alertHours = s.mediumHours ?: 12,
+                highAlertHours = s.urgentHours ?: 18
+            )
+        }.getOrDefault(com.pukaar.app.ui.screen.onboarding.InactivityTiming())
+    }
+
+    override fun saveInactivityTiming(timing: com.pukaar.app.ui.screen.onboarding.InactivityTiming) {
+        scope.launch {
+            runCatching {
+                PukaarApp.instance.repository.updateElderlySettings(
+                    ElderlySettingsDto(
+                        softHours = timing.softCheckHours,
+                        mediumHours = timing.alertHours,
+                        urgentHours = timing.highAlertHours,
+                        inactivityMonitoringEnabled = true
+                    )
+                )
+                com.pukaar.app.emergency.InactivityMonitor.syncFromServer(
+                    context,
+                    timing.softCheckHours,
+                    true
+                )
+                promptUsageAccessIfNeeded()
+            }.onFailure { onError(it.message ?: "Could not save inactivity timing") }
+        }
+    }
+
+    private suspend fun promptUsageAccessIfNeeded() {
+        if (!com.pukaar.app.emergency.PhoneUsageTracker.hasUsageAccess(context)) {
+            withContext(Dispatchers.Main) {
+                context.startActivity(
+                    com.pukaar.app.emergency.PhoneUsageTracker.usageAccessSettingsIntent(context)
+                )
+            }
+        }
+    }
+
+    override fun isPlanActive(): Boolean = true
+    override fun saveGeneralSettings(settings: com.pukaar.app.ui.screen.general.GeneralSettings) = Unit
+    override fun loadEmergencyCard(): com.pukaar.app.ui.screen.emergencycard.EmergencyCardDraft? = null
+    override fun saveEmergencyCard(draft: com.pukaar.app.ui.screen.emergencycard.EmergencyCardDraft) = Unit
+    override fun saveCardQr(draft: com.pukaar.app.ui.screen.emergencycard.EmergencyCardDraft) = Unit
+    override fun shareCardQr(draft: com.pukaar.app.ui.screen.emergencycard.EmergencyCardDraft) = Unit
+    override fun downloadCard(
+        draft: com.pukaar.app.ui.screen.emergencycard.EmergencyCardDraft,
+        options: com.pukaar.app.ui.screen.emergencycard.PrintOptions
+    ) = Unit
+
     override fun viewPaymentHistory() {
         scope.launch {
             runCatching {
@@ -304,7 +511,7 @@ class PukaarActionsImpl(
             isActive = active,
             individualPrice = sub?.plans?.individual ?: 499,
             familyPrice = sub?.plans?.family ?: 699,
-            referralCount = sub?.successfulReferrals ?: 0
+            referralCount = (sub?.successfulReferrals ?: 0).toInt()
         )
     }
 

@@ -28,7 +28,7 @@ fun Throwable.userMessage(): String {
                 401 -> "Session expired. Please verify OTP again."
                 403 -> "Access denied."
                 404 -> "Not found."
-                409 -> "This contact already exists. We updated it and opened SMS for verification."
+                409 -> "Could not save this contact. Try again or edit the existing entry."
                 else -> "Request failed (${code()})"
             }
         }

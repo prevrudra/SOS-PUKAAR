@@ -71,12 +71,16 @@ services:
       YOURBULKSMS_COUNTRY: ${YOURBULKSMS_COUNTRY:-0}
       YOURBULKSMS_DLT_TE_ID: ${YOURBULKSMS_DLT_TE_ID:-}
       YOURBULKSMS_OTP_TEMPLATE: ${YOURBULKSMS_OTP_TEMPLATE:-}
+      SMS_FALLBACK: ${SMS_FALLBACK:-true}
       FCM_SERVER_KEY: ${FCM_SERVER_KEY:-}
+      FCM_SERVICE_ACCOUNT: ${FCM_SERVICE_ACCOUNT:-/secrets/firebase-service-account.json}
+      FCM_PROJECT_ID: ${FCM_PROJECT_ID:-sos-pukar-c74d9}
       GOOGLE_MAPS_API_KEY: ${GOOGLE_MAPS_API_KEY:-}
     ports:
       - "8080:8080"
     volumes:
       - pukaar_evidence:/data/evidence
+      - /opt/pukaar/secrets:/secrets:ro
     networks:
       - pukaar-net
 

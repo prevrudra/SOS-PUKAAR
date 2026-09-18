@@ -71,7 +71,7 @@ object EmergencyAlertHelper {
             h.phone?.takeIf { it.isNotBlank() }?.let { sb.append(" $it") }
             sb.append("\n")
         }
-        sb.append("Install PUKAAR High Alert app for grabbing alert.")
+        sb.append("Install PUKAAR High Alert for grabbing alerts: https://play.google.com/store/apps/details?id=com.pukaar.highalert")
         return sb.toString().trim()
     }
 
@@ -129,7 +129,7 @@ object EmergencyAlertHelper {
         }
         val who = userName.ifBlank { "PUKAAR user" }
         val message =
-            "$who is safe now. Please call and check on them now. — PUKAAR"
+            "Good news! $who is safe now.\nThe earlier safety alert has been closed. Please don't worry. ❤️\n\nTeam Pukaar"
         val numbers = relevant.map { it.phoneNumber }.filter { it.isNotBlank() }.distinct()
         val result = SmsHelper.sendSmsInBackground(context, numbers, message)
         Log.i(TAG, "Safe SMS: sent=${result.sent} failed=${result.failed}")
@@ -137,20 +137,24 @@ object EmergencyAlertHelper {
     }
 
     fun call112InBackground(context: Context) {
-        if (androidx.core.content.ContextCompat.checkSelfPermission(
-                context, android.Manifest.permission.CALL_PHONE
-            ) != android.content.pm.PackageManager.PERMISSION_GRANTED
-        ) {
-            return
-        }
+        val hasCall = androidx.core.content.ContextCompat.checkSelfPermission(
+            context, android.Manifest.permission.CALL_PHONE
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
         try {
-            val intent = android.content.Intent(android.content.Intent.ACTION_CALL).apply {
-                data = android.net.Uri.parse("tel:112")
-                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            val intent = if (hasCall) {
+                android.content.Intent(android.content.Intent.ACTION_CALL).apply {
+                    data = android.net.Uri.parse("tel:112")
+                    addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            } else {
+                android.content.Intent(android.content.Intent.ACTION_DIAL).apply {
+                    data = android.net.Uri.parse("tel:112")
+                    addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
             }
             context.startActivity(intent)
         } catch (e: Exception) {
-            Log.e(TAG, "Could not call 112", e)
+            Log.e(TAG, "Could not call/dial 112", e)
         }
     }
 }

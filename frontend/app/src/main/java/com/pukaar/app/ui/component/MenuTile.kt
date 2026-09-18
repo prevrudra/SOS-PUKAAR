@@ -6,13 +6,16 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -34,12 +37,19 @@ import com.pukaar.app.ui.theme.PukaarRed
 import com.pukaar.app.ui.theme.PukaarTheme
 import com.pukaar.app.ui.theme.SurfaceCard
 import com.pukaar.app.ui.theme.TextPrimary
+import com.pukaar.app.ui.theme.TextSecondary
 
 /**
- * One square in the menu grid: an icon over its label.
+ * One square in the menu grid: an icon over its label, and under it whatever the
+ * label alone does not say.
  *
  * Pass [iconBackground] for the badged treatment — a white glyph inside a filled
  * circle — used where the icon needs to carry a category colour of its own.
+ *
+ * [subtitle] also earns the tile a chevron, since a tile that explains where it
+ * leads should look like it leads somewhere. The chevron is laid over the tile
+ * rather than beside the text so the icon and label stay centred in the square,
+ * which is what keeps a row of these looking like a grid.
  */
 @Composable
 fun MenuTile(
@@ -48,7 +58,8 @@ fun MenuTile(
     iconTint: Color,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    iconBackground: Color? = null
+    iconBackground: Color? = null,
+    subtitle: String? = null
 ) {
     Card(
         onClick = onClick,
@@ -57,48 +68,78 @@ fun MenuTile(
         border = BorderStroke(1.dp, Outline),
         modifier = modifier
             .fillMaxWidth()
-            .height(98.dp)
+            // A floor rather than a fixed height, so a long strapline or a large
+            // font scale grows the tile instead of clipping it. Rows equalise the
+            // pair, so the taller one sets the height for both.
+            .heightIn(min = 98.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(10.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            if (iconBackground != null) {
-                Box(
-                    modifier = Modifier
-                        .size(34.dp)
-                        .background(iconBackground, CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.Center)
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                if (iconBackground != null) {
+                    Box(
+                        modifier = Modifier
+                            .size(34.dp)
+                            .background(iconBackground, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = iconTint,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                } else {
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
                         tint = iconTint,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(28.dp)
                     )
                 }
-            } else {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = label,
+                    color = TextPrimary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    lineHeight = 16.sp,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (subtitle != null) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = subtitle,
+                        color = TextSecondary,
+                        fontSize = 11.sp,
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        lineHeight = 14.sp,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            if (subtitle != null) {
                 Icon(
-                    imageVector = icon,
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                     contentDescription = null,
-                    tint = iconTint,
-                    modifier = Modifier.size(28.dp)
+                    tint = TextSecondary,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .padding(end = 4.dp)
+                        .size(18.dp)
                 )
             }
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = label,
-                color = TextPrimary,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                textAlign = TextAlign.Center,
-                maxLines = 2,
-                lineHeight = 15.sp,
-                overflow = TextOverflow.Ellipsis
-            )
         }
     }
 }

@@ -9,7 +9,35 @@ sealed class Route(val path: String) {
     data object Home : Route("home")
     data object Menu : Route("menu")
 
-    // Priority menu items
+    // Ritik menu tiles
+    data object WhoIsPukaarFor : Route("who_is_pukaar_for")
+    data object HowItWorks : Route("how_it_works")
+    data object MockDrill : Route("mock_drill")
+    data object TripShield : Route("tripshield")
+    data object SosDrill : Route("drill/sos")
+    data object PaymentReferral : Route("payment_referral")
+    data object QuickOnboarding : Route("quick_onboarding")
+    data object ViewContacts : Route("view_contacts")
+    data object GeneralSettings : Route("general_settings")
+    data object Language : Route("language")
+    data object Faq : Route("faq")
+
+    data object EmergencyCard : Route("emergency_card")
+    data object EmergencyCardReady : Route("emergency_card/ready")
+    data object EmergencyCardDownload : Route("emergency_card/download")
+    data object EmergencyCardPrintable : Route("emergency_card/printable")
+    data object EmergencyCardLockScreen : Route("emergency_card/lock_screen")
+
+    data object SosGuide : Route("guide/sos")
+    data object InactivityGuide : Route("guide/inactivity")
+    data object EmergencyCardGuide : Route("guide/emergency_card")
+    data object WhenToUse : Route("guide/when_to_use")
+    data object SafeArrivalGuide : Route("guide/safe_arrival")
+
+    data object SosOnboarding : Route("onboarding/sos")
+    data object InactivityOnboarding : Route("onboarding/inactivity")
+
+    // Production / backend-wired extras
     data object AddContact : Route("add_contact")
     data object EditContact : Route("edit_contact/{contactId}") {
         fun pathFor(id: String) = "edit_contact/$id"
@@ -17,18 +45,11 @@ sealed class Route(val path: String) {
     }
     data object Settings : Route("settings")
     data object SosSettings : Route("sos_settings")
-    data object MockDrill : Route("mock_drill")
-    data object ViewContacts : Route("view_contacts")
     data object ElderlyHelp : Route("elderly_help")
     data object EmergencyInfo : Route("emergency_info")
-    data object PaymentReferral : Route("payment_referral")
     data object HelpVideo : Route("help_video")
     data object Recordings : Route("recordings")
-
-    // Non-priority menu items
-    data object Language : Route("language")
     data object Notifications : Route("notifications")
-    data object Faq : Route("faq")
     data object About : Route("about")
     data object HowThisWorks : Route("how_this_works")
     data object WhatHappensAfterSos : Route("what_happens_after_sos")
@@ -38,7 +59,6 @@ sealed class Route(val path: String) {
     data object HowElderlyHelpWorks : Route("how_elderly_help_works")
     data object InactivityFeature : Route("inactivity_feature")
 
-    /** Shared confirmation screen; the type decides the message it shows. */
     data object Success : Route("success/{$ARG_SUCCESS_TYPE}") {
         fun pathFor(type: SuccessType): String = "success/${type.name}"
     }

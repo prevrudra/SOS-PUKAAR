@@ -90,23 +90,30 @@ public class DeliveryStatusService {
         String who = user.getFullName() != null && !user.getFullName().isBlank()
                 ? user.getFullName()
                 : user.getPhoneE164();
-        String message = who + " is safe now. Please call and check on them now. — PUKAAR";
+        String message = "Good news! " + who + " is safe now.\n"
+                + "The earlier safety alert has been closed. Please don't worry. ❤️\n\n"
+                + "Team Pukaar";
         Map<String, String> pushData = new LinkedHashMap<>();
         pushData.put("type", "USER_SAFE");
         pushData.put("eventId", eventId.toString());
         pushData.put("victimName", who);
         pushData.put("victimPhone", user.getPhoneE164());
 
+        int waSent = 0;
         for (ContactDeliveryEntity d : deliveryRepo.findByEventId(eventId)) {
             var device = alertDeviceRepo.findFirstByPhoneE164AndActiveTrueOrderByUpdatedAtDesc(d.getContactPhone());
             if (device.isPresent() && device.get().getFcmToken() != null) {
                 fcm.sendHighPriority(device.get().getFcmToken(), "PUKAAR — User Safe", message, pushData);
             }
             if (whatsApp.isConfigured()) {
-                whatsApp.sendText(d.getContactPhone(), message);
+                if (whatsApp.sendText(d.getContactPhone(), message)) {
+                    waSent++;
+                } else {
+                    log.warn("I'm Safe WhatsApp failed for {}", d.getContactPhone());
+                }
             }
         }
-        log.info("Safe notifications enqueued for event {}", eventId);
+        log.info("Safe notifications for event {} — WhatsApp sent to {} contact(s)", eventId, waSent);
     }
 
     private void applyStatus(ContactDeliveryEntity d, DeliveryStatus next) {

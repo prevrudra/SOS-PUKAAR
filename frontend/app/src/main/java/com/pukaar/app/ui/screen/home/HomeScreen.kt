@@ -1,6 +1,5 @@
 package com.pukaar.app.ui.screen.home
 
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -25,7 +24,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -40,22 +38,22 @@ import com.pukaar.app.ui.component.PukaarShield
 import com.pukaar.app.ui.component.PukaarWordmark
 import com.pukaar.app.ui.theme.Black
 import com.pukaar.app.ui.theme.Outline
+import com.pukaar.app.ui.theme.PukaarRed
+import com.pukaar.app.ui.theme.PukaarRedDark
 import com.pukaar.app.ui.theme.PukaarTheme
 import com.pukaar.app.ui.theme.SurfaceElevated
 import com.pukaar.app.ui.theme.TextPrimary
-import com.pukaar.app.ui.theme.TextSecondary
 
 /**
- * Screen 1, in either of its two modes.
+ * Screen 1: the SOS button, and nothing competing with it.
  *
- * The layout is identical for both; [mode] supplies the colour and the wording,
- * so switching modes never moves anything on screen.
+ * The screen carried a mode switch while there were two things the button could
+ * be. There is one, so there is no switch — in an emergency the first frame
+ * should ask nothing of the user but a press.
  */
 @Composable
 fun HomeScreen(
-    mode: HomeMode,
-    onModeChange: (HomeMode) -> Unit,
-    onPrimaryAction: (HomeMode) -> Unit,
+    onSosClick: () -> Unit,
     onMenuClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -70,28 +68,14 @@ fun HomeScreen(
     ) {
         Header()
 
-        Spacer(modifier = Modifier.height(22.dp))
-
-        Text(
-            text = stringResource(R.string.home_mode_label).uppercase(),
-            color = TextPrimary,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Medium,
-            letterSpacing = 1.sp
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        ModeToggle(mode = mode, onModeChange = onModeChange)
-
         Spacer(modifier = Modifier.weight(1f))
 
-        ModeButton(mode = mode, onClick = { onPrimaryAction(mode) })
+        SosButton(onClick = onSosClick)
 
         Spacer(modifier = Modifier.height(26.dp))
 
         Text(
-            text = stringResource(mode.headlineRes).uppercase(),
+            text = stringResource(R.string.home_sos_headline).uppercase(),
             color = TextPrimary,
             fontSize = 15.sp,
             fontWeight = FontWeight.Medium,
@@ -99,17 +83,6 @@ fun HomeScreen(
             lineHeight = 23.sp,
             textAlign = TextAlign.Center
         )
-
-        if (mode.descriptionRes != null) {
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = stringResource(mode.descriptionRes),
-                color = TextSecondary,
-                fontSize = 14.sp,
-                lineHeight = 21.sp,
-                textAlign = TextAlign.Center
-            )
-        }
 
         Spacer(modifier = Modifier.weight(1f))
 
@@ -143,19 +116,12 @@ private fun Header(modifier: Modifier = Modifier) {
     }
 }
 
-/**
- * The one control that matters, ringed so it reads as a physical button. Its
- * colour and label come from the active [mode].
- */
+/** The one control that matters, ringed so it reads as a physical button. */
 @Composable
-private fun ModeButton(
-    mode: HomeMode,
+private fun SosButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val accent by animateColorAsState(mode.accent, label = "buttonAccent")
-    val accentDark by animateColorAsState(mode.accentDark, label = "buttonAccentDark")
-
     Box(
         modifier = modifier
             .size(268.dp)
@@ -167,14 +133,14 @@ private fun ModeButton(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
-                    brush = Brush.radialGradient(listOf(accent, accentDark)),
+                    brush = Brush.radialGradient(listOf(PukaarRed, PukaarRedDark)),
                     shape = CircleShape
                 )
                 .clickable(onClick = onClick),
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = stringResource(mode.buttonLabelRes).uppercase(),
+                text = stringResource(R.string.sos).uppercase(),
                 color = TextPrimary,
                 fontSize = 62.sp,
                 fontWeight = FontWeight.Bold,
@@ -222,28 +188,10 @@ private fun MenuBar(
     }
 }
 
-@Preview(name = "SOS mode", showBackground = true, backgroundColor = 0xFF000000, heightDp = 780)
+@Preview(showBackground = true, backgroundColor = 0xFF000000, heightDp = 780)
 @Composable
-private fun HomeScreenSosPreview() {
+private fun HomeScreenPreview() {
     PukaarTheme {
-        HomeScreen(
-            mode = HomeMode.SOS,
-            onModeChange = {},
-            onPrimaryAction = {},
-            onMenuClick = {}
-        )
-    }
-}
-
-@Preview(name = "Help mode", showBackground = true, backgroundColor = 0xFF000000, heightDp = 780)
-@Composable
-private fun HomeScreenHelpPreview() {
-    PukaarTheme {
-        HomeScreen(
-            mode = HomeMode.HELP,
-            onModeChange = {},
-            onPrimaryAction = {},
-            onMenuClick = {}
-        )
+        HomeScreen(onSosClick = {}, onMenuClick = {})
     }
 }

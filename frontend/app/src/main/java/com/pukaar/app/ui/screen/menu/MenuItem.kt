@@ -2,36 +2,29 @@ package com.pukaar.app.ui.screen.menu
 
 import androidx.annotation.StringRes
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.DirectionsRun
 import androidx.compose.material.icons.automirrored.filled.Help
-import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Elderly
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.ContactEmergency
+import androidx.compose.material.icons.filled.Flight
 import androidx.compose.material.icons.filled.Groups
-import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.HowToReg
 import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.MedicalServices
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PersonAdd
-import androidx.compose.material.icons.filled.PhoneInTalk
-import androidx.compose.material.icons.filled.PlayCircleFilled
 import androidx.compose.material.icons.filled.Schema
-import androidx.compose.material.icons.filled.Sos
-import androidx.compose.material.icons.filled.Timer
-import androidx.compose.material.icons.filled.ToggleOn
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Wallet
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material.icons.outlined.Elderly
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.pukaar.app.R
 import com.pukaar.app.ui.navigation.Route
 import com.pukaar.app.ui.theme.AccentBlue
 import com.pukaar.app.ui.theme.AccentGrey
-import com.pukaar.app.ui.theme.AccentOrange
 import com.pukaar.app.ui.theme.AccentPurple
+import com.pukaar.app.ui.theme.PukaarCoral
 import com.pukaar.app.ui.theme.PukaarOrange
 import com.pukaar.app.ui.theme.PukaarRed
+import com.pukaar.app.ui.theme.PukaarRedDark
 import com.pukaar.app.ui.theme.SuccessGreen
 import com.pukaar.app.ui.theme.TextPrimary
 
@@ -46,62 +39,155 @@ enum class MenuItem(
     @StringRes val labelRes: Int,
     val icon: ImageVector,
     val tint: Color,
-    val route: Route,
+    /**
+     * Where the tile leads, or null for one that does something instead of going
+     * somewhere — the invite opens WhatsApp and never leaves the menu.
+     */
+    val route: Route?,
+    /** Every tile says what it is for; none is left to its label alone. */
+    @StringRes val subtitleRes: Int,
     /** Set for the badged tiles: a white glyph inside a filled circle. */
-    val iconBackground: Color? = null
+    val iconBackground: Color? = null,
+    /**
+     * Whether this tile takes a whole row — the wide [FeatureTile] treatment
+     * rather than a square in the grid. Declared rather than inferred from the
+     * row widths below, so the two can be read against each other.
+     */
+    val isFeature: Boolean = false,
+    /**
+     * A rim and a wash in this colour, for a row that should be noticed. Nothing
+     * sets it: the menu reads as one list, and a tile wearing its own colour only
+     * looked like it belonged to a different screen.
+     */
+    val accent: Color? = null,
+    /** A pill beside the label, e.g. who the feature is for. */
+    @StringRes val badgeRes: Int? = null,
+    /**
+     * Built, listed, but not ready. The tile still shows — taking it out and
+     * putting it back would teach people the menu moves around — but it says so
+     * and does not open. Only [isFeature] tiles render the mark.
+     *
+     * Nothing sets it while TripShield's inner flow is being built; put it back on
+     * TRIPSHIELD before release if that flow is not finished.
+     */
+    val comingSoon: Boolean = false,
+    /** Character index where the label flips from white to [accent], for wordmarks. */
+    val labelAccentFrom: Int? = null
 ) {
-    ADD_CONTACT(R.string.menu_add_contact, Icons.Filled.PersonAdd, TextPrimary, Route.AddContact),
-    SOS_SETTINGS(R.string.menu_sos_settings, Icons.Filled.Sos, PukaarRed, Route.SosSettings),
-    MOCK_DRILL(R.string.menu_mock_drill, Icons.Filled.PhoneInTalk, PukaarRed, Route.MockDrill),
-    VIEW_CONTACTS(R.string.menu_view_contacts, Icons.Filled.Groups, TextPrimary, Route.ViewContacts),
-    ELDERLY_HELP(R.string.menu_elderly_help, Icons.Outlined.Elderly, AccentOrange, Route.ElderlyHelp),
-    EMERGENCY_INFO(R.string.menu_emergency_info, Icons.Filled.MedicalServices, PukaarRed, Route.EmergencyInfo),
-    RECORDINGS(R.string.menu_recordings, Icons.Filled.Mic, AccentPurple, Route.Recordings),
-    PAYMENT_REFERRAL(R.string.menu_payment_referral, Icons.Filled.Wallet, SuccessGreen, Route.PaymentReferral),
-    HELP_VIDEO(R.string.menu_help_video, Icons.Filled.PlayCircleFilled, AccentPurple, Route.HelpVideo),
-
+    WHO_IS_PUKAAR_FOR(
+        R.string.menu_who_is_pukaar_for,
+        Icons.Filled.Groups,
+        TextPrimary,
+        Route.WhoIsPukaarFor,
+        R.string.menu_who_is_pukaar_for_subtitle,
+        iconBackground = PukaarCoral,
+        isFeature = true
+    ),
     HOW_PUKAAR_WORKS(
         R.string.menu_how_pukaar_works,
         Icons.Filled.Schema,
         TextPrimary,
-        Route.HowThisWorks,
-        iconBackground = AccentBlue
+        Route.HowItWorks,
+        R.string.menu_how_pukaar_works_subtitle,
+        iconBackground = AccentBlue,
+        isFeature = true
     ),
-    WHAT_HAPPENS_AFTER_SOS(
-        R.string.menu_what_happens_after_sos,
-        Icons.Filled.Warning,
+    MOCK_DRILL(
+        R.string.menu_mock_drill,
+        Icons.AutoMirrored.Filled.DirectionsRun,
         TextPrimary,
-        Route.WhatHappensAfterSos,
-        iconBackground = PukaarRed
+        Route.MockDrill,
+        R.string.menu_mock_drill_subtitle,
+        iconBackground = PukaarRed,
+        isFeature = true
     ),
-    HOME_MODE_GUIDE(
-        R.string.menu_home_mode_guide,
-        Icons.Filled.ToggleOn,
+    TRIPSHIELD(
+        R.string.menu_tripshield,
+        Icons.Filled.Flight,
         TextPrimary,
-        Route.HomeModeGuide,
-        iconBackground = AccentBlue
+        Route.TripShield,
+        R.string.menu_tripshield_subtitle,
+        iconBackground = PukaarRedDark,
+        isFeature = true,
+        badgeRes = R.string.menu_tripshield_badge,
+        // "TRIP" stays white, "SHIELD" picks up the red.
+        labelAccentFrom = 4
     ),
-    HOW_ELDERLY_HELP_WORKS(
-        R.string.menu_how_elderly_help_works,
-        Icons.Filled.Elderly,
+    EMERGENCY_CARD(
+        R.string.menu_emergency_card,
+        Icons.Filled.ContactEmergency,
         TextPrimary,
-        Route.HowElderlyHelpWorks,
+        Route.EmergencyCard,
+        R.string.menu_emergency_card_subtitle,
+        iconBackground = AccentPurple,
+        isFeature = true
+    ),
+    PAYMENT_REFERRAL(
+        R.string.menu_payment_referral,
+        Icons.Filled.Wallet,
+        TextPrimary,
+        Route.PaymentReferral,
+        R.string.menu_payment_referral_subtitle,
+        iconBackground = SuccessGreen,
+        isFeature = true
+    ),
+    INVITE(
+        R.string.menu_invite,
+        Icons.AutoMirrored.Filled.Send,
+        TextPrimary,
+        // Goes nowhere: it hands the invite to WhatsApp and leaves the user here.
+        null,
+        R.string.menu_invite_subtitle,
+        iconBackground = PukaarOrange,
+        isFeature = true
+    ),
+    QUICK_ONBOARDING(
+        R.string.menu_quick_onboarding,
+        Icons.Filled.HowToReg,
+        SuccessGreen,
+        Route.QuickOnboarding,
+        R.string.menu_quick_onboarding_subtitle
+    ),
+    ADD_CONTACT(
+        R.string.menu_add_contact,
+        Icons.Filled.PersonAdd,
+        PukaarOrange,
+        Route.AddContact,
+        R.string.menu_add_contact_sub,
         iconBackground = PukaarOrange
     ),
-    INACTIVITY_FEATURE(
-        R.string.menu_inactivity_feature,
-        Icons.Filled.Timer,
-        TextPrimary,
-        Route.InactivityFeature,
-        iconBackground = PukaarOrange
+    VIEW_CONTACTS(
+        R.string.menu_view_contacts,
+        Icons.Filled.Groups,
+        AccentBlue,
+        Route.ViewContacts,
+        R.string.menu_view_contacts_subtitle
     ),
-
-    LANGUAGE(R.string.menu_language, Icons.Filled.Language, TextPrimary, Route.Language),
-    NOTIFICATIONS(R.string.menu_notifications, Icons.Filled.Notifications, TextPrimary, Route.Notifications),
-    LEGAL_TERMS(R.string.menu_legal_terms, Icons.Filled.Description, AccentPurple, Route.LegalTerms),
-    PRIVACY_SECURITY(R.string.menu_privacy_security, Icons.Filled.Lock, SuccessGreen, Route.PrivacySecurity),
-    FAQ(R.string.menu_faq, Icons.AutoMirrored.Filled.Help, AccentBlue, Route.Faq),
-    ABOUT(R.string.menu_about, Icons.Filled.Info, AccentGrey, Route.About);
+    GENERAL(
+        R.string.menu_general,
+        Icons.Filled.Settings,
+        AccentGrey,
+        Route.GeneralSettings,
+        R.string.menu_general_subtitle
+    ),
+    LANGUAGE(
+        R.string.menu_language,
+        Icons.Filled.Language,
+        TextPrimary,
+        Route.Language,
+        R.string.menu_language_subtitle
+    ),
+    FAQ(
+        R.string.menu_faq,
+        Icons.AutoMirrored.Filled.Help,
+        TextPrimary,
+        Route.Faq,
+        R.string.menu_faq_subtitle,
+        iconBackground = AccentBlue,
+        // An odd one out since HELP left: five squares will not pair up, and a
+        // lone full-width square reads worse than a proper wide row.
+        isFeature = true
+    );
 
     companion object {
         /**
@@ -110,22 +196,20 @@ enum class MenuItem(
          * Row widths vary deliberately: tiles share their row evenly, so a row of
          * one spans the full width and a row of three splits into thirds.
          *
-         * Every [MenuItem] must appear here exactly once; `MenuItemTest` enforces
-         * it, so a new tile cannot go missing from the menu.
+         * Every [MenuItem] must appear here exactly once.
          */
         val stepRows: List<List<MenuItem>> = listOf(
-            listOf(HOW_PUKAAR_WORKS, WHAT_HAPPENS_AFTER_SOS),
-            listOf(HOW_ELDERLY_HELP_WORKS, INACTIVITY_FEATURE),
+            listOf(WHO_IS_PUKAAR_FOR),
+            listOf(HOW_PUKAAR_WORKS),
             listOf(MOCK_DRILL),
+            listOf(TRIPSHIELD),
+            listOf(EMERGENCY_CARD),
             listOf(PAYMENT_REFERRAL),
+            listOf(INVITE),
+            listOf(QUICK_ONBOARDING),
             listOf(ADD_CONTACT, VIEW_CONTACTS),
-            listOf(SOS_SETTINGS, ELDERLY_HELP),
-            listOf(EMERGENCY_INFO, RECORDINGS),
-            listOf(FAQ),
-            listOf(HELP_VIDEO, HOME_MODE_GUIDE),
-            listOf(LANGUAGE, NOTIFICATIONS),
-            listOf(LEGAL_TERMS, PRIVACY_SECURITY),
-            listOf(ABOUT)
+            listOf(GENERAL, LANGUAGE),
+            listOf(FAQ)
         )
     }
 }
