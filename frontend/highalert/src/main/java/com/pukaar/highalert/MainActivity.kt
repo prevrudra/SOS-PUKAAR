@@ -57,7 +57,7 @@ import com.pukaar.highalert.ui.theme.TextMuted
 import com.pukaar.highalert.ui.theme.TextPrimary
 import com.pukaar.highalert.ui.theme.TextSecondary
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeout
 
 class MainActivity : ComponentActivity() {
     private val notifPermission = registerForActivityResult(
@@ -78,11 +78,13 @@ class MainActivity : ComponentActivity() {
 
             LaunchedEffect(Unit) {
                 runCatching {
-                    val session = (application as HighAlertApp).session
-                    if (!session.token().isNullOrBlank()) {
-                        activePhone = session.phone().orEmpty()
-                        step = Step.Active
-                        ensureMonitoring()
+                    withTimeout(5_000) {
+                        val session = (application as HighAlertApp).session
+                        if (!session.token().isNullOrBlank()) {
+                            activePhone = session.phone().orEmpty()
+                            step = Step.Active
+                            ensureMonitoring()
+                        }
                     }
                 }.onFailure {
                     android.util.Log.e("HighAlert", "Startup session read failed: ${it.message}", it)
@@ -197,29 +199,17 @@ class MainActivity : ComponentActivity() {
                                                 loading = true
                                                 error = null
                                                 try {
-                                                    val api = AlertNetwork.api { null }
-                                                    val resp = api.verifyOtp(OtpVerifyRequest(phoneE164, otp))
+                                                    val resp = AlertNetwork.api { null }
+                                                        .verifyOtp(OtpVerifyRequest(phoneE164, otp))
                                                     val token = resp.accessToken ?: error("Could not sign in")
                                                     (application as HighAlertApp).session.save(token, phoneE164)
-                                                    val fcmToken = if (FcmRegistrar.isAvailable()) {
-                                                        runCatching {
-                                                            com.google.firebase.messaging.FirebaseMessaging
-                                                                .getInstance().token.await()
-                                                        }.getOrNull()
-                                                    } else null
-                                                    AlertNetwork.api { token }.registerDevice(
-                                                        RegisterDeviceRequest(
-                                                            phone = phoneE164,
-                                                            fcmToken = fcmToken,
-                                                            deviceId = "ha-${System.currentTimeMillis()}"
-                                                        )
-                                                    )
-                                                    if (fcmToken != null) {
-                                                        FcmRegistrar.registerToken(this@MainActivity, fcmToken)
-                                                    }
                                                     activePhone = phoneE164
-                                                    ensureMonitoring()
                                                     step = Step.Active
+                                                    ensureMonitoring()
+                                                    // FCM can hang on some OEMs — register in background after UI advances.
+                                                    scope.launch {
+                                                        FcmRegistrar.registerAfterLogin(this@MainActivity)
+                                                    }
                                                 } catch (e: Exception) {
                                                     error = friendlyError(e)
                                                 } finally {

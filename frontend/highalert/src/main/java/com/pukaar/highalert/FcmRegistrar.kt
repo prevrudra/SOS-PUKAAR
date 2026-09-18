@@ -5,6 +5,7 @@ import android.provider.Settings
 import android.util.Log
 import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeout
 
 /**
  * Registers this phone's FCM token with PUKAAR so the server can wake High Alert
@@ -12,8 +13,22 @@ import kotlinx.coroutines.tasks.await
  */
 object FcmRegistrar {
     private const val TAG = "HighAlertFCM"
+    private const val FCM_TIMEOUT_MS = 8_000L
 
-    fun isAvailable(): Boolean = true
+    fun isAvailable(): Boolean = BuildConfig.FCM_ENABLED
+
+    /** After OTP sign-in — never block the UI waiting on Google Play / FCM. */
+    suspend fun registerAfterLogin(context: Context) {
+        if (!isAvailable()) return
+        runCatching {
+            withTimeout(FCM_TIMEOUT_MS) {
+                val token = FirebaseMessaging.getInstance().token.await()
+                registerToken(context, token)
+            }
+        }.onFailure {
+            Log.w(TAG, "FCM register after login skipped: ${it.message}")
+        }
+    }
 
     suspend fun refreshAndRegister(context: Context) {
         if (!isAvailable()) {
@@ -21,8 +36,10 @@ object FcmRegistrar {
             return
         }
         runCatching {
-            val token = FirebaseMessaging.getInstance().token.await()
-            registerToken(context, token)
+            withTimeout(FCM_TIMEOUT_MS) {
+                val token = FirebaseMessaging.getInstance().token.await()
+                registerToken(context, token)
+            }
         }.onFailure {
             Log.w(TAG, "FCM token fetch failed: ${it.message}")
         }
