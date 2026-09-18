@@ -45,6 +45,7 @@ public class AlertDeliveryService {
     private final WhatsAppAlertSender whatsApp;
     private final WhatsAppSosDedupService waDedup;
     private final YourBulkSmsSender smsSender;
+    private final AuthKeyVoiceSender voiceSender;
     private final NearbyPlacesService nearbyPlacesService;
     private final PukaarProperties props;
 
@@ -188,6 +189,19 @@ public class AlertDeliveryService {
         return sb.isEmpty() ? "NONE" : sb.toString();
     }
 
+    /** Called by DeliveryRetryScheduler when contact has not acked within ~60s. */
+    @Transactional
+    public void forceVoiceEscalation(UUID userId, UUID eventId, UUID deliveryId) {
+        ContactDeliveryEntity delivery = deliveryRepo.findById(deliveryId).orElse(null);
+        if (delivery == null) return;
+        if (delivery.getAcknowledgedAt() != null) return;
+        if (channelHasVoice(delivery)) return;
+        EmergencyEventEntity event = eventRepo.findById(eventId).orElse(null);
+        UserEntity user = userRepo.findById(userId).orElse(null);
+        if (event == null || user == null) return;
+        tryVoiceEscalation(user, event, delivery.getContactPhone(), delivery);
+    }
+
     /** Called by DeliveryRetryScheduler when contact has not acked within 30s. */
     @Transactional
     public void forceSmsFallback(UUID userId, UUID eventId, UUID deliveryId) {
@@ -225,6 +239,36 @@ public class AlertDeliveryService {
             return true;
         }
         return false;
+    }
+
+    /** Automated voice IVR when push/WhatsApp/SMS did not get an ack in time. */
+    private boolean tryVoiceEscalation(
+            UserEntity user,
+            EmergencyEventEntity event,
+            String phone,
+            ContactDeliveryEntity delivery
+    ) {
+        if (!props.getNotification().isVoiceEscalationEnabled() || !voiceSender.isConfigured()) {
+            return false;
+        }
+        if (channelHasVoice(delivery)) {
+            return true;
+        }
+        String who = displayName(user);
+        if (voiceSender.sendEmergency(phone, who)) {
+            String existing = delivery.getChannel();
+            delivery.setChannel(existing == null || existing.isBlank() ? "VOICE" : existing + "+VOICE");
+            delivery.setLastError(null);
+            deliveryRepo.save(delivery);
+            log.info("Voice escalation alert placed to {} for {}", phone, who);
+            return true;
+        }
+        return false;
+    }
+
+    private static boolean channelHasVoice(ContactDeliveryEntity delivery) {
+        String ch = delivery.getChannel();
+        return ch != null && ch.toUpperCase(Locale.ROOT).contains("VOICE");
     }
 
     private String buildAlertFollowUpMessage(UserEntity user, EmergencyEventEntity event) {

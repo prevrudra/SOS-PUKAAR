@@ -53,4 +53,19 @@ public interface ContactDeliveryRepository extends JpaRepository<ContactDelivery
             @Param("olderThan") Instant olderThan,
             @Param("since") Instant since
     );
+
+    @Query("""
+            SELECT d FROM ContactDeliveryEntity d
+            WHERE d.status IN (com.pukaar.common.DeliveryStatus.SENT,
+                               com.pukaar.common.DeliveryStatus.PENDING)
+              AND d.acknowledgedAt IS NULL
+              AND d.createdAt <= :olderThan
+              AND d.createdAt >= :since
+              AND (d.channel IS NULL OR d.channel NOT LIKE '%VOICE%')
+            ORDER BY d.createdAt ASC
+            """)
+    List<ContactDeliveryEntity> findUnackedNeedingVoice(
+            @Param("olderThan") Instant olderThan,
+            @Param("since") Instant since
+    );
 }

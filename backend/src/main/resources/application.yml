@@ -108,7 +108,9 @@ pukaar:
     retry-backoff-ms: 2000
     retry-scan-ms: 15000
     sms-escalate-ms: 15000
+    voice-escalate-ms: 60000
     sms-fallback-enabled: ${SMS_FALLBACK:true}
+    voice-escalation-enabled: ${VOICE_ESCALATION:true}
   razorpay:
     key-id: ${RAZORPAY_KEY_ID:}
     key-secret: ${RAZORPAY_KEY_SECRET:}
@@ -132,6 +134,13 @@ pukaar:
       country: ${YOURBULKSMS_COUNTRY:0}
       dlt-te-id: ${YOURBULKSMS_DLT_TE_ID:}
       otp-template: ${YOURBULKSMS_OTP_TEMPLATE:Dear user , Your OTP is {#var#}. Use this to verify your Axispoint account within 10 minutes. For your security, do not share this code with anyone.}
+    voice:
+      endpoint: ${AUTHKEY_ENDPOINT:https://api.authkey.io/request}
+      auth-key: ${AUTHKEY_AUTH_KEY:}
+      country-code: ${AUTHKEY_COUNTRY_CODE:91}
+      template-id: ${AUTHKEY_VOICE_TEMPLATE_ID:}
+      message-template: ${AUTHKEY_VOICE_MESSAGE:URGENT! URGENT! This is an emergency alert from PUKAAR. {userName} may be in danger and needs immediate assistance. Please check your WhatsApp immediately for further details, including emergency information and location. Please take action now.}
+      enabled: ${AUTHKEY_VOICE_ENABLED:false}
     fcm:
       server-key: ${FCM_SERVER_KEY:}
       service-account-path: ${FCM_SERVICE_ACCOUNT:}

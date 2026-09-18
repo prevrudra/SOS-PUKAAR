@@ -78,6 +78,7 @@ public class PukaarProperties {
         private int retryMax = 5;
         private long retryBackoffMs = 2000;
         private boolean smsFallbackEnabled = false;
+        private boolean voiceEscalationEnabled = false;
     }
 
     @Data
@@ -97,6 +98,7 @@ public class PukaarProperties {
     public static class Alerts {
         private Whatsapp whatsapp = new Whatsapp();
         private Sms sms = new Sms();
+        private Voice voice = new Voice();
         private Fcm fcm = new Fcm();
 
         @Data
@@ -116,6 +118,20 @@ public class PukaarProperties {
             private String country = "0";
             private String dltTeId = "";
             private String otpTemplate = "Dear user , Your OTP is {#var#}. Use this to verify your Axispoint account within 10 minutes. For your security, do not share this code with anyone.";
+        }
+
+        @Data
+        public static class Voice {
+            private String endpoint = "https://api.authkey.io/request";
+            private String authKey = "";
+            private String countryCode = "91";
+            /** Optional AuthKey template id (vid). When set, raw voice text is not sent. */
+            private String templateId = "";
+            private String messageTemplate =
+                    "URGENT! URGENT! This is an emergency alert from PUKAAR. {userName} may be in danger "
+                            + "and needs immediate assistance. Please check your WhatsApp immediately for "
+                            + "further details, including emergency information and location. Please take action now.";
+            private boolean enabled = false;
         }
 
         @Data

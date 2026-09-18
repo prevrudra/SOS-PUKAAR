@@ -42,13 +42,13 @@ Elder triggers SOS
 
 Without step 2–3, High Alert falls back to **60-second polling** only.
 
-## Recommended backend fallback (not yet built)
+## Backend fallback escalation
 
-If no `DELIVERED` ack within **30 seconds**:
-1. SMS to trusted contact
-2. Automated voice call (IVR)
+If no `DELIVERED` ack within **30 seconds** → SMS to trusted contact (`DeliveryRetryScheduler`).
 
-Requires a job watching `emergency_contact_deliveries.status`.
+If still unacked after **60 seconds** → AuthKey.io voice IVR (`AuthKeyVoiceSender`).
+
+Configure on the VPS: `AUTHKEY_AUTH_KEY`, `AUTHKEY_VOICE_ENABLED=true`, `VOICE_ESCALATION=true`.
 
 ## iOS (future)
 

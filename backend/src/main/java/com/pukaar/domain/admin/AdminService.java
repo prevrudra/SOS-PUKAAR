@@ -1,7 +1,9 @@
 package com.pukaar.domain.admin;
 
 import com.pukaar.common.ApiException;
+import com.pukaar.common.PhoneNumbers;
 import com.pukaar.common.PaymentOrderStatus;
+import com.pukaar.domain.alert.AuthKeyVoiceSender;
 import com.pukaar.common.SubscriptionStatus;
 import com.pukaar.common.UploadStatus;
 import com.pukaar.common.UserRole;
@@ -37,6 +39,7 @@ public class AdminService {
     private final EmergencyEventRepository emergencyRepo;
     private final AudioSegmentRepository audioRepo;
     private final EvidenceStorageService evidenceStorage;
+    private final AuthKeyVoiceSender voiceSender;
 
     public Map<String, Object> stats() {
         Map<String, Object> m = new LinkedHashMap<>();
@@ -175,5 +178,18 @@ public class AdminService {
         m.put("createdAt", p.getCreatedAt());
         m.put("paidAt", p.getPaidAt());
         return m;
+    }
+
+    public Map<String, Object> testVoiceCall(String phone, String userName) {
+        if (!voiceSender.isConfigured()) {
+            throw new ApiException("VOICE_NOT_CONFIGURED", "AuthKey voice is not enabled on this server");
+        }
+        String normalized = PhoneNumbers.toE164(phone);
+        String who = userName != null && !userName.isBlank() ? userName.trim() : "Test User";
+        boolean ok = voiceSender.sendEmergency(normalized, who);
+        if (!ok) {
+            throw new ApiException("VOICE_FAILED", "AuthKey voice request failed");
+        }
+        return Map.of("phone", normalized, "userName", who, "status", "SUBMITTED");
     }
 }

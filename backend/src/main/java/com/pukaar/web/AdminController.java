@@ -68,6 +68,11 @@ public class AdminController {
         return adminService.setUserRole(id, req.getRole());
     }
 
+    @PostMapping("/test-voice")
+    public Map<String, Object> testVoice(@RequestBody TestVoiceRequest req) {
+        return adminService.testVoiceCall(req.getPhone(), req.getUserName());
+    }
+
     private static ResponseEntity<Resource> audioResponse(Resource resource, String filename) throws java.io.IOException {
         long len = resource.contentLength();
         ResponseEntity.BodyBuilder builder = ResponseEntity.ok()
@@ -84,5 +89,11 @@ public class AdminController {
     @Data
     public static class RoleRequest {
         private UserRole role;
+    }
+
+    @Data
+    public static class TestVoiceRequest {
+        private String phone;
+        private String userName;
     }
 }
