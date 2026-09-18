@@ -47,6 +47,10 @@ class HighAlertFirebaseMessagingService : FirebaseMessagingService() {
         val appCtx = applicationContext
         val eventId = data["eventId"]
         if (eventId.isNullOrBlank()) return
+        if (AlertSilence.isSilenced(appCtx, eventId)) {
+            Log.i(TAG, "FCM ignored — user silenced $eventId")
+            return
+        }
 
         // Ring immediately from thin FCM — never wait on network for sound.
         val fromPush = alertFromPushData(data)

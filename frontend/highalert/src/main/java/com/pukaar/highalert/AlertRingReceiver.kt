@@ -19,7 +19,7 @@ class AlertRingReceiver : BroadcastReceiver() {
         scope.launch {
             try {
                 val alert = AlertRingState.getActive(appCtx)
-                if (alert != null && alert.active == true) {
+                if (alert != null && alert.active == true && !AlertSilence.isSilenced(appCtx, alert.eventId)) {
                     Log.i(TAG, "Alarm-clock tick — re-ring ${alert.eventId}")
                     AlertFireHelper.reRing(appCtx, alert)
                 } else {

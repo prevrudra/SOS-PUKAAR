@@ -13,10 +13,11 @@ Signed with `deploy/secrets/pukaar-upload.jks`.
 
 - **Internal testing:** completed versionCode **40** (`1.18.3`)
 - One WhatsApp SOS per event+phone (dedup table); contact add/edit fixes
+- Deployed with backend `e7db7bd` (2026-09-18)
 
 ## High Alert — internal testing
 
-- **Internal testing:** versionCode **34** (`1.13.4`) — ready to upload
+- **Internal testing:** completed versionCode **34** (`1.13.4`)
 - Fix: full contact/police/hospital data no longer blocked by ring debounce
 - Fix: snapshot fetch retries 5× before showing thin FCM payload
 - Fix: pending poll keeps working after DELIVERED ack (server-side)

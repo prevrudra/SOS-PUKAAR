@@ -117,8 +117,7 @@ class AlertActivity : ComponentActivity() {
                         onBack = null,
                         title = if (mock) "PUKAAR TEST ALERT" else "PUKAAR SOS Alert",
                         onBeforeAction = {
-                            stopAllAlerts()
-                            markRead(eventId)
+                            userStoppedAlert(eventId)
                         },
                         modifier = Modifier
                             .weight(1f)
@@ -126,9 +125,7 @@ class AlertActivity : ComponentActivity() {
                     )
                     Button(
                         onClick = {
-                            stopAllAlerts()
-                            markRead(eventId)
-                            finish()
+                            userStoppedAlert(eventId)
                         },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color(0xFF111827),
@@ -150,15 +147,23 @@ class AlertActivity : ComponentActivity() {
         }
     }
 
-    private fun markRead(eventId: String?) {
-        if (eventId.isNullOrBlank()) return
-        Thread {
+    private fun userStoppedAlert(eventId: String?) {
+        if (eventId.isNullOrBlank()) {
+            stopAllAlerts()
+            finish()
+            return
+        }
+        AlertSilence.silence(this, eventId)
+        lifecycleScope.launch {
             runCatching {
-                val session = AlertSession(this)
-                val api = AlertNetwork.api { runBlocking { session.token() } }
-                runBlocking { api.acknowledge(AcknowledgeRequest(eventId, "READ")) }
+                val session = AlertSession(this@AlertActivity)
+                val token = session.token()
+                val api = AlertNetwork.api { token }
+                api.acknowledge(AcknowledgeRequest(eventId, "READ"))
             }
-        }.start()
+            stopAllAlerts()
+            finish()
+        }
     }
 
     private fun boostAlarmVolume() {
@@ -225,9 +230,10 @@ class AlertActivity : ComponentActivity() {
         super.onResume()
         applyAlarmWindowFlags()
         AlertRingState.getActive(this)?.let { stored ->
-            if (!stored.eventId.isNullOrBlank()) {
+            val id = stored.eventId
+            if (!id.isNullOrBlank() && !AlertSilence.isSilenced(this, id)) {
                 lifecycleScope.launch {
-                    AlertDataFetcher.fetchEventSnapshot(this@AlertActivity, stored.eventId!!)?.let { snap ->
+                    AlertDataFetcher.fetchEventSnapshot(this@AlertActivity, id)?.let { snap ->
                         if (snap.active == true) {
                             AlertFireHelper.updateAlertData(this@AlertActivity, snap)
                         }

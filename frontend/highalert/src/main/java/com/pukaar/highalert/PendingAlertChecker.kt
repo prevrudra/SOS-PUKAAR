@@ -5,10 +5,7 @@ import android.util.Log
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-/**
- * Polls /pending and fires SOS. Re-fires while the server says the event is still
- * active — tapping Stop only silences locally until the victim marks safe.
- */
+/** Polls /pending and fires SOS until the contact taps Stop or the victim marks safe. */
 object PendingAlertChecker {
     private const val TAG = "HighAlertPending"
     private val mutex = Mutex()
@@ -28,6 +25,11 @@ object PendingAlertChecker {
                 if (AlertRingState.isRinging(appCtx)) {
                     AlertFireHelper.dismissRinging(appCtx)
                 }
+                return false
+            }
+
+            if (AlertSilence.isSilenced(appCtx, eventId)) {
+                Log.i(TAG, "Pending SOS $eventId — skipped (user stopped alert)")
                 return false
             }
 

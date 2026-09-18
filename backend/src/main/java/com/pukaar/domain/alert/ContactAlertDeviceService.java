@@ -1,6 +1,7 @@
 package com.pukaar.domain.alert;
 
 import com.pukaar.common.ContactRole;
+import com.pukaar.common.DeliveryStatus;
 import com.pukaar.domain.contact.TrustedContactEntity;
 import com.pukaar.domain.contact.TrustedContactRepository;
 import com.pukaar.domain.emergency.ContactDeliveryEntity;
@@ -62,11 +63,22 @@ public class ContactAlertDeviceService {
     /** Fresh snapshot for an already-open High Alert screen (location may arrive after first fire). */
     public Map<String, Object> alertSnapshotForContact(String phoneE164, UUID eventId) {
         String phone = normalize(phoneE164);
+        if (contactDismissedAlert(eventId, phone)) {
+            return Map.of("active", false);
+        }
         return eventRepo.findById(eventId)
                 .filter(e -> e.getClosedAt() == null)
                 .filter(e -> deliveryBelongsToPhone(e.getId(), phone))
                 .map(this::toAlertPayload)
                 .orElse(Map.of("active", false));
+    }
+
+    private boolean contactDismissedAlert(UUID eventId, String phoneE164) {
+        String want = last10(phoneE164);
+        return deliveryRepo.findByEventId(eventId).stream()
+                .anyMatch(d -> last10(d.getContactPhone()).equals(want)
+                        && (d.getAcknowledgedAt() != null
+                        || d.getStatus() == DeliveryStatus.READ));
     }
 
     private boolean deliveryBelongsToPhone(UUID eventId, String phoneE164) {

@@ -96,19 +96,24 @@ object AlertFireHelper {
     }
 
     private fun fireInternal(context: Context, alert: PendingAlertResponse) {
+        val eventId = alert.eventId
+        if (AlertSilence.isSilenced(context, eventId)) {
+            Log.i(TAG, "Skip fire — silenced by user event=$eventId")
+            return
+        }
         val stored = AlertRingState.getActive(context)
         val merged = if (stored != null && stored.eventId == alert.eventId) {
             AlertMerge.merge(stored, alert)
         } else {
             alert
         }
-        val eventId = merged.eventId
+        val mergedEventId = merged.eventId
         val now = SystemClock.elapsedRealtime()
-        val duplicateRing = !eventId.isNullOrBlank() &&
-            eventId == lastRingEventId &&
+        val duplicateRing = !mergedEventId.isNullOrBlank() &&
+            mergedEventId == lastRingEventId &&
             now - lastRingAtMs < 2_500L
 
-        Log.i(TAG, "FIRE SOS event=$eventId victim=${merged.victimName} ring=${!duplicateRing}")
+        Log.i(TAG, "FIRE SOS event=$mergedEventId victim=${merged.victimName} ring=${!duplicateRing}")
         AlertRingState.setActive(context, merged)
         notifyDataUpdated(context, merged)
 
@@ -117,13 +122,14 @@ object AlertFireHelper {
             return
         }
 
-        lastRingEventId = eventId
+        lastRingEventId = mergedEventId
         lastRingAtMs = now
         AlarmClockRinger.fireNow(context, merged)
         ringNow(context, merged)
     }
 
     private fun updateAlertDataInternal(context: Context, alert: PendingAlertResponse) {
+        if (AlertSilence.isSilenced(context, alert.eventId)) return
         val stored = AlertRingState.getActive(context)
         val merged = when {
             stored == null -> alert
@@ -132,7 +138,7 @@ object AlertFireHelper {
         }
         Log.i(TAG, "UPDATE alert data event=${merged.eventId}")
         AlertRingState.setActive(context, merged)
-        AlarmClockRinger.arm(context, merged)
+        // Do not re-arm alarm clock here — that re-opens the screen in a loop.
         notifyDataUpdated(context, merged)
     }
 
@@ -147,6 +153,10 @@ object AlertFireHelper {
     }
 
     private fun reRingInternal(context: Context, alert: PendingAlertResponse) {
+        if (AlertSilence.isSilenced(context, alert.eventId)) {
+            AlarmClockRinger.cancel(context)
+            return
+        }
         AlarmClockRinger.arm(context, alert)
         ringNow(context, alert)
     }
