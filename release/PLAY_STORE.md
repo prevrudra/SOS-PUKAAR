@@ -4,22 +4,23 @@
 
 | File | App | Version |
 |------|-----|---------|
+| `pukaar-1.18.4-41.aab` | PUKAAR (`pukaar.com`) | 1.18.4 (41) |
 | `pukaar-1.18.3-40.aab` | PUKAAR (`pukaar.com`) | 1.18.3 (40) |
-| `highalert-1.13.5-35.aab` | High Alert (`com.pukaar.highalert`) | 1.13.5 (35) |
+| `highalert-1.13.7-37.aab` | High Alert (`com.pukaar.highalert`) | 1.13.7 (37) |
 
 Signed with `deploy/secrets/pukaar-upload.jks`.
 
 ## PUKAAR — internal testing
 
-- **Internal testing:** completed versionCode **40** (`1.18.3`)
-- One WhatsApp SOS per event+phone (dedup table); contact add/edit fixes
-- Deployed with backend `e7db7bd` (2026-09-18)
+- **Internal testing:** completed versionCode **41** (`1.18.4`)
+- Fix: login/splash no longer stuck on "Starting…" (local session first, background sync + timeout)
+- Prior **40** (`1.18.3`): WhatsApp SOS dedup; contact add/edit fixes
 
 ## High Alert — internal testing
 
-- **Internal testing:** completed versionCode **35** (`1.13.5`)
-- Fix: Stop alert no longer loops — silences locally + server READ ack
-- Fix: watchdog/FCM skip dismissed events; no re-arm on data enrich
+- **Internal testing:** completed versionCode **37** (`1.13.7`)
+- Fix: login no longer stuck on "Starting…" (FCM timeout + background register)
+- Fix: phone numbers match WhatsApp E.164 format
 
 ## Re-upload later
 

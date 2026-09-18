@@ -17,17 +17,17 @@ class PukaarRepository(private val sessionStore: SessionStore) {
         val deviceId = Build.MODEL + "-" + Build.FINGERPRINT.take(24)
         val resp = api.verifyOtp(OtpVerifyRequest(phone, code, deviceId, referral))
         val user = resp.user
-        if (resp.accessToken != null && user != null) {
+        if (resp.accessToken != null) {
             sessionStore.saveAuth(
                 token = resp.accessToken,
-                phone = user.phone ?: phone,
-                name = user.fullName,
-                homeMode = user.homeMode ?: "SOS",
-                onboarding = user.onboardingComplete == true,
-                protectionReady = user.protectionReady == true,
-                mockDrillPassed = user.mockDrillPassed == true
+                phone = user?.phone ?: phone,
+                name = user?.fullName,
+                homeMode = user?.homeMode ?: "SOS",
+                onboarding = user?.onboardingComplete == true,
+                protectionReady = user?.protectionReady == true,
+                mockDrillPassed = user?.mockDrillPassed == true
             )
-            user.referralCode?.let { sessionStore.saveReferralCode(it) }
+            user?.referralCode?.let { sessionStore.saveReferralCode(it) }
         }
         return resp
     }

@@ -36,6 +36,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 
 @Composable
 fun PukaarAppNavHost() {
@@ -55,11 +56,19 @@ fun PukaarAppNavHost() {
         withContext(Dispatchers.IO) {
             val token = PukaarApp.instance.sessionStore.token()
             if (token != null) {
-                runCatching { PukaarApp.instance.repository.syncSession() }
-                val done = PukaarApp.instance.sessionStore.onboardingComplete.first()
+                val done = runCatching {
+                    PukaarApp.instance.sessionStore.onboardingComplete.first()
+                }.getOrDefault(false)
                 withContext(Dispatchers.Main) {
                     authed = true
                     onboardingDone = done
+                }
+                runCatching {
+                    withTimeout(12_000) {
+                        PukaarApp.instance.repository.syncSession()
+                    }
+                    val synced = PukaarApp.instance.sessionStore.onboardingComplete.first()
+                    withContext(Dispatchers.Main) { onboardingDone = synced }
                 }
             } else {
                 withContext(Dispatchers.Main) { authed = false }
@@ -72,14 +81,22 @@ fun PukaarAppNavHost() {
         authed == false -> PukaarTheme {
             OtpLoginScreen { restore ->
                 showDeviceRestore = restore
-                authed = true
-                // Returning users already have onboarding on server; syncSession fills local prefs
                 scope.launch {
-                    withContext(Dispatchers.IO) {
-                        runCatching { PukaarApp.instance.repository.syncSession() }
-                    }
-                    onboardingDone = PukaarApp.instance.sessionStore.onboardingComplete.first()
+                    onboardingDone = runCatching {
+                        PukaarApp.instance.sessionStore.onboardingComplete.first()
+                    }.getOrDefault(false)
+                    authed = true
                     com.pukaar.app.emergency.PukaarGuardService.start(context, hasSession = true)
+                    withContext(Dispatchers.IO) {
+                        runCatching {
+                            withTimeout(12_000) {
+                                PukaarApp.instance.repository.syncSession()
+                            }
+                        }
+                        onboardingDone = runCatching {
+                            PukaarApp.instance.sessionStore.onboardingComplete.first()
+                        }.getOrDefault(onboardingDone == true)
+                    }
                 }
             }
         }
