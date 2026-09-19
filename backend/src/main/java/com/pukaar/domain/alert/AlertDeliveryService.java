@@ -71,14 +71,15 @@ public class AlertDeliveryService {
         // FCM first — do not wait on Places/WhatsApp. Save once at end (avoid WA retry race).
         boolean fcmSent = tryPush(user, event, eventId, phone, highPriority, level);
         boolean waSent = alreadyWa || tryWhatsApp(user, event, phone, delivery);
+        boolean voiceSent = tryVoice(user, event, phone, delivery);
         boolean smsSent = false;
 
         if (!waSent && !fcmSent) {
             smsSent = trySmsFallback(user, event, phone, delivery);
         }
 
-        if (waSent || fcmSent || smsSent) {
-            String channel = channelLabel(fcmSent, waSent, smsSent);
+        if (waSent || fcmSent || smsSent || voiceSent) {
+            String channel = channelLabel(fcmSent, waSent, smsSent, voiceSent);
             delivery.setChannel(channel);
             delivery.setChannelUsed(waSent ? "WHATSAPP" : (smsSent ? "SMS" : "FCM"));
             delivery.setStatus(DeliveryStatus.SENT);
@@ -115,20 +116,21 @@ public class AlertDeliveryService {
         // while this call was still sending (duplicate SOS WhatsApps).
         boolean fcmSent = tryPush(user, event, eventId, phone, true, null);
         boolean waSent = alreadyWa || tryWhatsApp(user, event, phone, delivery);
+        boolean voiceSent = tryVoice(user, event, phone, delivery);
         boolean smsSent = false;
         if (!waSent && !fcmSent) {
             smsSent = trySmsFallback(user, event, phone, delivery);
         }
 
-        if (waSent || fcmSent || smsSent) {
-            String channel = channelLabel(fcmSent, waSent, smsSent);
+        if (waSent || fcmSent || smsSent || voiceSent) {
+            String channel = channelLabel(fcmSent, waSent, smsSent, voiceSent);
             delivery.setChannel(channel);
             delivery.setChannelUsed(waSent ? "WHATSAPP" : (smsSent ? "SMS" : "FCM"));
             delivery.setStatus(DeliveryStatus.SENT);
             delivery.setLastError(waSent ? null : "WhatsApp failed — used " + delivery.getChannelUsed());
             deliveryRepo.save(delivery);
-            log.info("Emergency alert to {} via {} (fcm={} wa={} sms={})",
-                    phone, channel, fcmSent, waSent, smsSent);
+            log.info("Emergency alert to {} via {} (fcm={} wa={} sms={} voice={})",
+                    phone, channel, fcmSent, waSent, smsSent, voiceSent);
             return;
         }
 
@@ -175,12 +177,16 @@ public class AlertDeliveryService {
                 || (used != null && used.toUpperCase(Locale.ROOT).contains("WHATSAPP"));
     }
 
-    private static String channelLabel(boolean fcm, boolean wa, boolean sms) {
+    private static String channelLabel(boolean fcm, boolean wa, boolean sms, boolean voice) {
         StringBuilder sb = new StringBuilder();
         if (fcm) sb.append("FCM");
         if (wa) {
             if (!sb.isEmpty()) sb.append('+');
             sb.append("WHATSAPP");
+        }
+        if (voice) {
+            if (!sb.isEmpty()) sb.append('+');
+            sb.append("VOICE");
         }
         if (sms) {
             if (!sb.isEmpty()) sb.append('+');
@@ -189,7 +195,7 @@ public class AlertDeliveryService {
         return sb.isEmpty() ? "NONE" : sb.toString();
     }
 
-    /** Called by DeliveryRetryScheduler when contact has not acked within ~60s. */
+    /** Instant AuthKey voice IVR in parallel with FCM/WhatsApp on every SOS. */
     @Transactional
     public void forceVoiceEscalation(UUID userId, UUID eventId, UUID deliveryId) {
         ContactDeliveryEntity delivery = deliveryRepo.findById(deliveryId).orElse(null);
@@ -241,7 +247,15 @@ public class AlertDeliveryService {
         return false;
     }
 
-    /** Automated voice IVR when push/WhatsApp/SMS did not get an ack in time. */
+    private boolean tryVoice(
+            UserEntity user,
+            EmergencyEventEntity event,
+            String phone,
+            ContactDeliveryEntity delivery
+    ) {
+        return tryVoiceEscalation(user, event, phone, delivery);
+    }
+
     private boolean tryVoiceEscalation(
             UserEntity user,
             EmergencyEventEntity event,

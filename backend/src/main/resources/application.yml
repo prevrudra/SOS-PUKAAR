@@ -108,7 +108,6 @@ pukaar:
     retry-backoff-ms: 2000
     retry-scan-ms: 15000
     sms-escalate-ms: 15000
-    voice-escalate-ms: 60000
     sms-fallback-enabled: ${SMS_FALLBACK:true}
     voice-escalation-enabled: ${VOICE_ESCALATION:true}
   razorpay:

@@ -27,7 +27,7 @@ Signed with `deploy/secrets/pukaar-upload.jks`.
 ## Backend (VPS)
 
 - **Deployed:** `de24472` on `pukaaralert.com/pukaar/` — 2026-09-19
-- AuthKey voice IVR escalation enabled (60s if no ack)
+- AuthKey voice IVR fires instantly on every SOS (parallel with FCM/WhatsApp)
 - WhatsApp dedup, phone normalization, stop-loop fixes
 
 ## Re-upload later

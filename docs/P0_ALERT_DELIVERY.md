@@ -46,7 +46,7 @@ Without step 2–3, High Alert falls back to **60-second polling** only.
 
 If no `DELIVERED` ack within **30 seconds** → SMS to trusted contact (`DeliveryRetryScheduler`).
 
-If still unacked after **60 seconds** → AuthKey.io voice IVR (`AuthKeyVoiceSender`).
+**Instant** AuthKey.io voice IVR in parallel with FCM/WhatsApp (`AuthKeyVoiceSender`).
 
 Configure on the VPS: `AUTHKEY_AUTH_KEY`, `AUTHKEY_VOICE_ENABLED=true`, `VOICE_ESCALATION=true`.
 
