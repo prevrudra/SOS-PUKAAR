@@ -44,6 +44,7 @@ public class AlertDeliveryService {
     private final FcmPushSender fcm;
     private final WhatsAppAlertSender whatsApp;
     private final WhatsAppSosDedupService waDedup;
+    private final VoiceSosDedupService voiceDedup;
     private final YourBulkSmsSender smsSender;
     private final AuthKeyVoiceSender voiceSender;
     private final NearbyPlacesService nearbyPlacesService;
@@ -65,6 +66,10 @@ public class AlertDeliveryService {
 
         String phone = normalizeContactPhone(delivery.getContactPhone());
         delivery.setContactPhone(phone);
+        if (delivery.getStatus() == DeliveryStatus.SENT) {
+            log.info("Inactivity delivery {} already SENT for {} — skip", deliveryId, phone);
+            return;
+        }
         delivery.setAttempts(delivery.getAttempts() + 1);
         boolean highPriority = level == InactivityLevel.URGENT;
         boolean alreadyWa = channelHasWhatsApp(delivery);
@@ -108,6 +113,10 @@ public class AlertDeliveryService {
 
         String phone = normalizeContactPhone(delivery.getContactPhone());
         delivery.setContactPhone(phone);
+        if (delivery.getStatus() == DeliveryStatus.SENT) {
+            log.info("Delivery {} already SENT for {} — skip duplicate send", deliveryId, phone);
+            return;
+        }
         delivery.setAttempts(delivery.getAttempts() + 1);
         boolean alreadyWa = channelHasWhatsApp(delivery);
 
@@ -265,7 +274,11 @@ public class AlertDeliveryService {
         if (!props.getNotification().isVoiceEscalationEnabled() || !voiceSender.isConfigured()) {
             return false;
         }
-        if (channelHasVoice(delivery)) {
+        if (channelHasVoice(delivery) || voiceDedup.alreadySent(event.getId(), phone)) {
+            return true;
+        }
+        if (!voiceDedup.tryClaim(event.getId(), phone)) {
+            log.info("Voice already claimed for event {} phone {}", event.getId(), phone);
             return true;
         }
         String who = displayName(user);

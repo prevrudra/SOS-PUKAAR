@@ -102,11 +102,14 @@ object AlertFireHelper {
             return
         }
         val stored = AlertRingState.getActive(context)
-        val merged = if (stored != null && stored.eventId == alert.eventId) {
-            AlertMerge.merge(stored, alert)
-        } else {
-            alert
+        if (!eventId.isNullOrBlank() && stored?.eventId == eventId) {
+            val merged = AlertMerge.merge(stored, alert)
+            Log.i(TAG, "Already alerting event=$eventId — refresh only (no re-ring)")
+            AlertRingState.setActive(context, merged)
+            notifyDataUpdated(context, merged)
+            return
         }
+        val merged = alert
         val mergedEventId = merged.eventId
         val now = SystemClock.elapsedRealtime()
         val duplicateRing = !mergedEventId.isNullOrBlank() &&

@@ -154,6 +154,7 @@ class AlertActivity : ComponentActivity() {
             return
         }
         AlertSilence.silence(this, eventId)
+        MonitorWatchdogReceiver.cancel(this)
         lifecycleScope.launch {
             runCatching {
                 val session = AlertSession(this@AlertActivity)
