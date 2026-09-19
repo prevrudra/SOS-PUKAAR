@@ -4,6 +4,7 @@
 
 | File | App | Version |
 |------|-----|---------|
+| `pukaar-1.18.6-43.aab` | PUKAAR (`pukaar.com`) | 1.18.6 (43) |
 | `pukaar-1.18.5-42.aab` | PUKAAR (`pukaar.com`) | 1.18.5 (42) |
 | `pukaar-1.18.4-41.aab` | PUKAAR (`pukaar.com`) | 1.18.4 (41) |
 | `pukaar-1.18.3-40.aab` | PUKAAR (`pukaar.com`) | 1.18.3 (40) |
@@ -13,8 +14,9 @@ Signed with `deploy/secrets/pukaar-upload.jks`.
 
 ## PUKAAR — internal testing
 
-- **Internal testing:** completed versionCode **42** (`1.18.5`) — 2026-09-19
-- Fix: Motorola/background SOS — guard service retries after boot; hardware triggers registered dynamically
+- **Internal testing:** completed versionCode **43** (`1.18.6`) — 2026-09-19
+- Fix: "Pukaar keeps stopping" crash — no FGS from background; update without uninstall
+- Prior **42** (`1.18.5`): Motorola/background SOS guard retries
 - Prior **41** (`1.18.4`): login/splash no longer stuck on "Starting…"
 - Prior **40** (`1.18.3`): WhatsApp SOS dedup; contact add/edit fixes
 

@@ -6,7 +6,7 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
-import com.pukaar.app.PukaarApp
+import com.pukaar.app.data.local.SessionStore
 import java.util.concurrent.TimeUnit
 
 /**
@@ -18,8 +18,8 @@ class HeartbeatWorker(
 ) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         return try {
-            if (PukaarApp.instance.sessionStore.token() != null) {
-                PukaarGuardService.start(applicationContext, hasSession = true)
+            if (SessionStore(applicationContext).token() != null) {
+                HardwareReceiverRegistry.register(applicationContext)
                 PhoneUsageTracker.pollUsageStats(applicationContext)
                 PhoneUsageTracker.flushPendingHeartbeat(applicationContext)
             }

@@ -8,9 +8,9 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.OutOfQuotaPolicy
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
-import com.pukaar.app.PukaarApp
+import com.pukaar.app.data.local.SessionStore
 
-/** Retry guard FGS + hardware listeners when boot/background start is blocked (Motorola, Android 12+). */
+/** Re-arm hardware listeners from background — never start FGS here (Android 12+ crash). */
 class GuardBoostWorker(
     context: Context,
     params: WorkerParameters
@@ -18,8 +18,8 @@ class GuardBoostWorker(
 
     override suspend fun doWork(): Result {
         return try {
-            if (PukaarApp.instance.sessionStore.token() != null) {
-                PukaarGuardService.start(applicationContext, hasSession = true)
+            if (SessionStore(applicationContext).token() != null) {
+                HardwareReceiverRegistry.register(applicationContext)
                 if (PhoneUsageTracker.isEnabled(applicationContext)) {
                     PhoneUsageTracker.arm(applicationContext)
                 }

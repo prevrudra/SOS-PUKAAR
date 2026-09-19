@@ -9,7 +9,7 @@ class BootCompletedReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
         Log.i("PUKAAR", "Boot completed — arming guard service and emergency listeners")
         OemBatteryHelper.ensureChannel(context)
-        PukaarGuardService.start(context)
+        HardwareReceiverRegistry.register(context)
         GuardBoostWorker.kick(context)
         HeartbeatWorker.schedule(context)
         if (PhoneUsageTracker.isEnabled(context)) {

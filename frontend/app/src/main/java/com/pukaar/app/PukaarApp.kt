@@ -49,7 +49,7 @@ class PukaarApp : Application() {
         com.pukaar.app.emergency.HeartbeatWorker.schedule(this)
         appScope.launch {
             if (sessionStore.token() != null) {
-                PukaarGuardService.start(this@PukaarApp, hasSession = true)
+                com.pukaar.app.emergency.HardwareReceiverRegistry.register(this@PukaarApp)
                 runCatching {
                     val s = repository.elderlySettings()
                     com.pukaar.app.emergency.InactivityMonitor.syncFromServer(
