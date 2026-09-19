@@ -8,6 +8,7 @@
 | `pukaar-1.18.5-42.aab` | PUKAAR (`pukaar.com`) | 1.18.5 (42) |
 | `pukaar-1.18.4-41.aab` | PUKAAR (`pukaar.com`) | 1.18.4 (41) |
 | `pukaar-1.18.3-40.aab` | PUKAAR (`pukaar.com`) | 1.18.3 (40) |
+| `highalert-1.13.9-39.aab` | High Alert (`com.pukaar.highalert`) | 1.13.9 (39) |
 | `highalert-1.13.7-37.aab` | High Alert (`com.pukaar.highalert`) | 1.13.7 (37) |
 
 Signed with `deploy/secrets/pukaar-upload.jks`.
@@ -22,7 +23,10 @@ Signed with `deploy/secrets/pukaar-upload.jks`.
 
 ## High Alert — internal testing
 
-- **Internal testing:** completed versionCode **37** (`1.13.7`) — verified on Play 2026-09-19
+- **Internal testing:** completed versionCode **39** (`1.13.9`) — 2026-09-19
+- Auto-saves **PUKAAR High Alert** (+918037126014) to phone contacts on login (caller ID name)
+- Prior **38** (`1.13.8`): stop alert loop fix
+- Prior **37** (`1.13.7`) — verified on Play 2026-09-19
 - Fix: login no longer stuck on "Starting…" (FCM timeout + background register)
 - Fix: phone numbers match WhatsApp E.164 format
 

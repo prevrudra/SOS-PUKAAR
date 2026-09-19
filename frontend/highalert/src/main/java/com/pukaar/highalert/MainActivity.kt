@@ -64,6 +64,14 @@ class MainActivity : ComponentActivity() {
         ActivityResultContracts.RequestPermission()
     ) { }
 
+    private val contactsPermission = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            PukaarCallerIdContact.ensureSaved(this)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -84,6 +92,7 @@ class MainActivity : ComponentActivity() {
                             activePhone = session.phone().orEmpty()
                             step = Step.Active
                             ensureMonitoring()
+                            ensurePukaarCallerIdContact()
                         }
                     }
                 }.onFailure {
@@ -206,6 +215,7 @@ class MainActivity : ComponentActivity() {
                                                     activePhone = phoneE164
                                                     step = Step.Active
                                                     ensureMonitoring()
+                                                    ensurePukaarCallerIdContact()
                                                     // FCM can hang on some OEMs — register in background after UI advances.
                                                     scope.launch {
                                                         FcmRegistrar.registerAfterLogin(this@MainActivity)
@@ -249,6 +259,16 @@ class MainActivity : ComponentActivity() {
             != PackageManager.PERMISSION_GRANTED
         ) {
             runCatching { notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS) }
+        }
+    }
+
+    /** Saves +918037126014 as "PUKAAR High Alert" so voice calls show a name on caller ID. */
+    private fun ensurePukaarCallerIdContact() {
+        if (PukaarCallerIdContact.ensureSaved(this)) return
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_CONTACTS)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            runCatching { contactsPermission.launch(Manifest.permission.WRITE_CONTACTS) }
         }
     }
 
@@ -317,6 +337,7 @@ class MainActivity : ComponentActivity() {
                 val token = (application as HighAlertApp).session.token()
                 if (!token.isNullOrBlank()) {
                     ensureMonitoring()
+                    ensurePukaarCallerIdContact()
                 }
             }
         }
