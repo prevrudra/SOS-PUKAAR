@@ -76,15 +76,14 @@ public class AlertDeliveryService {
         // FCM first — do not wait on Places/WhatsApp. Save once at end (avoid WA retry race).
         boolean fcmSent = tryPush(user, event, eventId, phone, highPriority, level);
         boolean waSent = alreadyWa || tryWhatsApp(user, event, phone, delivery);
-        boolean voiceSent = tryVoice(user, event, phone, delivery);
         boolean smsSent = false;
 
         if (!waSent && !fcmSent) {
             smsSent = trySmsFallback(user, event, phone, delivery);
         }
 
-        if (waSent || fcmSent || smsSent || voiceSent) {
-            String channel = channelLabel(fcmSent, waSent, smsSent, voiceSent);
+        if (waSent || fcmSent || smsSent) {
+            String channel = channelLabel(fcmSent, waSent, smsSent, false);
             delivery.setChannel(channel);
             delivery.setChannelUsed(waSent ? "WHATSAPP" : (smsSent ? "SMS" : "FCM"));
             delivery.setStatus(DeliveryStatus.SENT);
@@ -125,21 +124,21 @@ public class AlertDeliveryService {
         // while this call was still sending (duplicate SOS WhatsApps).
         boolean fcmSent = tryPush(user, event, eventId, phone, true, null);
         boolean waSent = alreadyWa || tryWhatsApp(user, event, phone, delivery);
-        boolean voiceSent = tryVoice(user, event, phone, delivery);
         boolean smsSent = false;
         if (!waSent && !fcmSent) {
             smsSent = trySmsFallback(user, event, phone, delivery);
         }
 
-        if (waSent || fcmSent || smsSent || voiceSent) {
-            String channel = channelLabel(fcmSent, waSent, smsSent, voiceSent);
+        if (waSent || fcmSent || smsSent) {
+            String channel = channelLabel(fcmSent, waSent, smsSent, false);
             delivery.setChannel(channel);
             delivery.setChannelUsed(waSent ? "WHATSAPP" : (smsSent ? "SMS" : "FCM"));
             delivery.setStatus(DeliveryStatus.SENT);
             delivery.setLastError(waSent ? null : "WhatsApp failed — used " + delivery.getChannelUsed());
             deliveryRepo.save(delivery);
-            log.info("Emergency alert to {} via {} (fcm={} wa={} sms={} voice={})",
-                    phone, channel, fcmSent, waSent, smsSent, voiceSent);
+            log.info("Emergency alert to {} via {} (fcm={} wa={} sms={}; voice scheduled ~{}s)",
+                    phone, channel, fcmSent, waSent, smsSent,
+                    props.getNotification().getVoiceEscalateDelaySeconds());
             return;
         }
 
@@ -204,7 +203,7 @@ public class AlertDeliveryService {
         return sb.isEmpty() ? "NONE" : sb.toString();
     }
 
-    /** Instant AuthKey voice IVR in parallel with FCM/WhatsApp on every SOS. */
+    /** AuthKey voice IVR ~25s after SOS if the contact has not acknowledged yet. */
     @Transactional
     public void forceVoiceEscalation(UUID userId, UUID eventId, UUID deliveryId) {
         ContactDeliveryEntity delivery = deliveryRepo.findById(deliveryId).orElse(null);
@@ -254,15 +253,6 @@ public class AlertDeliveryService {
             return true;
         }
         return false;
-    }
-
-    private boolean tryVoice(
-            UserEntity user,
-            EmergencyEventEntity event,
-            String phone,
-            ContactDeliveryEntity delivery
-    ) {
-        return tryVoiceEscalation(user, event, phone, delivery);
     }
 
     private boolean tryVoiceEscalation(

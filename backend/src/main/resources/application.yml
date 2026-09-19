@@ -110,6 +110,8 @@ pukaar:
     sms-escalate-ms: 15000
     sms-fallback-enabled: ${SMS_FALLBACK:true}
     voice-escalation-enabled: ${VOICE_ESCALATION:true}
+    voice-escalate-delay-seconds: ${VOICE_ESCALATE_DELAY_SECONDS:25}
+    voice-escalate-scan-ms: 10000
   razorpay:
     key-id: ${RAZORPAY_KEY_ID:}
     key-secret: ${RAZORPAY_KEY_SECRET:}

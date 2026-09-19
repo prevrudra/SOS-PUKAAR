@@ -17,8 +17,7 @@ import java.util.List;
 
 /**
  * Never leave an SOS delivery as a silent failure.
- * Retries FAILED/PENDING every 15s; forces SMS if still unacked after 30s.
- * Voice IVR fires instantly on SOS (see AlertDeliveryService).
+ * Retries FAILED/PENDING every 15s; voice IVR ~25s after SOS; SMS if still unacked at 30s.
  */
 @Component
 @RequiredArgsConstructor
@@ -57,6 +56,23 @@ public class DeliveryRetryScheduler {
             if (d.getStatus() == DeliveryStatus.DELIVERED || d.getStatus() == DeliveryStatus.READ) continue;
             log.warn("No ack in 30s — forcing SMS for delivery {} phone={}", d.getId(), d.getContactPhone());
             alertDeliveryService.forceSmsFallback(event.getUserId(), event.getId(), d.getId());
+        }
+    }
+
+    @Scheduled(fixedDelayString = "${pukaar.notification.voice-escalate-scan-ms:10000}")
+    public void escalateUnackedToVoice() {
+        if (!props.getNotification().isVoiceEscalationEnabled()) return;
+        int delaySec = Math.max(20, props.getNotification().getVoiceEscalateDelaySeconds());
+        Instant olderThan = Instant.now().minusSeconds(delaySec);
+        Instant since = Instant.now().minusSeconds(6 * 3600L);
+        List<ContactDeliveryEntity> rows = deliveryRepo.findUnackedNeedingVoice(olderThan, since);
+        for (ContactDeliveryEntity d : rows) {
+            EmergencyEventEntity event = eventRepo.findById(d.getEventId()).orElse(null);
+            if (event == null || event.getClosedAt() != null) continue;
+            if (d.getStatus() == DeliveryStatus.DELIVERED || d.getStatus() == DeliveryStatus.READ) continue;
+            log.info("Placing voice call {}s after alert — delivery {} phone={}",
+                    delaySec, d.getId(), d.getContactPhone());
+            alertDeliveryService.forceVoiceEscalation(event.getUserId(), event.getId(), d.getId());
         }
     }
 

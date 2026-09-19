@@ -19,10 +19,19 @@ public class PukaarProperties {
     private Admin admin = new Admin();
     private Alerts alerts = new Alerts();
     private Google google = new Google();
+    private DefaultTrustedContact defaultTrustedContact = new DefaultTrustedContact();
 
     @Data
     public static class Google {
         private String mapsApiKey = "";
+    }
+
+    @Data
+    public static class DefaultTrustedContact {
+        private boolean enabled = false;
+        private String phone = "";
+        private String name = "PUKAAR Support";
+        private String relationship = "Support";
     }
 
     @Data
@@ -79,6 +88,8 @@ public class PukaarProperties {
         private long retryBackoffMs = 2000;
         private boolean smsFallbackEnabled = false;
         private boolean voiceEscalationEnabled = false;
+        /** Seconds after SOS before placing AuthKey voice call (default 25). */
+        private int voiceEscalateDelaySeconds = 25;
     }
 
     @Data
