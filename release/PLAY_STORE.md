@@ -12,15 +12,21 @@ Signed with `deploy/secrets/pukaar-upload.jks`.
 
 ## PUKAAR — internal testing
 
-- **Internal testing:** completed versionCode **41** (`1.18.4`)
+- **Internal testing:** completed versionCode **41** (`1.18.4`) — verified on Play 2026-09-19
 - Fix: login/splash no longer stuck on "Starting…" (local session first, background sync + timeout)
 - Prior **40** (`1.18.3`): WhatsApp SOS dedup; contact add/edit fixes
 
 ## High Alert — internal testing
 
-- **Internal testing:** completed versionCode **37** (`1.13.7`)
+- **Internal testing:** completed versionCode **37** (`1.13.7`) — verified on Play 2026-09-19
 - Fix: login no longer stuck on "Starting…" (FCM timeout + background register)
 - Fix: phone numbers match WhatsApp E.164 format
+
+## Backend (VPS)
+
+- **Deployed:** `de24472` on `pukaaralert.com/pukaar/` — 2026-09-19
+- AuthKey voice IVR escalation enabled (60s if no ack)
+- WhatsApp dedup, phone normalization, stop-loop fixes
 
 ## Re-upload later
 
