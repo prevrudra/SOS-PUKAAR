@@ -32,8 +32,9 @@ Signed with `deploy/secrets/pukaar-upload.jks`.
 
 ## Backend (VPS)
 
-- **Deployed:** `de24472` on `pukaaralert.com/pukaar/` — 2026-09-19
+- **Deployed:** `194841c` on `pukaaralert.com/pukaar/` — 2026-09-20
 - AuthKey voice IVR ~25s after SOS (lets WhatsApp/push arrive first)
+- Voice dedup, stop-loop fixes, caller ID contact config
 - WhatsApp dedup, phone normalization, stop-loop fixes
 
 ## Re-upload later
