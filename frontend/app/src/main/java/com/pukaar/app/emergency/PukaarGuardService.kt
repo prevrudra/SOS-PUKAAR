@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.pukaar.app.MainActivity
 import com.pukaar.app.PukaarApp
@@ -23,12 +24,13 @@ import kotlinx.coroutines.launch
  */
 class PukaarGuardService : Service() {
     private var screenReceiver: PhoneUsageReceiver? = null
+    private var powerButtonReceiver: PowerButtonTriggerReceiver? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         startForeground(NOTIFICATION_ID, buildNotification())
-        registerScreenReceiver()
+        registerHardwareReceivers()
         if (PhoneUsageTracker.isEnabled(this)) {
             PhoneUsageTracker.arm(this)
         }
@@ -41,31 +43,53 @@ class PukaarGuardService : Service() {
     }
 
     override fun onDestroy() {
-        unregisterScreenReceiver()
+        unregisterHardwareReceivers()
         super.onDestroy()
     }
 
-    private fun registerScreenReceiver() {
-        if (screenReceiver != null) return
-        val receiver = PhoneUsageReceiver()
-        val filter = IntentFilter().apply {
-            addAction(Intent.ACTION_SCREEN_ON)
-            addAction(Intent.ACTION_USER_PRESENT)
+    private fun registerHardwareReceivers() {
+        if (screenReceiver == null) {
+            val receiver = PhoneUsageReceiver()
+            val filter = IntentFilter().apply {
+                addAction(Intent.ACTION_SCREEN_ON)
+                addAction(Intent.ACTION_USER_PRESENT)
+            }
+            if (registerDynamicReceiver(receiver, filter)) screenReceiver = receiver
         }
-        runCatching {
+        if (powerButtonReceiver == null) {
+            val receiver = PowerButtonTriggerReceiver()
+            val filter = IntentFilter().apply {
+                addAction(Intent.ACTION_SCREEN_ON)
+                addAction(Intent.ACTION_SCREEN_OFF)
+                addAction(Intent.ACTION_USER_PRESENT)
+            }
+            if (registerDynamicReceiver(receiver, filter)) powerButtonReceiver = receiver
+        }
+    }
+
+    private fun registerDynamicReceiver(
+        receiver: android.content.BroadcastReceiver,
+        filter: IntentFilter
+    ): Boolean {
+        return runCatching {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
             } else {
                 @Suppress("UnspecifiedRegisterReceiverFlag")
                 registerReceiver(receiver, filter)
             }
-            screenReceiver = receiver
+            true
+        }.getOrElse { e ->
+            Log.w("PUKAAR", "Failed to register ${receiver.javaClass.simpleName}: ${e.message}")
+            false
         }
     }
 
-    private fun unregisterScreenReceiver() {
+    private fun unregisterHardwareReceivers() {
         screenReceiver?.let { runCatching { unregisterReceiver(it) } }
         screenReceiver = null
+        powerButtonReceiver?.let { runCatching { unregisterReceiver(it) } }
+        powerButtonReceiver = null
     }
 
     private fun buildNotification(): Notification {
@@ -108,8 +132,10 @@ class PukaarGuardService : Service() {
         private fun startForegroundSafe(app: Context) {
             runCatching {
                 app.startForegroundService(Intent(app, PukaarGuardService::class.java))
-            }.onFailure {
+            }.onFailure { e ->
+                Log.w("PUKAAR", "Guard FGS blocked — scheduling boost: ${e.message}")
                 runCatching { app.startService(Intent(app, PukaarGuardService::class.java)) }
+                    .onFailure { GuardBoostWorker.kick(app) }
             }
         }
     }

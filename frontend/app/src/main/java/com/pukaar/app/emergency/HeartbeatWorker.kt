@@ -19,6 +19,7 @@ class HeartbeatWorker(
     override suspend fun doWork(): Result {
         return try {
             if (PukaarApp.instance.sessionStore.token() != null) {
+                PukaarGuardService.start(applicationContext, hasSession = true)
                 PhoneUsageTracker.pollUsageStats(applicationContext)
                 PhoneUsageTracker.flushPendingHeartbeat(applicationContext)
             }

@@ -38,6 +38,7 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
     override fun onResume() {
         super.onResume()
         InactivityMonitor.recordActivity(this)
+        com.pukaar.app.emergency.PukaarGuardService.start(this)
     }
 
     override fun onNewIntent(intent: Intent) {

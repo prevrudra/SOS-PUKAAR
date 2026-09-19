@@ -4,6 +4,7 @@
 
 | File | App | Version |
 |------|-----|---------|
+| `pukaar-1.18.5-42.aab` | PUKAAR (`pukaar.com`) | 1.18.5 (42) |
 | `pukaar-1.18.4-41.aab` | PUKAAR (`pukaar.com`) | 1.18.4 (41) |
 | `pukaar-1.18.3-40.aab` | PUKAAR (`pukaar.com`) | 1.18.3 (40) |
 | `highalert-1.13.7-37.aab` | High Alert (`com.pukaar.highalert`) | 1.13.7 (37) |
@@ -12,8 +13,9 @@ Signed with `deploy/secrets/pukaar-upload.jks`.
 
 ## PUKAAR — internal testing
 
-- **Internal testing:** completed versionCode **41** (`1.18.4`) — verified on Play 2026-09-19
-- Fix: login/splash no longer stuck on "Starting…" (local session first, background sync + timeout)
+- **Internal testing:** completed versionCode **42** (`1.18.5`) — 2026-09-19
+- Fix: Motorola/background SOS — guard service retries after boot; hardware triggers registered dynamically
+- Prior **41** (`1.18.4`): login/splash no longer stuck on "Starting…"
 - Prior **40** (`1.18.3`): WhatsApp SOS dedup; contact add/edit fixes
 
 ## High Alert — internal testing
