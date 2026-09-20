@@ -14,7 +14,8 @@ class PukaarVoiceTriggerService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        Log.i("PUKAAR", "Voice trigger service started (device-dependent; fallback to App SOS required)")
-        return START_STICKY
+        Log.i("PUKAAR", "Voice trigger placeholder — stopping (not implemented)")
+        stopSelf()
+        return START_NOT_STICKY
     }
 }

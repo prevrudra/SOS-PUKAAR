@@ -41,6 +41,7 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
         runCatching {
             com.pukaar.app.emergency.HardwareReceiverRegistry.register(this)
             com.pukaar.app.emergency.PukaarGuardService.start(this, hasSession = true)
+            com.pukaar.app.emergency.EmergencyForegroundService.resumeIfNeeded(this)
         }
     }
 
@@ -59,7 +60,7 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
 
     private fun handleSosIntent(intent: Intent?) {
         if (intent?.action == PukaarApp.ACTION_SOS) {
-            PukaarApp.instance.signalHardwareSos()
+            runCatching { PukaarApp.instance.signalHardwareSos() }
         }
     }
 

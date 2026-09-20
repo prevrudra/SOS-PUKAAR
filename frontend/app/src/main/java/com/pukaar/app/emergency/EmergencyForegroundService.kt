@@ -104,7 +104,7 @@ class EmergencyForegroundService : Service() {
                 if (recordAudio) getString(R.string.emergency_recording_notification)
                 else "PUKAAR is running emergency automation"
             )
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_stat_pukaar)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
@@ -246,7 +246,11 @@ class EmergencyForegroundService : Service() {
             PukaarApp.instance.repository.uploadSegment(pending.eventId, segmentId, pending.file)
         }.getOrNull()
 
-        return uploaded?.cloudSafe == true
+        val ok = uploaded?.cloudSafe == true
+        if (ok) {
+            runCatching { pending.file.delete() }
+        }
+        return ok
     }
 
     private fun stopSelfSafe() {
@@ -272,6 +276,10 @@ class EmergencyForegroundService : Service() {
         const val EXTRA_RECORD_AUDIO = "record_audio"
 
         fun start(context: Context, eventId: String, isSos: Boolean, recordAudio: Boolean = isSos) {
+            if (!AppForegroundTracker.isInForeground) {
+                android.util.Log.i("PUKAAR", "Emergency FGS deferred until app is foreground (event=$eventId)")
+                return
+            }
             val intent = Intent(context, EmergencyForegroundService::class.java).apply {
                 putExtra(EXTRA_EVENT_ID, eventId)
                 putExtra(EXTRA_IS_SOS, isSos)
@@ -279,6 +287,17 @@ class EmergencyForegroundService : Service() {
             }
             runCatching { ContextCompatStart(context, intent) }
                 .onFailure { android.util.Log.e("PUKAAR", "Could not start emergency service", it) }
+        }
+
+        fun resumeIfNeeded(context: Context) {
+            if (!AppForegroundTracker.isInForeground) return
+            val eventId = EmergencySessionStore.activeEventId(context) ?: return
+            start(
+                context,
+                eventId,
+                isSos = EmergencySessionStore.isSos(context) && !EmergencySessionStore.isMock(context),
+                recordAudio = EmergencySessionStore.recordAudio(context)
+            )
         }
 
         fun stop(context: Context) {

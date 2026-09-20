@@ -128,14 +128,24 @@ fun ViewContactsScreen(
                     onRemoveNumber = { removingNumber = it }
                 ) {
                     Spacer(modifier = Modifier.height(10.dp))
+                    val trustedCount = contacts.filterByType(type).size
                     AccentButton(
                         text = stringResource(
                             if (type == ContactType.SOS) R.string.view_contacts_add_sos
                             else R.string.view_contacts_add_inactivity
                         ),
                         onClick = { onAddContact(type) },
-                        accent = type.accent
+                        accent = type.accent,
+                        enabled = trustedCount < MaxTrustedContactsPerCategory
                     )
+                    if (trustedCount >= MaxTrustedContactsPerCategory) {
+                        Text(
+                            text = stringResource(R.string.onboarding_max_contacts),
+                            color = TextTertiary,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(top = 6.dp)
+                        )
+                    }
                     if (type == ContactType.INACTIVITY) {
                         TimingCard(
                             saved = inactivityTiming,

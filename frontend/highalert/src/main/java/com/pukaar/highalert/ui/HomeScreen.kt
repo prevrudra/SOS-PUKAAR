@@ -83,6 +83,8 @@ fun HomeScreen(
     onOpenSampleAlert: () -> Unit,
     modifier: Modifier = Modifier,
     monitoringPhone: String? = null,
+    callerIdSaved: Boolean = true,
+    onSaveCallerIdContact: (() -> Unit)? = null,
     onFixPermissions: (() -> Unit)? = null,
     onSignOut: (() -> Unit)? = null
 ) {
@@ -126,6 +128,43 @@ fun HomeScreen(
             fontSize = 15.sp,
             color = TextSecondary
         )
+
+        if (!callerIdSaved && onSaveCallerIdContact != null) {
+            Spacer(Modifier.height(14.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color(0xFFFFF7ED))
+                    .border(1.dp, Color(0xFFFDBA74), RoundedCornerShape(14.dp))
+                    .padding(14.dp)
+            ) {
+                Column {
+                    Text(
+                        "Save PUKAAR caller ID",
+                        color = Color(0xFFC2410C),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Adds +91 80371 26014 as “PUKAAR High Alert” in your contacts so emergency calls show a name.",
+                        color = TextSecondary,
+                        fontSize = 12.sp,
+                        lineHeight = 16.sp
+                    )
+                    Spacer(Modifier.height(10.dp))
+                    Button(
+                        onClick = onSaveCallerIdContact,
+                        modifier = Modifier.fillMaxWidth().height(44.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEA580C))
+                    ) {
+                        Text("Save to phone contacts", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
 
         if (!monitoringPhone.isNullOrBlank()) {
             Spacer(Modifier.height(14.dp))

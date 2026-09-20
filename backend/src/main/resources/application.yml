@@ -125,8 +125,13 @@ pukaar:
     whatsapp:
       token: ${WHATSAPP_TOKEN:}
       phone-number-id: ${WHATSAPP_PHONE_NUMBER_ID:}
-      template-name: ${WHATSAPP_TEMPLATE_NAME:emergency}
+      template-name: ${WHATSAPP_TEMPLATE_NAME:pukaar_sos}
       template-language: ${WHATSAPP_TEMPLATE_LANGUAGE:en}
+      safe-template-name: ${WHATSAPP_SAFE_TEMPLATE_NAME:pukaar_safe}
+      safe-template-language: ${WHATSAPP_SAFE_TEMPLATE_LANGUAGE:en}
+      webhook-verify-token: ${WHATSAPP_WEBHOOK_VERIFY_TOKEN:}
+      location-updates-enabled: ${WHATSAPP_LOCATION_UPDATES_ENABLED:true}
+      location-update-interval-seconds: ${WHATSAPP_LOCATION_UPDATE_INTERVAL_SECONDS:120}
     sms:
       endpoint: ${YOURBULKSMS_ENDPOINT:https://control.yourbulksms.net/api/sendhttp.php}
       auth-key: ${YOURBULKSMS_AUTH_KEY:}

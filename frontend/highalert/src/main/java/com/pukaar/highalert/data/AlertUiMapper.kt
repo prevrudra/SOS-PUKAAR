@@ -31,17 +31,21 @@ object AlertUiMapper {
         val (dateLabel, timeLabel) = formatStarted(alert.startedAt)
         val type = when (alert.triggerType?.uppercase(Locale.ROOT)) {
             "HELP", "HELP_MODE", "INACTIVE_CHECK" -> AlertType.HELP
-            "INACTIVE" -> AlertType.INACTIVE
+            "INACTIVITY", "INACTIVE" -> AlertType.INACTIVE
+            "MOCK_DRILL" -> AlertType.SOS
             else -> AlertType.SOS
         }
         val headline = when {
             mockDrill -> "$headlineLabel — practice alert"
             type == AlertType.HELP -> "$headlineLabel needs help"
+            type == AlertType.INACTIVE -> "$headlineLabel may need a check-in"
             else -> "$headlineLabel is in danger!"
         }
         val message = when {
             mockDrill -> "$headlineLabel activated a PUKAAR practice alert. Please confirm they are safe."
             type == AlertType.HELP -> "$headlineLabel has activated HELP in PUKAAR. Please check on them."
+            type == AlertType.INACTIVE ->
+                "$headlineLabel has not used their phone for a while. PUKAAR inactivity alert — please check on them."
             else -> "$headlineLabel has pressed SOS in PUKAAR. Please check on them immediately."
         }
         val locationText = when {

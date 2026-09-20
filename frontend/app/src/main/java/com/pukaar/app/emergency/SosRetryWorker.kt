@@ -47,13 +47,7 @@ class SosRetryWorker(
             val id = event.id
             if (id.isNullOrBlank()) return Result.retry()
             EmergencySessionStore.markServerSynced(appCtx, id)
-            EmergencyForegroundService.start(
-                appCtx,
-                id,
-                isSos = EmergencySessionStore.isSos(appCtx) && !EmergencySessionStore.isMock(appCtx),
-                recordAudio = EmergencySessionStore.recordAudio(appCtx)
-            )
-            Log.i(TAG, "Offline SOS synced to server event=$id")
+            Log.i(TAG, "Offline SOS synced to server event=$id (FGS resumes when app opens)")
             Result.success()
         } catch (e: Exception) {
             Log.w(TAG, "SOS retry failed: ${e.message}")

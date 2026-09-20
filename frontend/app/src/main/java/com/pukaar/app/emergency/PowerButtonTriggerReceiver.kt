@@ -12,9 +12,10 @@ import android.util.Log
  */
 class PowerButtonTriggerReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
-        val action = intent?.action ?: return
-        val now = System.currentTimeMillis()
-        synchronized(lock) {
+        try {
+            val action = intent?.action ?: return
+            val now = System.currentTimeMillis()
+            synchronized(lock) {
             if (now - lastEventMs < 800) {
                 pressCount++
             } else {
@@ -26,6 +27,9 @@ class PowerButtonTriggerReceiver : BroadcastReceiver() {
                 Log.w("PUKAAR", "Hardware-like trigger via $action — headless SOS")
                 VolumeTriggerController.fireHeadlessSos(context)
             }
+            }
+        } catch (e: Exception) {
+            Log.e("PUKAAR", "Power button trigger failed", e)
         }
     }
 

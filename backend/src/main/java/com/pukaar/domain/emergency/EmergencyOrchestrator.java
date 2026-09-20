@@ -10,6 +10,7 @@ import com.pukaar.domain.nearby.NearbyPlacesService;
 import com.pukaar.domain.evidence.AudioSegmentEntity;
 import com.pukaar.domain.evidence.AudioSegmentRepository;
 import com.pukaar.domain.evidence.EvidenceStorageService;
+import com.pukaar.domain.alert.LocationUpdateNotifier;
 import com.pukaar.domain.notification.NotificationService;
 import com.pukaar.domain.police.PoliceStationEntity;
 import com.pukaar.domain.police.PoliceStationRepository;
@@ -47,6 +48,7 @@ public class EmergencyOrchestrator {
     private final NotificationService notificationService;
     private final PukaarProperties props;
     private final NearbyPlacesService nearbyPlacesService;
+    private final LocationUpdateNotifier locationUpdateNotifier;
 
     @Transactional
     public Map<String, Object> trigger(UUID userId, TriggerType triggerType, Double lat, Double lng,
@@ -146,6 +148,7 @@ public class EmergencyOrchestrator {
         applyLocation(event, lat, lng, accuracy);
         event.setStatus(EmergencyStatus.LIVE_LOCATION_ACTIVE);
         eventRepo.save(event);
+        locationUpdateNotifier.maybeNotify(eventId, event);
         return toEventDto(event, true);
     }
 
@@ -156,6 +159,7 @@ public class EmergencyOrchestrator {
         event.setClosedAt(Instant.now());
         event.setStatus(EmergencyStatus.CLOSED);
         eventRepo.save(event);
+        locationUpdateNotifier.clear(eventId);
         audit(event.getId(), userId, "CLOSED", Map.of("reason", event.getClosureReason().name()));
         notificationService.notifyEmergencyClosed(event.getId());
         return toEventDto(event, true);

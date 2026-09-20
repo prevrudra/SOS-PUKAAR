@@ -1,0 +1,76 @@
+package com.pukaar.domain.alert;
+
+import com.pukaar.config.PukaarProperties;
+import com.pukaar.domain.emergency.ContactDeliveryEntity;
+import com.pukaar.domain.emergency.ContactDeliveryRepository;
+import com.pukaar.domain.emergency.EmergencyEventEntity;
+import com.pukaar.domain.user.UserEntity;
+import com.pukaar.domain.user.UserRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
+
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.Locale;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+
+/** Throttled WhatsApp live-location pings to contacts during an active SOS. */
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class LocationUpdateNotifier {
+    private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
+    private static final DateTimeFormatter TIME_FMT =
+            DateTimeFormatter.ofPattern("dd MMM yyyy, hh:mm a", Locale.ENGLISH);
+
+    private final PukaarProperties props;
+    private final WhatsAppAlertSender whatsApp;
+    private final ContactDeliveryRepository deliveryRepo;
+    private final UserRepository userRepo;
+
+    private final Map<UUID, Instant> lastSent = new ConcurrentHashMap<>();
+
+    public void maybeNotify(UUID eventId, EmergencyEventEntity event) {
+        var wa = props.getAlerts().getWhatsapp();
+        if (!wa.isLocationUpdatesEnabled() || !whatsApp.isConfigured()) return;
+        if (event.getLatitude() == null || event.getLongitude() == null) return;
+
+        int interval = Math.max(60, wa.getLocationUpdateIntervalSeconds());
+        Instant now = Instant.now();
+        Instant prev = lastSent.get(eventId);
+        if (prev != null && now.isBefore(prev.plusSeconds(interval))) return;
+
+        UserEntity user = userRepo.findById(event.getUserId()).orElse(null);
+        if (user == null) return;
+
+        String who = displayName(user);
+        String when = TIME_FMT.format(now.atZone(IST));
+        String maps = String.format(Locale.US, "https://maps.google.com/?q=%.6f,%.6f",
+                event.getLatitude(), event.getLongitude());
+        String body = who + " — live location update (" + when + " IST)\n" + maps;
+
+        int sent = 0;
+        for (ContactDeliveryEntity d : deliveryRepo.findByEventId(eventId)) {
+            if (whatsApp.sendText(d.getContactPhone(), body)) sent++;
+        }
+        if (sent > 0) {
+            lastSent.put(eventId, now);
+            log.info("Live location WhatsApp sent for event {} to {} contact(s)", eventId, sent);
+        }
+    }
+
+    public void clear(UUID eventId) {
+        lastSent.remove(eventId);
+    }
+
+    private static String displayName(UserEntity user) {
+        if (user.getFullName() != null && !user.getFullName().isBlank()) {
+            return user.getFullName().trim();
+        }
+        return user.getPhoneE164() != null ? user.getPhoneE164() : "PUKAAR user";
+    }
+}

@@ -32,7 +32,9 @@ import com.pukaar.app.ui.screen.home.HomeScreen
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import com.pukaar.app.PukaarApp
+import com.pukaar.app.ui.screen.contacts.ContactDraft
 import com.pukaar.app.ui.screen.contacts.ContactFormScreen
+import com.pukaar.app.ui.screen.contacts.ContactType
 import com.pukaar.app.ui.screen.contacts.alertContactsOnly
 import com.pukaar.app.ui.screen.contacts.asPreSavedNumbers
 import com.pukaar.app.ui.screen.contacts.toDraft
@@ -143,6 +145,9 @@ fun PukaarNavHost(
                         // Hands the invite to WhatsApp and stays put; every other
                         // tile is a destination.
                         MenuItem.INVITE -> invite()
+                        MenuItem.ADD_CONTACT -> navController.navigate(
+                            Route.AddContact.pathFor(ContactType.SOS.name)
+                        )
                         else -> item.route?.let { navController.navigate(it.path) }
                     }
                 },
@@ -319,7 +324,9 @@ fun PukaarNavHost(
                 preSavedNumbers = listed.asPreSavedNumbers() + actions.loadPreSavedNumbers(),
                 inactivityTiming = actions.loadInactivityTiming(),
                 onBack = { navController.popBackStack() },
-                onAddContact = { navController.navigate(Route.AddContact.path) },
+                onAddContact = { type ->
+                    navController.navigate(Route.AddContact.pathFor(type.name))
+                },
                 onSaveContact = { contact ->
                     val draft = contact.toDraft()
                     if (onSaveContact != null) {
@@ -360,15 +367,37 @@ fun PukaarNavHost(
             )
         }
 
-        composable(Route.AddContact.path) {
+        composable(
+            route = Route.AddContact.path,
+            arguments = listOf(
+                navArgument(Route.AddContact.ARG_TYPE) {
+                    type = NavType.StringType
+                    defaultValue = ContactType.SOS.name
+                }
+            )
+        ) { entry ->
+            val typeName = entry.arguments?.getString(Route.AddContact.ARG_TYPE)
+            val initialType = runCatching {
+                ContactType.valueOf(typeName ?: ContactType.SOS.name)
+            }.getOrDefault(ContactType.SOS)
             ContactFormScreen(
+                initial = ContactDraft(
+                    name = "",
+                    mobile = "",
+                    relationship = "",
+                    type = initialType
+                ),
                 onBack = { navController.popBackStack() },
                 onSave = { draft ->
                     if (onSaveContact != null) {
-                        onSaveContact(draft) { showSuccess(SuccessType.CONTACT_ADDED) }
+                        onSaveContact(draft) {
+                            showSuccess(SuccessType.CONTACT_ADDED)
+                            navController.popBackStack()
+                        }
                     } else {
                         actions.saveContact(draft)
                         showSuccess(SuccessType.CONTACT_ADDED)
+                        navController.popBackStack()
                     }
                 }
             )

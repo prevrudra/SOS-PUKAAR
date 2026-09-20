@@ -7,6 +7,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -60,20 +61,31 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 
 class MainActivity : ComponentActivity() {
+    private val callerIdSavedState = mutableStateOf(false)
+
     private val notifPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { }
 
     private val contactsPermission = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (granted) {
-            PukaarCallerIdContact.ensureSaved(this)
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { results ->
+        val ok = results[Manifest.permission.READ_CONTACTS] == true &&
+            results[Manifest.permission.WRITE_CONTACTS] == true
+        if (ok) {
+            val saved = PukaarCallerIdContact.ensureSaved(this)
+            callerIdSavedState.value = saved
+            Toast.makeText(
+                this,
+                if (saved) "PUKAAR High Alert saved to contacts" else "Could not save contact — try again",
+                Toast.LENGTH_LONG
+            ).show()
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        callerIdSavedState.value = PukaarCallerIdContact.isSaved(this)
         setContent {
             var phoneDigits by remember { mutableStateOf("") }
             var otp by remember { mutableStateOf("") }
@@ -81,6 +93,7 @@ class MainActivity : ComponentActivity() {
             var loading by remember { mutableStateOf(false) }
             var error by remember { mutableStateOf<String?>(null) }
             var activePhone by remember { mutableStateOf("") }
+            var callerIdSaved by callerIdSavedState
             val scope = rememberCoroutineScope()
             val phoneE164 = remember(phoneDigits) { toE164(phoneDigits) }
 
@@ -92,7 +105,7 @@ class MainActivity : ComponentActivity() {
                             activePhone = session.phone().orEmpty()
                             step = Step.Active
                             ensureMonitoring()
-                            ensurePukaarCallerIdContact()
+                            refreshCallerIdSaved()
                         }
                     }
                 }.onFailure {
@@ -108,6 +121,8 @@ class MainActivity : ComponentActivity() {
                                 startActivity(Intent(this@MainActivity, SamplePreviewActivity::class.java))
                             },
                             monitoringPhone = activePhone.ifBlank { "Ready" },
+                            callerIdSaved = callerIdSaved,
+                            onSaveCallerIdContact = { refreshCallerIdSaved(showFeedback = true) },
                             onFixPermissions = { enableGrabbing() },
                             onSignOut = {
                                 scope.launch {
@@ -215,7 +230,7 @@ class MainActivity : ComponentActivity() {
                                                     activePhone = phoneE164
                                                     step = Step.Active
                                                     ensureMonitoring()
-                                                    ensurePukaarCallerIdContact()
+                                                    refreshCallerIdSaved()
                                                     // FCM can hang on some OEMs — register in background after UI advances.
                                                     scope.launch {
                                                         FcmRegistrar.registerAfterLogin(this@MainActivity)
@@ -262,14 +277,39 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** Saves +918037126014 as "PUKAAR High Alert" so voice calls show a name on caller ID. */
-    private fun ensurePukaarCallerIdContact() {
-        if (PukaarCallerIdContact.ensureSaved(this)) return
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_CONTACTS)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
-            runCatching { contactsPermission.launch(Manifest.permission.WRITE_CONTACTS) }
+    private fun refreshCallerIdSaved(showFeedback: Boolean = false): Boolean {
+        if (PukaarCallerIdContact.isSaved(this)) {
+            callerIdSavedState.value = true
+            if (showFeedback) {
+                Toast.makeText(this, "PUKAAR High Alert is already in contacts", Toast.LENGTH_SHORT).show()
+            }
+            return true
         }
+        if (!PukaarCallerIdContact.hasPermissions(this)) {
+            runCatching {
+                contactsPermission.launch(
+                    arrayOf(
+                        Manifest.permission.READ_CONTACTS,
+                        Manifest.permission.WRITE_CONTACTS
+                    )
+                )
+            }
+            callerIdSavedState.value = false
+            if (showFeedback) {
+                Toast.makeText(this, "Allow contacts access to save caller ID", Toast.LENGTH_LONG).show()
+            }
+            return false
+        }
+        val saved = PukaarCallerIdContact.ensureSaved(this)
+        callerIdSavedState.value = saved
+        if (showFeedback) {
+            Toast.makeText(
+                this,
+                if (saved) "PUKAAR High Alert saved to contacts" else "Could not save contact — try again",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+        return saved
     }
 
     /**
@@ -337,7 +377,7 @@ class MainActivity : ComponentActivity() {
                 val token = (application as HighAlertApp).session.token()
                 if (!token.isNullOrBlank()) {
                     ensureMonitoring()
-                    ensurePukaarCallerIdContact()
+                    refreshCallerIdSaved()
                 }
             }
         }

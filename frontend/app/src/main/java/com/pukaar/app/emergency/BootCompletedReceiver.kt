@@ -7,13 +7,17 @@ import android.util.Log
 
 class BootCompletedReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
-        Log.i("PUKAAR", "Boot completed — arming guard service and emergency listeners")
-        OemBatteryHelper.ensureChannel(context)
-        HardwareReceiverRegistry.register(context)
-        GuardBoostWorker.kick(context)
-        HeartbeatWorker.schedule(context)
-        if (PhoneUsageTracker.isEnabled(context)) {
-            PhoneUsageTracker.arm(context)
+        try {
+            Log.i("PUKAAR", "Boot completed — arming hardware listeners (no background FGS)")
+            OemBatteryHelper.ensureChannel(context)
+            HardwareReceiverRegistry.register(context)
+            GuardBoostWorker.kick(context)
+            HeartbeatWorker.schedule(context)
+            if (PhoneUsageTracker.isEnabled(context)) {
+                PhoneUsageTracker.arm(context)
+            }
+        } catch (e: Exception) {
+            Log.e("PUKAAR", "Boot receiver failed", e)
         }
     }
 }

@@ -27,7 +27,7 @@ class GuardBoostWorker(
             Result.success()
         } catch (e: Exception) {
             Log.w(TAG, "Guard boost failed: ${e.message}")
-            Result.retry()
+            Result.failure()
         }
     }
 

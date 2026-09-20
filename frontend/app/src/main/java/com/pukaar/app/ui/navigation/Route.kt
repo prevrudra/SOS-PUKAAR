@@ -38,7 +38,10 @@ sealed class Route(val path: String) {
     data object InactivityOnboarding : Route("onboarding/inactivity")
 
     // Production / backend-wired extras
-    data object AddContact : Route("add_contact")
+    data object AddContact : Route("add_contact?type={type}") {
+        fun pathFor(type: String) = "add_contact?type=$type"
+        const val ARG_TYPE = "type"
+    }
     data object EditContact : Route("edit_contact/{contactId}") {
         fun pathFor(id: String) = "edit_contact/$id"
         const val ARG_CONTACT_ID = "contactId"

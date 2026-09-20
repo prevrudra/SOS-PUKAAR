@@ -42,23 +42,28 @@ class PukaarApp : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
-        sessionStore = SessionStore(this)
-        repository = PukaarRepository(sessionStore)
-        createNotificationChannels()
-        OemBatteryHelper.ensureChannel(this)
-        com.pukaar.app.emergency.HeartbeatWorker.schedule(this)
-        appScope.launch {
-            if (sessionStore.token() != null) {
-                com.pukaar.app.emergency.HardwareReceiverRegistry.register(this@PukaarApp)
-                runCatching {
-                    val s = repository.elderlySettings()
-                    com.pukaar.app.emergency.InactivityMonitor.syncFromServer(
-                        this@PukaarApp,
-                        s.softHours ?: 6,
-                        s.inactivityMonitoringEnabled != false
-                    )
+        runCatching {
+            com.pukaar.app.emergency.AppForegroundTracker.init(this)
+            sessionStore = SessionStore(this)
+            repository = PukaarRepository(sessionStore)
+            createNotificationChannels()
+            OemBatteryHelper.ensureChannel(this)
+            com.pukaar.app.emergency.HeartbeatWorker.schedule(this)
+            appScope.launch {
+                if (sessionStore.token() != null) {
+                    com.pukaar.app.emergency.HardwareReceiverRegistry.register(this@PukaarApp)
+                    runCatching {
+                        val s = repository.elderlySettings()
+                        com.pukaar.app.emergency.InactivityMonitor.syncFromServer(
+                            this@PukaarApp,
+                            s.softHours ?: 6,
+                            s.inactivityMonitoringEnabled != false
+                        )
+                    }
                 }
             }
+        }.onFailure { e ->
+            android.util.Log.e("PUKAAR", "Application onCreate failed", e)
         }
     }
 

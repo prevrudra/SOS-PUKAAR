@@ -118,6 +118,14 @@ public class PukaarProperties {
             private String phoneNumberId = "";
             private String templateName = "emergency";
             private String templateLanguage = "en";
+            /** Meta template for I'm Safe closure (e.g. pukaar_safe). Falls back to text if blank. */
+            private String safeTemplateName = "pukaar_safe";
+            private String safeTemplateLanguage = "en";
+            private String webhookVerifyToken = "";
+            /** Send live location updates to alerted contacts during active SOS. */
+            private boolean locationUpdatesEnabled = true;
+            /** Minimum seconds between location WhatsApp updates per event (testing default: 120). */
+            private int locationUpdateIntervalSeconds = 120;
         }
 
         @Data

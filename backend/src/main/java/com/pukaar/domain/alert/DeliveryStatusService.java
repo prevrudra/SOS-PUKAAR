@@ -15,6 +15,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -25,6 +27,10 @@ import java.util.UUID;
 @Service
 @RequiredArgsConstructor
 public class DeliveryStatusService {
+    private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
+    private static final DateTimeFormatter SAFE_TIME =
+            DateTimeFormatter.ofPattern("dd MMM yyyy, hh:mm a", Locale.ENGLISH);
+
     private final ContactDeliveryRepository deliveryRepo;
     private final EmergencyEventRepository eventRepo;
     private final UserRepository userRepo;
@@ -88,10 +94,11 @@ public class DeliveryStatusService {
         UserEntity user = userRepo.findById(event.getUserId()).orElse(null);
         if (user == null) return;
         String who = user.getFullName() != null && !user.getFullName().isBlank()
-                ? user.getFullName()
-                : user.getPhoneE164();
+                ? user.getFullName().trim()
+                : (user.getPhoneE164() != null ? user.getPhoneE164() : "PUKAAR user");
+        String closedAt = SAFE_TIME.format(Instant.now().atZone(IST)) + " IST";
         String message = "Good news! " + who + " is safe now.\n"
-                + "The earlier safety alert has been closed. Please don't worry. ❤️\n\n"
+                + "The earlier safety alert was closed at " + closedAt + ". Please don't worry.\n\n"
                 + "Team Pukaar";
         Map<String, String> pushData = new LinkedHashMap<>();
         pushData.put("type", "USER_SAFE");
@@ -106,7 +113,9 @@ public class DeliveryStatusService {
                 fcm.sendHighPriority(device.get().getFcmToken(), "PUKAAR — User Safe", message, pushData);
             }
             if (whatsApp.isConfigured()) {
-                if (whatsApp.sendText(d.getContactPhone(), message)) {
+                boolean ok = whatsApp.sendSafeTemplate(d.getContactPhone(), who, closedAt)
+                        || whatsApp.sendText(d.getContactPhone(), message);
+                if (ok) {
                     waSent++;
                 } else {
                     log.warn("I'm Safe WhatsApp failed for {}", d.getContactPhone());

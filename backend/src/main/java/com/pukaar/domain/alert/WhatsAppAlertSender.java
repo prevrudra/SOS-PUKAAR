@@ -32,25 +32,43 @@ public class WhatsAppAlertSender {
      * error, and retries produced 3–4 duplicate SOS WhatsApps per contact.
      */
     public boolean sendEmergencyTemplate(String toPhoneE164, List<String> bodyParams) {
-        return sendEmergencyTemplateOnce(toPhoneE164, bodyParams);
+        var wa = props.getAlerts().getWhatsapp();
+        String templateName = wa.getTemplateName() == null || wa.getTemplateName().isBlank()
+                ? "emergency" : wa.getTemplateName();
+        int expected = "pukaar_sos".equalsIgnoreCase(templateName) ? 18 : 19;
+        return sendNamedTemplate(toPhoneE164, templateName, wa.getTemplateLanguage(), bodyParams, expected);
     }
 
-    private boolean sendEmergencyTemplateOnce(String toPhoneE164, List<String> bodyParams) {
+    /** I'm Safe closure — uses WHATSAPP_SAFE_TEMPLATE_NAME (default pukaar_safe, 2 body vars). */
+    public boolean sendSafeTemplate(String toPhoneE164, String userName, String closedAtIst) {
+        var wa = props.getAlerts().getWhatsapp();
+        String templateName = wa.getSafeTemplateName();
+        if (templateName == null || templateName.isBlank()) return false;
+        String lang = wa.getSafeTemplateLanguage() == null || wa.getSafeTemplateLanguage().isBlank()
+                ? "en" : wa.getSafeTemplateLanguage();
+        return sendNamedTemplate(toPhoneE164, templateName, lang,
+                List.of(userName, closedAtIst), 2);
+    }
+
+    private boolean sendNamedTemplate(
+            String toPhoneE164,
+            String templateName,
+            String languageCode,
+            List<String> bodyParams,
+            int expectedParams
+    ) {
         if (!isConfigured()) return false;
         try {
             String phone = PhoneNumbers.forWhatsApp(toPhoneE164);
             var wa = props.getAlerts().getWhatsapp();
             String url = "https://graph.facebook.com/v26.0/" + wa.getPhoneNumberId() + "/messages";
-            String templateName = wa.getTemplateName() == null || wa.getTemplateName().isBlank()
-                    ? "emergency" : wa.getTemplateName();
-            int expected = "pukaar_sos".equalsIgnoreCase(templateName) ? 18 : 19;
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.setBearerAuth(wa.getToken());
 
             List<Map<String, Object>> parameters = new ArrayList<>();
-            for (String p : padParams(bodyParams, expected)) {
+            for (String p : padParams(bodyParams, expectedParams)) {
                 Map<String, Object> param = new LinkedHashMap<>();
                 param.put("type", "text");
                 param.put("text", sanitize(p));
@@ -63,8 +81,8 @@ public class WhatsAppAlertSender {
 
             Map<String, Object> template = new LinkedHashMap<>();
             template.put("name", templateName);
-            template.put("language", Map.of("code", wa.getTemplateLanguage() == null || wa.getTemplateLanguage().isBlank()
-                    ? "en" : wa.getTemplateLanguage()));
+            template.put("language", Map.of("code", languageCode == null || languageCode.isBlank()
+                    ? "en" : languageCode));
             template.put("components", List.of(bodyComponent));
 
             Map<String, Object> payload = new LinkedHashMap<>();

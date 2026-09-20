@@ -18,6 +18,8 @@ import java.util.*;
 @RequestMapping("/api/v1/contacts")
 @RequiredArgsConstructor
 public class ContactController {
+    private static final int MAX_PER_ROLE = 3;
+
     private final TrustedContactRepository contactRepo;
 
     @GetMapping
@@ -41,9 +43,7 @@ public class ContactController {
             return toDto(contactRepo.save(c));
         }
 
-        if (contactRepo.countByOwnerUserIdAndActiveTrue(ownerId) >= 10) {
-            throw new ApiException("CONTACT_LIMIT", "Maximum 10 trusted contacts allowed");
-        }
+        enforceRoleLimit(ownerId, role);
         TrustedContactEntity c = TrustedContactEntity.builder()
                 .ownerUserId(ownerId)
                 .name(req.getName())
@@ -179,6 +179,14 @@ public class ContactController {
         m.put("priorityOrder", c.getPriorityOrder());
         m.put("verified", c.isVerified());
         return m;
+    }
+
+    private void enforceRoleLimit(UUID ownerId, ContactRole role) {
+        long count = contactRepo.countByOwnerUserIdAndContactRoleAndActiveTrue(ownerId, role);
+        if (count >= MAX_PER_ROLE) {
+            throw new ApiException("CONTACT_LIMIT",
+                    "Maximum " + MAX_PER_ROLE + " contacts allowed for " + role.name());
+        }
     }
 
     private String normalize(String phone) {

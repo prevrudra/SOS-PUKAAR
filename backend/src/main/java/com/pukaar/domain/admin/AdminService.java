@@ -24,6 +24,9 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,6 +36,9 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class AdminService {
+    private static final ZoneId IST = ZoneId.of("Asia/Kolkata");
+    private static final DateTimeFormatter IST_FMT =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private final UserRepository userRepo;
     private final SubscriptionRepository subscriptionRepo;
     private final PaymentOrderRepository paymentRepo;
@@ -108,8 +114,8 @@ public class AdminService {
                     row.put("index", seg.getSegmentIndex());
                     row.put("durationSec", seg.getDurationSec());
                     row.put("byteSize", seg.getByteSize());
-                    row.put("uploadedAt", seg.getUploadedAt());
-                    row.put("startedAt", event.getStartedAt());
+                    row.put("uploadedAt", formatIst(seg.getUploadedAt()));
+                    row.put("startedAt", formatIst(event.getStartedAt()));
                     row.put("playUrl", "/api/v1/admin/recordings/" + seg.getId() + "/content");
                     return row;
                 })
@@ -191,5 +197,10 @@ public class AdminService {
             throw new ApiException("VOICE_FAILED", "AuthKey voice request failed");
         }
         return Map.of("phone", normalized, "userName", who, "status", "SUBMITTED");
+    }
+
+    private static String formatIst(Instant instant) {
+        if (instant == null) return null;
+        return IST_FMT.format(instant.atZone(IST)) + " IST";
     }
 }
