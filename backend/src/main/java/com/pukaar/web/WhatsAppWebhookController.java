@@ -34,9 +34,15 @@ public class WhatsAppWebhookController {
             log.info("WhatsApp webhook verified");
             return ResponseEntity.ok(challenge == null ? "" : challenge);
         }
+        if (mode == null && token == null && challenge == null) {
+            return ResponseEntity.ok(
+                    "PUKAAR WhatsApp webhook is live. Configure in Meta with hub.verify_token "
+                            + "matching WHATSAPP_WEBHOOK_VERIFY_TOKEN on the server."
+            );
+        }
         log.warn("WhatsApp webhook verify failed mode={} tokenMatch={}", mode,
                 expected != null && expected.equals(token));
-        return ResponseEntity.status(403).body("Forbidden");
+        return ResponseEntity.status(403).body("Forbidden — verify token mismatch or not configured on server");
     }
 
     @PostMapping
