@@ -66,6 +66,10 @@ public class AlertDeliveryService {
 
         String phone = normalizeContactPhone(delivery.getContactPhone());
         delivery.setContactPhone(phone);
+        if (!PhoneNumbers.isDeliverable(phone)) {
+            markFailed(delivery, "Invalid phone number — cannot deliver alert");
+            return;
+        }
         if (delivery.getStatus() == DeliveryStatus.SENT) {
             log.info("Inactivity delivery {} already SENT for {} — skip", deliveryId, phone);
             return;
@@ -112,6 +116,11 @@ public class AlertDeliveryService {
 
         String phone = normalizeContactPhone(delivery.getContactPhone());
         delivery.setContactPhone(phone);
+        if (!PhoneNumbers.isDeliverable(phone)) {
+            markFailed(delivery, "Invalid phone number — cannot deliver alert");
+            log.warn("Skipping delivery {} — invalid phone {}", deliveryId, phone);
+            return;
+        }
         if (delivery.getStatus() == DeliveryStatus.SENT) {
             log.info("Delivery {} already SENT for {} — skip duplicate send", deliveryId, phone);
             return;

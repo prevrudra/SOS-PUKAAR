@@ -13,6 +13,8 @@ enum class AlertType(val label: String) {
 enum class DeliveryStatus(val label: String) {
     READ("READ"),
     DELIVERED("DELIVERED"),
+    SENT("SENT"),
+    FAILED("FAILED"),
     PENDING("PENDING")
 }
 

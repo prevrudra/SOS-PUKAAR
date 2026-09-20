@@ -4,6 +4,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -24,4 +25,7 @@ public interface EmergencyEventRepository extends JpaRepository<EmergencyEventEn
             ORDER BY e.started_at DESC LIMIT 1
             """, nativeQuery = true)
     Optional<EmergencyEventEntity> findOpenAlertsForContactPhone(@Param("phone") String phone);
+
+    @Query("SELECT e FROM EmergencyEventEntity e WHERE e.closedAt IS NULL AND e.startedAt >= :since")
+    List<EmergencyEventEntity> findOpenSince(@Param("since") Instant since);
 }

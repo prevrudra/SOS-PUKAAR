@@ -55,7 +55,12 @@ public class LocationUpdateNotifier {
 
         int sent = 0;
         for (ContactDeliveryEntity d : deliveryRepo.findByEventId(eventId)) {
-            if (whatsApp.sendText(d.getContactPhone(), body)) sent++;
+            String phone = d.getContactPhone();
+            if (!com.pukaar.common.PhoneNumbers.isDeliverable(phone)) {
+                log.warn("Skip location WhatsApp — invalid phone {}", phone);
+                continue;
+            }
+            if (whatsApp.sendText(phone, body)) sent++;
         }
         if (sent > 0) {
             lastSent.put(eventId, now);

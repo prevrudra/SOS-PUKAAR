@@ -1,6 +1,7 @@
 package com.pukaar.web;
 
 import com.pukaar.config.PukaarProperties;
+import com.pukaar.domain.alert.WhatsAppDeliveryStatusService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -19,6 +20,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class WhatsAppWebhookController {
     private final PukaarProperties props;
+    private final WhatsAppDeliveryStatusService deliveryStatusService;
 
     @GetMapping
     public ResponseEntity<String> verify(
@@ -39,8 +41,8 @@ public class WhatsAppWebhookController {
 
     @PostMapping
     public ResponseEntity<Map<String, String>> receive(@RequestBody Map<String, Object> body) {
-        log.info("WhatsApp webhook payload: {}", body);
-        // Delivery/read receipts can be parsed here when Meta template statuses are needed.
+        log.debug("WhatsApp webhook payload: {}", body);
+        deliveryStatusService.handleWebhook(body);
         return ResponseEntity.ok(Map.of("status", "ok"));
     }
 }

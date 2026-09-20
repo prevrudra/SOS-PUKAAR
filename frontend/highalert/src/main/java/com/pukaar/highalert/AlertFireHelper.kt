@@ -14,7 +14,10 @@ import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
+import android.Manifest
+import android.content.pm.PackageManager
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 
 object AlertFireHelper {
     private const val TAG = "HighAlertFire"
@@ -212,7 +215,15 @@ object AlertFireHelper {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             builder.setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
         }
-        context.getSystemService(NotificationManager::class.java)?.notify(ALERT_NOTIF_ID, builder.build())
+        runCatching {
+            val nm = context.getSystemService(NotificationManager::class.java)
+            if (Build.VERSION.SDK_INT < 33 ||
+                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
+                == PackageManager.PERMISSION_GRANTED
+            ) {
+                nm?.notify(ALERT_NOTIF_ID, builder.build())
+            }
+        }.onFailure { Log.w(TAG, "Could not post alert notification: ${it.message}") }
 
         runCatching {
             context.startActivity(

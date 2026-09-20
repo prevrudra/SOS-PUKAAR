@@ -145,7 +145,9 @@ object AlertUiMapper {
 
     private fun parseStatus(raw: String?): DeliveryStatus = when (raw?.uppercase(Locale.ROOT)) {
         "READ" -> DeliveryStatus.READ
-        "DELIVERED", "SENT" -> DeliveryStatus.DELIVERED
+        "DELIVERED" -> DeliveryStatus.DELIVERED
+        "SENT" -> DeliveryStatus.SENT
+        "FAILED", "UNKNOWN" -> DeliveryStatus.FAILED
         else -> DeliveryStatus.PENDING
     }
 

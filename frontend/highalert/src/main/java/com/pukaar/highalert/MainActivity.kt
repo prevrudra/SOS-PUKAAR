@@ -104,8 +104,9 @@ class MainActivity : ComponentActivity() {
                         if (!session.token().isNullOrBlank()) {
                             activePhone = session.phone().orEmpty()
                             step = Step.Active
-                            ensureMonitoring()
+                            kotlinx.coroutines.delay(400)
                             refreshCallerIdSaved()
+                            ensureMonitoring()
                         }
                     }
                 }.onFailure {

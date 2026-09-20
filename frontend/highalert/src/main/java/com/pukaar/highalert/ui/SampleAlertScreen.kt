@@ -537,6 +537,8 @@ private fun DeliveryChip(status: DeliveryStatus, modifier: Modifier = Modifier) 
     val (textColor, surface) = when (status) {
         DeliveryStatus.READ -> StatusReadText to StatusReadSurface
         DeliveryStatus.DELIVERED -> StatusDeliveredText to StatusDeliveredSurface
+        DeliveryStatus.SENT -> StatusDeliveredText to StatusPendingSurface
+        DeliveryStatus.FAILED -> StatusPendingText to StatusPendingSurface
         DeliveryStatus.PENDING -> StatusPendingText to StatusPendingSurface
     }
     Row(
@@ -551,8 +553,10 @@ private fun DeliveryChip(status: DeliveryStatus, modifier: Modifier = Modifier) 
     ) {
         Text(text = status.label, style = ChipLabel.copy(color = textColor), maxLines = 1)
         Spacer(Modifier.width(5.dp))
-        if (status == DeliveryStatus.PENDING) {
-            Text(text = "•••", style = ChipLabel.copy(color = textColor, fontWeight = FontWeight.Bold))
+        if (status == DeliveryStatus.PENDING || status == DeliveryStatus.FAILED) {
+            Text(text = if (status == DeliveryStatus.FAILED) "!" else "•••", style = ChipLabel.copy(color = textColor, fontWeight = FontWeight.Bold))
+        } else if (status == DeliveryStatus.SENT) {
+            Text(text = "✓", style = ChipLabel.copy(color = textColor, fontWeight = FontWeight.Bold))
         } else {
             Icon(
                 imageVector = Icons.Filled.Check,
