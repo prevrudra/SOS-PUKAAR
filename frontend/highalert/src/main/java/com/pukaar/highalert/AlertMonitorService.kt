@@ -11,10 +11,12 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -41,42 +43,49 @@ class AlertMonitorService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
-            ACTION_STOP -> {
-                stopGuardInternal()
-                runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
-                stopSelf()
-                return START_NOT_STICKY
-            }
-            ACTION_GUARD -> {
-                startGuardInternal()
-                return START_STICKY
-            }
-            ACTION_CHECK_ONCE, null -> {
-                MonitorWatchdogReceiver.schedule(this)
-                MonitorKeepAliveWorker.enqueue(this)
-                if (checkJob?.isActive != true) {
-                    checkJob = scope.launch {
-                        try {
-                            createChannels()
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                startForeground(NOTIF_ID, buildQuietNotification())
-                            }
-                            PendingAlertChecker.checkAndFire(this@AlertMonitorService)
-                        } catch (e: Exception) {
-                            Log.w(TAG, "Check failed: ${e.message}")
-                        } finally {
-                            delay(1_500L)
-                            if (guardJob?.isActive != true) {
-                                runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
-                                stopSelf()
+        return try {
+            when (intent?.action) {
+                ACTION_STOP -> {
+                    stopGuardInternal()
+                    runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
+                    stopSelf()
+                    START_NOT_STICKY
+                }
+                ACTION_GUARD -> {
+                    createChannels()
+                    enterForeground(GUARD_NOTIF_ID, buildGuardNotification())
+                    startGuardInternal(alreadyForeground = true)
+                    START_STICKY
+                }
+                ACTION_CHECK_ONCE, null -> {
+                    MonitorWatchdogReceiver.schedule(this)
+                    MonitorKeepAliveWorker.enqueue(this)
+                    createChannels()
+                    enterForeground(NOTIF_ID, buildQuietNotification())
+                    if (checkJob?.isActive != true) {
+                        checkJob = scope.launch {
+                            try {
+                                PendingAlertChecker.checkAndFire(this@AlertMonitorService)
+                            } catch (e: Exception) {
+                                Log.w(TAG, "Check failed: ${e.message}")
+                            } finally {
+                                delay(1_500L)
+                                if (guardJob?.isActive != true) {
+                                    runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
+                                    stopSelf()
+                                }
                             }
                         }
                     }
+                    START_NOT_STICKY
                 }
-                return START_NOT_STICKY
+                else -> START_NOT_STICKY
             }
-            else -> return START_NOT_STICKY
+        } catch (e: Exception) {
+            Log.e(TAG, "Monitor service failed — stopping to avoid crash loop", e)
+            runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
+            stopSelf()
+            START_NOT_STICKY
         }
     }
 
@@ -85,20 +94,35 @@ class AlertMonitorService : Service() {
         runCatching {
             val loggedIn = runBlocking { !AlertSession(this@AlertMonitorService).token().isNullOrBlank() }
             if (loggedIn) {
-                Log.i(TAG, "Task removed — restarting guard")
-                startGuard(applicationContext)
+                Log.i(TAG, "Task removed — re-arming watchdog (no background FGS)")
                 MonitorWatchdogReceiver.schedule(applicationContext)
+                MonitorKeepAliveWorker.enqueue(applicationContext)
             }
         }
     }
 
-    private fun startGuardInternal() {
+    private fun enterForeground(notifId: Int, notification: Notification) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+            } else {
+                0
+            }
+            ServiceCompat.startForeground(this, notifId, notification, type)
+        } else {
+            startForeground(notifId, notification)
+        }
+    }
+
+    private fun startGuardInternal(alreadyForeground: Boolean = false) {
         MonitorWatchdogReceiver.schedule(this)
         MonitorKeepAliveWorker.enqueue(this)
         registerNetworkCallback()
         if (guardJob?.isActive == true) return
-        createChannels()
-        startForeground(GUARD_NOTIF_ID, buildGuardNotification())
+        if (!alreadyForeground) {
+            createChannels()
+            enterForeground(GUARD_NOTIF_ID, buildGuardNotification())
+        }
         guardJob = scope.launch {
             while (isActive) {
                 try {

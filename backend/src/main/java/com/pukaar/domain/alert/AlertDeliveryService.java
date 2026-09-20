@@ -171,11 +171,18 @@ public class AlertDeliveryService {
         }
 
         List<String> params = buildEmergencyTemplateParams(user, event);
-        if (!whatsApp.sendEmergencyTemplate(phone, params)) {
-            log.warn("WhatsApp template failed for {}", phone);
-            return false;
+        if (whatsApp.sendEmergencyTemplate(phone, params)) {
+            return true;
         }
-        return true;
+        String template = props.getAlerts().getWhatsapp().getTemplateName();
+        if (template != null && template.equalsIgnoreCase("pukaar_sos")) {
+            log.warn("pukaar_sos failed for {} — trying legacy emergency template", phone);
+            if (whatsApp.sendLegacyEmergencyTemplate(phone, buildLegacyEmergencyParams(user, event))) {
+                return true;
+            }
+        }
+        log.warn("WhatsApp template failed for {}", phone);
+        return false;
     }
 
     private static boolean channelHasWhatsApp(ContactDeliveryEntity delivery) {

@@ -57,7 +57,8 @@ public interface ContactDeliveryRepository extends JpaRepository<ContactDelivery
     @Query("""
             SELECT d FROM ContactDeliveryEntity d
             WHERE d.status IN (com.pukaar.common.DeliveryStatus.SENT,
-                               com.pukaar.common.DeliveryStatus.PENDING)
+                               com.pukaar.common.DeliveryStatus.PENDING,
+                               com.pukaar.common.DeliveryStatus.DELIVERED)
               AND d.acknowledgedAt IS NULL
               AND d.createdAt <= :olderThan
               AND d.createdAt >= :since

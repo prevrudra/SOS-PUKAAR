@@ -69,7 +69,7 @@ public class DeliveryRetryScheduler {
         for (ContactDeliveryEntity d : rows) {
             EmergencyEventEntity event = eventRepo.findById(d.getEventId()).orElse(null);
             if (event == null || event.getClosedAt() != null) continue;
-            if (d.getStatus() == DeliveryStatus.DELIVERED || d.getStatus() == DeliveryStatus.READ) continue;
+            if (d.getStatus() == DeliveryStatus.READ || d.getAcknowledgedAt() != null) continue;
             log.info("Placing voice call {}s after alert — delivery {} phone={}",
                     delaySec, d.getId(), d.getContactPhone());
             alertDeliveryService.forceVoiceEscalation(event.getUserId(), event.getId(), d.getId());

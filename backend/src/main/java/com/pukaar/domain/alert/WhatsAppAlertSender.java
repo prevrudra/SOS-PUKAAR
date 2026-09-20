@@ -39,6 +39,18 @@ public class WhatsAppAlertSender {
         return sendNamedTemplate(toPhoneE164, templateName, wa.getTemplateLanguage(), bodyParams, expected);
     }
 
+    /** Legacy approved template "emergency" (19 body variables). */
+    public boolean sendLegacyEmergencyTemplate(String toPhoneE164, List<String> bodyParams) {
+        var wa = props.getAlerts().getWhatsapp();
+        return sendNamedTemplate(
+                toPhoneE164,
+                "emergency",
+                wa.getTemplateLanguage(),
+                bodyParams,
+                19
+        );
+    }
+
     /** I'm Safe closure — uses WHATSAPP_SAFE_TEMPLATE_NAME (default pukaar_safe, 2 body vars). */
     public boolean sendSafeTemplate(String toPhoneE164, String userName, String closedAtIst) {
         var wa = props.getAlerts().getWhatsapp();

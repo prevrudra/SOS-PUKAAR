@@ -276,10 +276,14 @@ class AlertSoundService : Service() {
                 putExtra(EXTRA_HELP, isHelp)
                 putExtra(EXTRA_MOCK, mock)
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.startForegroundService(i)
-            } else {
-                context.startService(i)
+            runCatching {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(i)
+                } else {
+                    context.startService(i)
+                }
+            }.onFailure { e ->
+                android.util.Log.w("AlertSoundService", "FGS start blocked: ${e.message}")
             }
         }
 
