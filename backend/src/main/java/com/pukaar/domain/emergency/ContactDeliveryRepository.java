@@ -83,4 +83,17 @@ public interface ContactDeliveryRepository extends JpaRepository<ContactDelivery
             @Param("eventId") UUID eventId,
             @Param("phone") String phone
     );
+
+    /** Recent deliveries for WhatsApp read/delivered webhooks (open or recently closed SOS). */
+    @Query(value = """
+            SELECT d.* FROM emergency_contact_deliveries d
+            JOIN emergency_events e ON e.id = d.event_id
+            WHERE d.created_at >= :since
+              AND RIGHT(regexp_replace(d.contact_phone, '[^0-9]', '', 'g'), 10) = :last10
+            ORDER BY d.created_at DESC
+            """, nativeQuery = true)
+    List<ContactDeliveryEntity> findRecentByContactLast10(
+            @Param("last10") String last10,
+            @Param("since") Instant since
+    );
 }

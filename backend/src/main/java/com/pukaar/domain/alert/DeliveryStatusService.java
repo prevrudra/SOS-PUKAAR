@@ -120,10 +120,11 @@ public class DeliveryStatusService {
             }
             boolean notified = false;
             if (whatsApp.isConfigured()) {
-                // Text first — works in the 24h window after the SOS template; avoids 404 on unapproved pukaar_safe.
-                notified = whatsApp.sendText(d.getContactPhone(), message);
-                if (!notified && whatsApp.hasSafeTemplate()) {
+                if (whatsApp.hasSafeTemplate()) {
                     notified = whatsApp.sendSafeTemplate(d.getContactPhone(), who, closedAt);
+                }
+                if (!notified) {
+                    notified = whatsApp.sendText(d.getContactPhone(), message);
                 }
                 if (notified) {
                     waSent++;

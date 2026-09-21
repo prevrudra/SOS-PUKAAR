@@ -3,10 +3,13 @@ package com.pukaar.app.emergency
 import android.app.Notification
 import android.app.PendingIntent
 import android.app.Service
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.Build
+import androidx.core.content.ContextCompat
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -28,6 +31,15 @@ class PukaarGuardService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED
+            ) {
+                Log.w("PUKAAR", "Guard FGS skipped — POST_NOTIFICATIONS not granted")
+                HardwareReceiverRegistry.register(this)
+                stopSelf()
+                return START_NOT_STICKY
+            }
             val notification = buildNotification()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {

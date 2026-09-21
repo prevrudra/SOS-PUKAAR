@@ -1,8 +1,12 @@
 package com.pukaar.app
 
+import android.Manifest
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.view.KeyEvent
+import androidx.core.content.ContextCompat
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -22,16 +26,21 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
-        setShowWhenLocked(true)
-        setTurnScreenOn(true)
-        handleSosIntent(intent)
-        setContent {
-            PukaarTheme {
-                Surface(modifier = Modifier.fillMaxSize(), color = Color.Black) {
-                    PukaarAppNavHost()
+        runCatching {
+            enableEdgeToEdge()
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+            handleSosIntent(intent)
+            setContent {
+                PukaarTheme {
+                    Surface(modifier = Modifier.fillMaxSize(), color = Color.Black) {
+                        PukaarAppNavHost()
+                    }
                 }
             }
+        }.onFailure { e ->
+            android.util.Log.e("PUKAAR", "MainActivity failed to start UI", e)
+            finish()
         }
     }
 
@@ -40,9 +49,21 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
         InactivityMonitor.recordActivity(this)
         runCatching {
             com.pukaar.app.emergency.HardwareReceiverRegistry.register(this)
-            com.pukaar.app.emergency.PukaarGuardService.start(this, hasSession = true)
+            if (canStartGuardService()) {
+                com.pukaar.app.emergency.PukaarGuardService.start(this)
+            }
             com.pukaar.app.emergency.EmergencyForegroundService.resumeIfNeeded(this)
         }
+    }
+
+    private fun canStartGuardService(): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            return false
+        }
+        return true
     }
 
     override fun onNewIntent(intent: Intent) {

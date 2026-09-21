@@ -42,10 +42,11 @@ class PukaarApp : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        // Always init session first — NavHost reads these on first frame.
+        sessionStore = SessionStore(this)
+        repository = PukaarRepository(sessionStore)
         runCatching {
             com.pukaar.app.emergency.AppForegroundTracker.init(this)
-            sessionStore = SessionStore(this)
-            repository = PukaarRepository(sessionStore)
             createNotificationChannels()
             OemBatteryHelper.ensureChannel(this)
             com.pukaar.app.emergency.HeartbeatWorker.schedule(this)

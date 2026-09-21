@@ -61,21 +61,16 @@ public class WhatsAppDeliveryStatusService {
         String last10 = PhoneNumbers.last10(recipientDigits);
         if (last10.length() < 10) return;
         Instant since = Instant.now().minusSeconds(6 * 3600L);
-        List<EmergencyEventEntity> open = eventRepo.findOpenSince(since);
         int updated = 0;
-        for (EmergencyEventEntity event : open) {
-            if (event.getClosedAt() != null) continue;
-            for (ContactDeliveryEntity d : deliveryRepo.findByEventId(event.getId())) {
-                if (!PhoneNumbers.last10(d.getContactPhone()).equals(last10)) continue;
-                if (!channelHasWhatsApp(d)) continue;
-                if (rank(next) > rank(d.getStatus())) {
-                    d.setStatus(next);
-                    if (next == DeliveryStatus.READ && d.getAcknowledgedAt() == null) {
-                        d.setAcknowledgedAt(Instant.now());
-                    }
-                    deliveryRepo.save(d);
-                    updated++;
+        for (ContactDeliveryEntity d : deliveryRepo.findRecentByContactLast10(last10, since)) {
+            if (!channelHasWhatsApp(d)) continue;
+            if (rank(next) > rank(d.getStatus())) {
+                d.setStatus(next);
+                if (next == DeliveryStatus.READ && d.getAcknowledgedAt() == null) {
+                    d.setAcknowledgedAt(Instant.now());
                 }
+                deliveryRepo.save(d);
+                updated++;
             }
         }
         if (updated > 0) {

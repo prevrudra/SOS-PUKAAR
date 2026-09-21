@@ -29,6 +29,7 @@ public class LocationUpdateNotifier {
 
     private final PukaarProperties props;
     private final WhatsAppAlertSender whatsApp;
+    private final YourBulkSmsSender smsSender;
     private final ContactDeliveryRepository deliveryRepo;
     private final UserRepository userRepo;
 
@@ -61,8 +62,13 @@ public class LocationUpdateNotifier {
                 log.warn("Skip location WhatsApp — invalid phone {}", phone);
                 continue;
             }
-            boolean ok = whatsApp.sendLocation(phone, event.getLatitude(), event.getLongitude(), who, address)
-                    || whatsApp.sendText(phone, body);
+            // Text first — more reliable internationally than location pins (Dubai, roaming, etc.).
+            boolean ok = whatsApp.sendText(phone, body)
+                    || whatsApp.sendLocation(phone, event.getLatitude(), event.getLongitude(), who, address);
+            if (!ok && smsSender.isConfigured()) {
+                String sms = who + " live location (" + when + " IST): " + maps;
+                ok = smsSender.send(phone, sms);
+            }
             if (ok) sent++;
         }
         if (sent > 0) {
