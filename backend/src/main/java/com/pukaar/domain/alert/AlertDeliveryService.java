@@ -184,8 +184,8 @@ public class AlertDeliveryService {
             return true;
         }
         String template = props.getAlerts().getWhatsapp().getTemplateName();
-        if (template != null && template.equalsIgnoreCase("pukaar_sos")) {
-            log.warn("pukaar_sos failed for {} — trying legacy emergency template", phone);
+        if (template != null && (template.equalsIgnoreCase("pukaar_sos") || template.equalsIgnoreCase("alert"))) {
+            log.warn("{} failed for {} — trying legacy emergency template", template, phone);
             if (whatsApp.sendLegacyEmergencyTemplate(phone, buildLegacyEmergencyParams(user, event))) {
                 return true;
             }
@@ -427,10 +427,80 @@ public class AlertDeliveryService {
      */
     public List<String> buildEmergencyTemplateParams(UserEntity user, EmergencyEventEntity event) {
         String template = props.getAlerts().getWhatsapp().getTemplateName();
+        if (template != null && template.equalsIgnoreCase("alert")) {
+            return buildAlertTemplateParams(user, event);
+        }
         if (template != null && template.equalsIgnoreCase("pukaar_sos")) {
             return buildPukaarSosParams(user, event);
         }
         return buildLegacyEmergencyParams(user, event);
+    }
+
+    /**
+     * Meta template "alert" (32 body variables) — Sourabh layout Sep 2026.
+     * name — relation — phone for trusted + pre-saved; services as name — phone.
+     */
+    private List<String> buildAlertTemplateParams(UserEntity user, EmergencyEventEntity event) {
+        String who = displayName(user);
+        String userPhone = formatPhoneParam(user.getPhoneE164());
+        String when = event.getStartedAt() != null
+                ? SOS_TIME.format(event.getStartedAt().atZone(IST))
+                : SOS_TIME.format(java.time.Instant.now().atZone(IST));
+        String maps = mapsLink(event);
+        String battery = event.getBatteryPct() != null
+                ? String.valueOf(event.getBatteryPct()) : "-";
+        String network = event.getNetworkType() != null && !event.getNetworkType().isBlank()
+                ? event.getNetworkType() : "-";
+
+        List<TrustedContactEntity> all = contactRepo
+                .findByOwnerUserIdAndActiveTrueOrderByPriorityOrderAsc(user.getId());
+        List<TrustedContactEntity> trusted = all.stream()
+                .filter(c -> c.getContactRole() == ContactRole.SOS_TRUSTED)
+                .toList();
+        List<TrustedContactEntity> emergency = all.stream()
+                .filter(c -> c.getContactRole() == ContactRole.DOCTOR
+                        || c.getContactRole() == ContactRole.NEIGHBOUR
+                        || c.getContactRole() == ContactRole.HELP_MONITOR)
+                .toList();
+        NearbySnapshot nearby = resolveNearby(event);
+
+        List<String> params = new ArrayList<>();
+        params.add(who);       // 1
+        params.add(when);      // 2
+        params.add(userPhone); // 3
+        params.add(maps);      // 4
+        params.add(battery);   // 5
+        params.add(network);   // 6
+        params.add(who);       // 7
+        addContactTriple(params, trusted, 0);    // 8-10
+        addContactTriple(params, trusted, 1);    // 11-13
+        addContactTriple(params, trusted, 2);    // 14-16
+        addContactTriple(params, emergency, 0);  // 17-19
+        addContactTriple(params, emergency, 1);  // 20-22
+        addContactTriple(params, emergency, 2);  // 23-25
+        params.add(blankToDash(nearby.policeName()));   // 26
+        params.add(blankToDash(nearby.policePhone()));  // 27
+        params.add(blankToDash(nearby.ambName()));      // 28
+        params.add(blankToDash(nearby.ambPhone()));     // 29
+        params.add(blankToDash(nearby.hospitalName())); // 30
+        params.add(blankToDash(nearby.hospitalPhone()));// 31
+        params.add(who);       // 32
+        return params;
+    }
+
+    private static void addContactTriple(List<String> params, List<TrustedContactEntity> list, int index) {
+        if (index >= list.size()) {
+            params.add("-");
+            params.add("-");
+            params.add("-");
+            return;
+        }
+        TrustedContactEntity c = list.get(index);
+        String rel = c.getRelationship() != null && !c.getRelationship().isBlank()
+                ? c.getRelationship() : roleLabel(c.getContactRole());
+        params.add(c.getName() != null && !c.getName().isBlank() ? c.getName().trim() : "-");
+        params.add(rel);
+        params.add(formatPhoneParam(c.getPhoneE164()));
     }
 
     /** New Meta template "pukaar_sos" (18 body variables). */

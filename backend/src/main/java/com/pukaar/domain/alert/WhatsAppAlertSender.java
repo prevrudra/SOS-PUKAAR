@@ -35,7 +35,11 @@ public class WhatsAppAlertSender {
         var wa = props.getAlerts().getWhatsapp();
         String templateName = wa.getTemplateName() == null || wa.getTemplateName().isBlank()
                 ? "emergency" : wa.getTemplateName();
-        int expected = "pukaar_sos".equalsIgnoreCase(templateName) ? 18 : 19;
+        int expected = switch (templateName.toLowerCase(java.util.Locale.ROOT)) {
+            case "alert" -> 32;
+            case "pukaar_sos" -> 18;
+            default -> 19; // legacy "emergency"
+        };
         return sendNamedTemplate(toPhoneE164, templateName, wa.getTemplateLanguage(), bodyParams, expected);
     }
 
@@ -56,15 +60,28 @@ public class WhatsAppAlertSender {
         return name != null && !name.isBlank();
     }
 
-    /** I'm Safe closure — uses WHATSAPP_SAFE_TEMPLATE_NAME when set (e.g. pukaar_safe, 2 body vars). */
-    public boolean sendSafeTemplate(String toPhoneE164, String userName, String closedAtIst) {
+    /** I'm Safe — WHATSAPP_SAFE_TEMPLATE_NAME (e.g. safe = 4 vars, pukaar_safe = 2 vars). */
+    public boolean sendSafeTemplate(String toPhoneE164, String userName, String mapsLink, String closedAtIst) {
         var wa = props.getAlerts().getWhatsapp();
         String templateName = wa.getSafeTemplateName();
         if (templateName == null || templateName.isBlank()) return false;
         String lang = wa.getSafeTemplateLanguage() == null || wa.getSafeTemplateLanguage().isBlank()
                 ? "en" : wa.getSafeTemplateLanguage();
-        return sendNamedTemplate(toPhoneE164, templateName, lang,
-                List.of(userName, closedAtIst), 2);
+        List<String> params;
+        int expected;
+        if ("safe".equalsIgnoreCase(templateName)) {
+            params = List.of(userName, userName, mapsLink == null || mapsLink.isBlank() ? "-" : mapsLink, closedAtIst);
+            expected = 4;
+        } else {
+            params = List.of(userName, closedAtIst);
+            expected = 2;
+        }
+        return sendNamedTemplate(toPhoneE164, templateName, lang, params, expected);
+    }
+
+    /** @deprecated use {@link #sendSafeTemplate(String, String, String, String)} */
+    public boolean sendSafeTemplate(String toPhoneE164, String userName, String closedAtIst) {
+        return sendSafeTemplate(toPhoneE164, userName, "-", closedAtIst);
     }
 
     private boolean sendNamedTemplate(

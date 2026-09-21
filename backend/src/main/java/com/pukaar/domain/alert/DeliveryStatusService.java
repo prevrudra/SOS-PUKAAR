@@ -120,8 +120,12 @@ public class DeliveryStatusService {
             }
             boolean notified = false;
             if (whatsApp.isConfigured()) {
+                String maps = event.getLatitude() != null && event.getLongitude() != null
+                        ? String.format(java.util.Locale.US, "https://maps.google.com/?q=%.6f,%.6f",
+                        event.getLatitude(), event.getLongitude())
+                        : "-";
                 if (whatsApp.hasSafeTemplate()) {
-                    notified = whatsApp.sendSafeTemplate(d.getContactPhone(), who, closedAt);
+                    notified = whatsApp.sendSafeTemplate(d.getContactPhone(), who, maps, closedAt);
                 }
                 if (!notified) {
                     notified = whatsApp.sendText(d.getContactPhone(), message);

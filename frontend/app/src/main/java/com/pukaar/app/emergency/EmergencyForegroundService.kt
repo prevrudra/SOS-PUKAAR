@@ -142,27 +142,42 @@ class EmergencyForegroundService : Service() {
 
     private fun startLocationUpdates() {
         fused = LocationServices.getFusedLocationProviderClient(this)
-        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 10_000L)
+        // High accuracy only — avoid coarse/cell “SIM” pins that never move with the user.
+        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 8_000L)
             .setMinUpdateIntervalMillis(5_000L)
+            .setMinUpdateDistanceMeters(15f)
+            .setWaitForAccurateLocation(true)
             .build()
         try {
             fused?.requestLocationUpdates(request, object : LocationCallback() {
                 override fun onLocationResult(result: LocationResult) {
-                    val loc = result.lastLocation ?: return
+                    val loc = pickFreshFix(result) ?: return
                     val id = eventId ?: return
                     scope.launch {
                         runCatching {
-                            PukaarApp.instance.repository.updateLocation(id, loc.latitude, loc.longitude, loc.accuracy.toDouble())
+                            PukaarApp.instance.repository.updateLocation(
+                                id, loc.latitude, loc.longitude, loc.accuracy.toDouble()
+                            )
                         }
                     }
                 }
             }, mainLooper)
+            // Kick an immediate fresh GPS fix (not cached lastLocation).
+            scope.launch {
+                runCatching {
+                    val id = eventId ?: return@runCatching
+                    val loc = fetchFreshGps() ?: return@runCatching
+                    PukaarApp.instance.repository.updateLocation(
+                        id, loc.latitude, loc.longitude, loc.accuracy.toDouble()
+                    )
+                }
+            }
         } catch (_: SecurityException) {
             // Permission missing — engine continues with last known path
         }
     }
 
-    /** Posts last known GPS every 2 min so backend can send WhatsApp location pings even if fused updates stall. */
+    /** Posts a fresh high-accuracy GPS every 2 min (never stale lastLocation alone). */
     private fun startPeriodicLocationSync() {
         scope.launch {
             while (isActive) {
@@ -170,7 +185,7 @@ class EmergencyForegroundService : Service() {
                 val id = eventId ?: break
                 if (!hasLocationPermission()) continue
                 runCatching {
-                    val loc = fetchBestLocation() ?: return@runCatching
+                    val loc = fetchFreshGps() ?: return@runCatching
                     PukaarApp.instance.repository.updateLocation(
                         id, loc.latitude, loc.longitude, loc.accuracy.toDouble()
                     )
@@ -181,14 +196,33 @@ class EmergencyForegroundService : Service() {
         }
     }
 
-    private fun fetchBestLocation(): android.location.Location? {
+    private fun pickFreshFix(result: LocationResult): android.location.Location? {
+        val candidates = result.locations.ifEmpty {
+            listOfNotNull(result.lastLocation)
+        }
+        return candidates
+            .filter { isUsableGps(it) }
+            .minByOrNull { it.accuracy }
+    }
+
+    /** Prefer a live GPS fix from this device — reject old/coarse cell/Wi‑Fi pins. */
+    private fun fetchFreshGps(): android.location.Location? {
         val client = fused ?: return null
-        val last = Tasks.await(client.lastLocation)
-        if (last != null) return last
         val token = CancellationTokenSource()
-        return Tasks.await(
-            client.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, token.token)
-        )
+        val current = runCatching {
+            Tasks.await(client.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, token.token))
+        }.getOrNull()
+        if (current != null && isUsableGps(current)) return current
+        val last = runCatching { Tasks.await(client.lastLocation) }.getOrNull()
+        return if (last != null && isUsableGps(last)) last else current ?: last
+    }
+
+    private fun isUsableGps(loc: android.location.Location): Boolean {
+        if (!loc.hasAccuracy()) return loc.provider == android.location.LocationManager.GPS_PROVIDER
+        // Reject very coarse cell-tower style fixes when possible.
+        if (loc.accuracy > 200f) return false
+        val ageMs = System.currentTimeMillis() - loc.time
+        return ageMs in 0..90_000L
     }
 
     private fun startTelemetryLoop() {

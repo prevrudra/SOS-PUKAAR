@@ -37,6 +37,7 @@ public class LocationUpdateNotifier {
     private final UserRepository userRepo;
 
     private final Map<UUID, Instant> lastSent = new ConcurrentHashMap<>();
+    private final Map<UUID, String> lastSentCoords = new ConcurrentHashMap<>();
     /** Prevents double-send when GPS callback + scheduler race. */
     private final Set<UUID> inFlight = ConcurrentHashMap.newKeySet();
 
@@ -59,10 +60,17 @@ public class LocationUpdateNotifier {
         int interval = Math.max(60, intervalSeconds);
         Instant now = Instant.now();
         Instant prev = lastSent.get(eventId);
+        String coordKey = String.format(Locale.US, "%.5f,%.5f", event.getLatitude(), event.getLongitude());
+        boolean moved = !coordKey.equals(lastSentCoords.get(eventId));
         if (prev != null && now.isBefore(prev.plusSeconds(interval))) return;
+        // After the interval, do not rebroadcast the same frozen pin (old SIM/home location bug).
+        if (prev != null && !moved) {
+            log.debug("Skip location event {} — coordinates unchanged", eventId);
+            return;
+        }
 
-        // Claim the slot before network I/O so a racing thread cannot double-send.
         lastSent.put(eventId, now);
+        lastSentCoords.put(eventId, coordKey);
 
         UserEntity user = userRepo.findById(event.getUserId()).orElse(null);
         if (user == null) {
@@ -107,6 +115,7 @@ public class LocationUpdateNotifier {
 
     public void clear(UUID eventId) {
         lastSent.remove(eventId);
+        lastSentCoords.remove(eventId);
         inFlight.remove(eventId);
     }
 

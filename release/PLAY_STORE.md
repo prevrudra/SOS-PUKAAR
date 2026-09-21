@@ -4,6 +4,7 @@
 
 | File | App | Version |
 |------|-----|---------|
+| `pukaar-1.19.1-48.aab` | PUKAAR (`pukaar.com`) | 1.19.1 (48) |
 | `pukaar-1.19.0-47.aab` | PUKAAR (`pukaar.com`) | 1.19.0 (47) |
 | `pukaar-1.18.7-44.aab` | PUKAAR (`pukaar.com`) | 1.18.7 (44) |
 | `pukaar-1.18.6-43.aab` | PUKAAR (`pukaar.com`) | 1.18.6 (43) |
@@ -31,7 +32,7 @@ Signed with `deploy/secrets/pukaar-upload.jks`.
 
 ## High Alert — internal testing
 
-- **Internal testing:** completed versionCode **46** (`1.13.16`) — 2026-09-21
+- **Internal testing:** completed versionCode **47** (`1.13.17`) — 2026-09-21
 - Fix: Motorola crash — proper notification icon, FGS gated on POST_NOTIFICATIONS
 - Prior **42** (`1.13.12`): INACTIVITY alert template mapping + inactivity message copy
 - Prior **41** (`1.13.11`): caller ID contact save with manual save button + toast
