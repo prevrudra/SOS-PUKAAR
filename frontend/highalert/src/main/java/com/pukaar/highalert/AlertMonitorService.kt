@@ -7,19 +7,16 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
-import android.content.pm.PackageManager
-import android.content.pm.ServiceInfo
-import android.Manifest
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
-import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -33,9 +30,9 @@ import kotlinx.coroutines.runBlocking
 /**
  * Hard-coded SOS receiver.
  *
- * [ACTION_GUARD] — persistent low-power foreground guard with 15s server poll.
- * Survives process death, task swipe, and OEM battery killing better than alarms alone.
- * [ACTION_CHECK_ONCE] — one-shot check (boot / watchdog tick).
+ * CRITICAL: After [Context.startForegroundService], [startForeground] MUST be called
+ * within ~5s or Android kills the process ("keeps stopping"). Never skip it.
+ * FGS notifications are exempt from POST_NOTIFICATIONS on Android 13+.
  */
 class AlertMonitorService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -56,15 +53,21 @@ class AlertMonitorService : Service() {
                 }
                 ACTION_GUARD -> {
                     createChannels()
-                    enterForeground(GUARD_NOTIF_ID, buildGuardNotification())
+                    if (!enterForeground(GUARD_NOTIF_ID, buildGuardNotification())) {
+                        abortFgsStart()
+                        return START_NOT_STICKY
+                    }
                     startGuardInternal(alreadyForeground = true)
                     START_STICKY
                 }
                 ACTION_CHECK_ONCE, null -> {
+                    createChannels()
+                    if (!enterForeground(NOTIF_ID, buildQuietNotification())) {
+                        abortFgsStart()
+                        return START_NOT_STICKY
+                    }
                     MonitorWatchdogReceiver.schedule(this)
                     MonitorKeepAliveWorker.enqueue(this)
-                    createChannels()
-                    enterForeground(NOTIF_ID, buildQuietNotification())
                     if (checkJob?.isActive != true) {
                         checkJob = scope.launch {
                             try {
@@ -86,8 +89,7 @@ class AlertMonitorService : Service() {
             }
         } catch (e: Exception) {
             Log.e(TAG, "Monitor service failed — stopping to avoid crash loop", e)
-            runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
-            stopSelf()
+            abortFgsStart()
             START_NOT_STICKY
         }
     }
@@ -104,27 +106,35 @@ class AlertMonitorService : Service() {
         }
     }
 
-    private fun canShowForegroundNotification(): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return true
-        return ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
-            PackageManager.PERMISSION_GRANTED
+    /**
+     * Always call startForeground after startForegroundService.
+     * Returns false only if the platform rejected it — caller must stopSelf immediately.
+     */
+    private fun enterForeground(notifId: Int, notification: Notification): Boolean {
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                } else {
+                    0
+                }
+                ServiceCompat.startForeground(this, notifId, notification, type)
+            } else {
+                @Suppress("DEPRECATION")
+                startForeground(notifId, notification)
+            }
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "startForeground failed: ${e.message}", e)
+            false
+        }
     }
 
-    private fun enterForeground(notifId: Int, notification: Notification) {
-        if (!canShowForegroundNotification()) {
-            Log.w(TAG, "POST_NOTIFICATIONS missing — skip FGS (Motorola/OEM safe path)")
-            return
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-            } else {
-                0
-            }
-            ServiceCompat.startForeground(this, notifId, notification, type)
-        } else {
-            startForeground(notifId, notification)
-        }
+    private fun abortFgsStart() {
+        runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
+        MonitorWatchdogReceiver.schedule(applicationContext)
+        MonitorKeepAliveWorker.enqueue(applicationContext)
+        stopSelf()
     }
 
     private fun startGuardInternal(alreadyForeground: Boolean = false) {
@@ -134,7 +144,10 @@ class AlertMonitorService : Service() {
         if (guardJob?.isActive == true) return
         if (!alreadyForeground) {
             createChannels()
-            enterForeground(GUARD_NOTIF_ID, buildGuardNotification())
+            if (!enterForeground(GUARD_NOTIF_ID, buildGuardNotification())) {
+                abortFgsStart()
+                return
+            }
         }
         guardJob = scope.launch {
             while (isActive) {
@@ -230,7 +243,7 @@ class AlertMonitorService : Service() {
 
     private fun createChannels() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val nm = getSystemService(NotificationManager::class.java)
+            val nm = getSystemService(NotificationManager::class.java) ?: return
             nm.createNotificationChannel(
                 NotificationChannel(
                     CHANNEL_MONITOR,
@@ -251,7 +264,7 @@ class AlertMonitorService : Service() {
                     setShowBadge(false)
                 }
             )
-            AlertFireHelper.ensureAlertChannel(this)
+            runCatching { AlertFireHelper.ensureAlertChannel(this) }
         }
     }
 
@@ -276,16 +289,15 @@ class AlertMonitorService : Service() {
         const val ACTION_GUARD = "com.pukaar.highalert.GUARD"
 
         fun start(ctx: Context) {
-            safeStart(ctx, ACTION_CHECK_ONCE)
+            // One-shot check must not use FGS from background — alarms handle that.
+            MonitorWatchdogReceiver.schedule(ctx.applicationContext)
+            MonitorKeepAliveWorker.enqueue(ctx.applicationContext)
         }
 
-        /** Persistent guard — hard-coded max reliability when logged in. */
+        /** Persistent guard — only from a visible Activity (foreground). */
         fun startGuard(ctx: Context) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS)
-                != PackageManager.PERMISSION_GRANTED
-            ) {
-                Log.w(TAG, "Skip guard FGS — notification permission not granted yet")
+            if (!AppForegroundTracker.isInForeground) {
+                Log.w(TAG, "Skip guard FGS — app not in foreground")
                 MonitorWatchdogReceiver.schedule(ctx.applicationContext)
                 MonitorKeepAliveWorker.enqueue(ctx.applicationContext)
                 return
@@ -303,7 +315,6 @@ class AlertMonitorService : Service() {
                     appCtx.startService(i)
                 }
             }.onFailure { e ->
-                // Android 12+ blocks FGS from background — fall back to alarms/workers.
                 Log.w(TAG, "FGS start blocked ($action): ${e.message}")
                 MonitorWatchdogReceiver.schedule(ctx.applicationContext)
                 MonitorKeepAliveWorker.enqueue(ctx.applicationContext)

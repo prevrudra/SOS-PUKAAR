@@ -25,7 +25,7 @@ class MonitorKeepAliveWorker(
             val token = AlertSession(applicationContext).token()
             if (!token.isNullOrBlank()) {
                 PendingAlertChecker.checkAndFire(applicationContext)
-                AlertMonitorService.startGuard(applicationContext)
+                // Never start FGS from WorkManager — Android 12+ kills the process.
                 MonitorWatchdogReceiver.schedule(applicationContext)
                 FcmRegistrar.refreshAndRegister(applicationContext)
             }

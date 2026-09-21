@@ -87,193 +87,195 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        callerIdSavedState.value = runCatching { PukaarCallerIdContact.isSaved(this) }.getOrDefault(false)
-        setContent {
-            var phoneDigits by remember { mutableStateOf("") }
-            var otp by remember { mutableStateOf("") }
-            var step by remember { mutableStateOf(Step.Phone) }
-            var loading by remember { mutableStateOf(false) }
-            var error by remember { mutableStateOf<String?>(null) }
-            var activePhone by remember { mutableStateOf("") }
-            var callerIdSaved by callerIdSavedState
-            val scope = rememberCoroutineScope()
-            val phoneE164 = remember(phoneDigits) { toE164(phoneDigits) }
+        runCatching {
+            callerIdSavedState.value = runCatching { PukaarCallerIdContact.isSaved(this) }.getOrDefault(false)
+            setContent {
+                var phoneDigits by remember { mutableStateOf("") }
+                var otp by remember { mutableStateOf("") }
+                var step by remember { mutableStateOf(Step.Phone) }
+                var loading by remember { mutableStateOf(false) }
+                var error by remember { mutableStateOf<String?>(null) }
+                var activePhone by remember { mutableStateOf("") }
+                var callerIdSaved by callerIdSavedState
+                val scope = rememberCoroutineScope()
+                val phoneE164 = remember(phoneDigits) { toE164(phoneDigits) }
 
-            LaunchedEffect(Unit) {
-                runCatching {
-                    withTimeout(5_000) {
-                        val session = (application as HighAlertApp).session
-                        if (!session.token().isNullOrBlank()) {
-                            activePhone = session.phone().orEmpty()
-                            step = Step.Active
-                            kotlinx.coroutines.delay(400)
-                            refreshCallerIdSaved()
-                            kotlinx.coroutines.delay(800)
-                            ensureMonitoring()
+                LaunchedEffect(Unit) {
+                    runCatching {
+                        withTimeout(5_000) {
+                            val session = (application as HighAlertApp).session
+                            if (!session.token().isNullOrBlank()) {
+                                activePhone = session.phone().orEmpty()
+                                step = Step.Active
+                                kotlinx.coroutines.delay(600)
+                                runCatching { refreshCallerIdSaved() }
+                                kotlinx.coroutines.delay(400)
+                                runCatching { ensureMonitoring() }
+                            }
                         }
+                    }.onFailure {
+                        android.util.Log.e("HighAlert", "Startup session read failed: ${it.message}", it)
                     }
-                }.onFailure {
-                    android.util.Log.e("HighAlert", "Startup session read failed: ${it.message}", it)
                 }
-            }
 
-            PukaarAlertTheme {
-                when (step) {
-                    Step.Active -> {
-                        HomeScreen(
-                            onOpenSampleAlert = {
-                                startActivity(Intent(this@MainActivity, SamplePreviewActivity::class.java))
-                            },
-                            monitoringPhone = activePhone.ifBlank { "Ready" },
-                            callerIdSaved = callerIdSaved,
-                            onSaveCallerIdContact = { refreshCallerIdSaved(showFeedback = true) },
-                            onFixPermissions = { enableGrabbing() },
-                            onSignOut = {
-                                scope.launch {
-                                    (application as HighAlertApp).session.clear()
-                                    AlertReliabilityEngine.disarm(this@MainActivity)
-                                    step = Step.Phone
-                                    phoneDigits = ""
-                                    otp = ""
-                                    activePhone = ""
-                                }
-                            },
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .statusBarsPadding()
-                                .navigationBarsPadding()
-                        )
-                    }
+                PukaarAlertTheme {
+                    when (step) {
+                        Step.Active -> {
+                            HomeScreen(
+                                onOpenSampleAlert = {
+                                    startActivity(Intent(this@MainActivity, SamplePreviewActivity::class.java))
+                                },
+                                monitoringPhone = activePhone.ifBlank { "Ready" },
+                                callerIdSaved = callerIdSaved,
+                                onSaveCallerIdContact = { refreshCallerIdSaved(showFeedback = true) },
+                                onFixPermissions = { enableGrabbing() },
+                                onSignOut = {
+                                    scope.launch {
+                                        (application as HighAlertApp).session.clear()
+                                        AlertReliabilityEngine.disarm(this@MainActivity)
+                                        step = Step.Phone
+                                        phoneDigits = ""
+                                        otp = ""
+                                        activePhone = ""
+                                    }
+                                },
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .statusBarsPadding()
+                                    .navigationBarsPadding()
+                            )
+                        }
 
-                    else -> {
-                        Box(
-                            Modifier
-                                .fillMaxSize()
-                                .background(SurfaceWhite)
-                                .statusBarsPadding()
-                                .navigationBarsPadding()
-                                .imePadding()
-                                .padding(24.dp)
-                        ) {
-                            Column(Modifier.fillMaxWidth()) {
-                                Text("PUKAAR", color = PukaarRed, fontSize = 36.sp, fontWeight = FontWeight.Black)
-                                Text("ALERT", color = TextPrimary, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
-                                Spacer(Modifier.height(8.dp))
-                                Text(
+                        else -> {
+                            Box(
+                                Modifier
+                                    .fillMaxSize()
+                                    .background(SurfaceWhite)
+                                    .statusBarsPadding()
+                                    .navigationBarsPadding()
+                                    .imePadding()
+                                    .padding(24.dp)
+                            ) {
+                                Column(Modifier.fillMaxWidth()) {
+                                    Text("PUKAAR", color = PukaarRed, fontSize = 36.sp, fontWeight = FontWeight.Black)
+                                    Text("ALERT", color = TextPrimary, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
+                                    Spacer(Modifier.height(8.dp))
+                                    Text(
+                                        when (step) {
+                                            Step.Phone -> "Sign in with your phone to receive loud SOS alerts from people who trust you."
+                                            Step.Otp -> "Enter the 6-digit code we sent by SMS."
+                                            Step.Active -> ""
+                                        },
+                                        color = TextSecondary,
+                                        fontSize = 14.sp,
+                                        lineHeight = 20.sp
+                                    )
+                                    Spacer(Modifier.height(28.dp))
+
                                     when (step) {
-                                        Step.Phone -> "Sign in with your phone to receive loud SOS alerts from people who trust you."
-                                        Step.Otp -> "Enter the 6-digit code we sent by SMS."
-                                        Step.Active -> ""
-                                    },
-                                    color = TextSecondary,
-                                    fontSize = 14.sp,
-                                    lineHeight = 20.sp
-                                )
-                                Spacer(Modifier.height(28.dp))
-
-                                when (step) {
-                                    Step.Phone -> {
-                                        FieldLabel("Phone number")
-                                        SimpleBoxField(
-                                            value = phoneDigits,
-                                            onValueChange = {
-                                                phoneDigits = it.filter(Char::isDigit).take(10)
-                                                error = null
-                                            },
-                                            placeholder = "10-digit mobile",
-                                            keyboardType = KeyboardType.Phone,
-                                            prefix = "+91"
-                                        )
-                                        error?.let { Err(it) }
-                                        Spacer(Modifier.height(20.dp))
-                                        PrimaryButton(
-                                            text = if (loading) "Sending…" else "Continue",
-                                            enabled = phoneDigits.length == 10 && !loading
-                                        ) {
-                                            scope.launch {
-                                                loading = true
-                                                error = null
-                                                try {
-                                                    AlertNetwork.api { null }.requestOtp(OtpRequest(phoneE164))
-                                                    otp = ""
-                                                    step = Step.Otp
-                                                } catch (e: Exception) {
-                                                    error = friendlyError(e)
-                                                } finally {
-                                                    loading = false
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    Step.Otp -> {
-                                        FieldLabel("OTP code")
-                                        SimpleBoxField(
-                                            value = otp,
-                                            onValueChange = {
-                                                otp = it.filter(Char::isDigit).take(6)
-                                                error = null
-                                            },
-                                            placeholder = "6 digits",
-                                            keyboardType = KeyboardType.NumberPassword
-                                        )
-                                        error?.let { Err(it) }
-                                        Spacer(Modifier.height(20.dp))
-                                        PrimaryButton(
-                                            text = if (loading) "Starting…" else "Start alerts",
-                                            enabled = otp.length == 6 && !loading
-                                        ) {
-                                            scope.launch {
-                                                loading = true
-                                                error = null
-                                                try {
-                                                    val resp = AlertNetwork.api { null }
-                                                        .verifyOtp(OtpVerifyRequest(phoneE164, otp))
-                                                    val token = resp.accessToken ?: error("Could not sign in")
-                                                    (application as HighAlertApp).session.save(token, phoneE164)
-                                                    activePhone = phoneE164
-                                                    step = Step.Active
-                                                    ensureMonitoring()
-                                                    refreshCallerIdSaved()
-                                                    // FCM can hang on some OEMs — register in background after UI advances.
-                                                    scope.launch {
-                                                        FcmRegistrar.registerAfterLogin(this@MainActivity)
+                                        Step.Phone -> {
+                                            FieldLabel("Phone number")
+                                            SimpleBoxField(
+                                                value = phoneDigits,
+                                                onValueChange = {
+                                                    phoneDigits = it.filter(Char::isDigit).take(10)
+                                                    error = null
+                                                },
+                                                placeholder = "10-digit mobile",
+                                                keyboardType = KeyboardType.Phone,
+                                                prefix = "+91"
+                                            )
+                                            error?.let { Err(it) }
+                                            Spacer(Modifier.height(20.dp))
+                                            PrimaryButton(
+                                                text = if (loading) "Sending…" else "Continue",
+                                                enabled = phoneDigits.length == 10 && !loading
+                                            ) {
+                                                scope.launch {
+                                                    loading = true
+                                                    error = null
+                                                    try {
+                                                        AlertNetwork.api { null }.requestOtp(OtpRequest(phoneE164))
+                                                        otp = ""
+                                                        step = Step.Otp
+                                                    } catch (e: Exception) {
+                                                        error = friendlyError(e)
+                                                    } finally {
+                                                        loading = false
                                                     }
-                                                } catch (e: Exception) {
-                                                    error = friendlyError(e)
-                                                } finally {
-                                                    loading = false
                                                 }
                                             }
                                         }
-                                        TextButton(onClick = {
-                                            step = Step.Phone
-                                            otp = ""
-                                            error = null
-                                        }) {
-                                            Text("Change number", color = TextMuted)
-                                        }
-                                    }
 
-                                    Step.Active -> Unit
+                                        Step.Otp -> {
+                                            FieldLabel("OTP code")
+                                            SimpleBoxField(
+                                                value = otp,
+                                                onValueChange = {
+                                                    otp = it.filter(Char::isDigit).take(6)
+                                                    error = null
+                                                },
+                                                placeholder = "6 digits",
+                                                keyboardType = KeyboardType.NumberPassword
+                                            )
+                                            error?.let { Err(it) }
+                                            Spacer(Modifier.height(20.dp))
+                                            PrimaryButton(
+                                                text = if (loading) "Starting…" else "Start alerts",
+                                                enabled = otp.length == 6 && !loading
+                                            ) {
+                                                scope.launch {
+                                                    loading = true
+                                                    error = null
+                                                    try {
+                                                        val resp = AlertNetwork.api { null }
+                                                            .verifyOtp(OtpVerifyRequest(phoneE164, otp))
+                                                        val token = resp.accessToken ?: error("Could not sign in")
+                                                        (application as HighAlertApp).session.save(token, phoneE164)
+                                                        activePhone = phoneE164
+                                                        step = Step.Active
+                                                        ensureMonitoring()
+                                                        refreshCallerIdSaved()
+                                                        scope.launch {
+                                                            FcmRegistrar.registerAfterLogin(this@MainActivity)
+                                                        }
+                                                    } catch (e: Exception) {
+                                                        error = friendlyError(e)
+                                                    } finally {
+                                                        loading = false
+                                                    }
+                                                }
+                                            }
+                                            TextButton(onClick = {
+                                                step = Step.Phone
+                                                otp = ""
+                                                error = null
+                                            }) {
+                                                Text("Change number", color = TextMuted)
+                                            }
+                                        }
+
+                                        Step.Active -> Unit
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
+        }.onFailure { e ->
+            android.util.Log.e("HighAlert", "MainActivity UI failed", e)
+            finish()
         }
     }
 
     private fun ensureMonitoring() {
+        // Ask for notification permission (SOS alerts). FGS guard still works without it.
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
             != PackageManager.PERMISSION_GRANTED
         ) {
             runCatching { notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS) }
-            // FGS without notification permission crashes on Motorola — watchdog only until granted.
-            runCatching { AlertReliabilityEngine.armAll(this, allowForegroundService = false) }
-            return
         }
         runCatching {
             AlertReliabilityEngine.armAll(this, allowForegroundService = true)

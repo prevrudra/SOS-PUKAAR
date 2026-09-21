@@ -10,6 +10,7 @@ class HighAlertApp : Application() {
         super.onCreate()
         instance = this
         session = AlertSession(this)
+        AppForegroundTracker.init(this)
         // Do NOT start foreground services here — Android 12+ kills the process with
         // ForegroundServiceStartNotAllowedException when the app is not in the foreground.
         // Monitoring is armed from MainActivity after login.
