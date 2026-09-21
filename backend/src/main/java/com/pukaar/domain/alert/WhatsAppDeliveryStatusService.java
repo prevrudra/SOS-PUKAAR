@@ -4,8 +4,6 @@ import com.pukaar.common.DeliveryStatus;
 import com.pukaar.common.PhoneNumbers;
 import com.pukaar.domain.emergency.ContactDeliveryEntity;
 import com.pukaar.domain.emergency.ContactDeliveryRepository;
-import com.pukaar.domain.emergency.EmergencyEventEntity;
-import com.pukaar.domain.emergency.EmergencyEventRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -22,7 +20,6 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class WhatsAppDeliveryStatusService {
     private final ContactDeliveryRepository deliveryRepo;
-    private final EmergencyEventRepository eventRepo;
 
     @Transactional
     public void handleWebhook(Map<String, Object> body) {
