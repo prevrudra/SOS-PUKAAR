@@ -10,6 +10,7 @@ import com.pukaar.domain.nearby.NearbyPlacesService;
 import com.pukaar.domain.evidence.AudioSegmentEntity;
 import com.pukaar.domain.evidence.AudioSegmentRepository;
 import com.pukaar.domain.evidence.EvidenceStorageService;
+import com.pukaar.domain.alert.DeliveryStatusService;
 import com.pukaar.domain.alert.LocationUpdateNotifier;
 import com.pukaar.domain.notification.NotificationService;
 import com.pukaar.domain.police.PoliceStationEntity;
@@ -49,6 +50,7 @@ public class EmergencyOrchestrator {
     private final PukaarProperties props;
     private final NearbyPlacesService nearbyPlacesService;
     private final LocationUpdateNotifier locationUpdateNotifier;
+    private final DeliveryStatusService deliveryStatusService;
 
     @Transactional
     public Map<String, Object> trigger(UUID userId, TriggerType triggerType, Double lat, Double lng,
@@ -161,7 +163,14 @@ public class EmergencyOrchestrator {
         eventRepo.save(event);
         locationUpdateNotifier.clear(eventId);
         audit(event.getId(), userId, "CLOSED", Map.of("reason", event.getClosureReason().name()));
-        notificationService.notifyEmergencyClosed(event.getId());
+        UUID closedId = event.getId();
+        // Notify contacts only after DB commit — synchronous so the API reflects real delivery.
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                deliveryStatusService.notifyContactsUserSafe(closedId);
+            }
+        });
         return toEventDto(event, true);
     }
 

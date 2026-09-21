@@ -12,6 +12,7 @@ import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import com.google.android.gms.location.*
+import com.google.android.gms.tasks.Tasks
 import com.pukaar.app.MainActivity
 import com.pukaar.app.PukaarApp
 import com.pukaar.app.R
@@ -73,6 +74,7 @@ class EmergencyForegroundService : Service() {
             startAsForeground(isSos, recordAudio)
             acquireWakeLock()
             startLocationUpdates()
+            startPeriodicLocationSync()
             startTelemetryLoop()
             if (recordAudio && hasRecordAudioPermission()) startAudioLoop()
             START_STICKY
@@ -156,6 +158,26 @@ class EmergencyForegroundService : Service() {
             }, mainLooper)
         } catch (_: SecurityException) {
             // Permission missing — engine continues with last known path
+        }
+    }
+
+    /** Posts last known GPS every 2 min so backend can send WhatsApp location pings even if fused updates stall. */
+    private fun startPeriodicLocationSync() {
+        scope.launch {
+            while (isActive) {
+                delay(120_000L)
+                val id = eventId ?: break
+                if (!hasLocationPermission()) continue
+                runCatching {
+                    val client = fused ?: continue
+                    val loc = Tasks.await(client.lastLocation) ?: continue
+                    PukaarApp.instance.repository.updateLocation(
+                        id, loc.latitude, loc.longitude, loc.accuracy.toDouble()
+                    )
+                }.onFailure { e ->
+                    android.util.Log.w("PUKAAR", "Periodic location sync failed: ${e.message}")
+                }
+            }
         }
     }
 

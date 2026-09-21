@@ -106,23 +106,37 @@ public class DeliveryStatusService {
         pushData.put("victimName", who);
         pushData.put("victimPhone", user.getPhoneE164());
 
+        String smsBody = who + " is safe now. PUKAAR alert closed at " + closedAt + ".";
         int waSent = 0;
+        int smsSent = 0;
         for (ContactDeliveryEntity d : deliveryRepo.findByEventId(eventId)) {
+            if (!PhoneNumbers.isDeliverable(d.getContactPhone())) {
+                log.warn("Skip I'm Safe — invalid phone {}", d.getContactPhone());
+                continue;
+            }
             var device = findAlertDevice(d.getContactPhone());
             if (device.isPresent() && device.get().getFcmToken() != null) {
                 fcm.sendHighPriority(device.get().getFcmToken(), "PUKAAR — User Safe", message, pushData);
             }
+            boolean notified = false;
             if (whatsApp.isConfigured()) {
-                boolean ok = whatsApp.sendSafeTemplate(d.getContactPhone(), who, closedAt)
-                        || whatsApp.sendText(d.getContactPhone(), message);
-                if (ok) {
+                // Text first — works in the 24h window after the SOS template; avoids 404 on unapproved pukaar_safe.
+                notified = whatsApp.sendText(d.getContactPhone(), message);
+                if (!notified && whatsApp.hasSafeTemplate()) {
+                    notified = whatsApp.sendSafeTemplate(d.getContactPhone(), who, closedAt);
+                }
+                if (notified) {
                     waSent++;
                 } else {
                     log.warn("I'm Safe WhatsApp failed for {}", d.getContactPhone());
                 }
             }
+            if (!notified && smsSender.isConfigured() && smsSender.send(d.getContactPhone(), smsBody)) {
+                smsSent++;
+                notified = true;
+            }
         }
-        log.info("Safe notifications for event {} — WhatsApp sent to {} contact(s)", eventId, waSent);
+        log.info("Safe notifications for event {} — WhatsApp={}, SMS={}", eventId, waSent, smsSent);
     }
 
     private void applyStatus(ContactDeliveryEntity d, DeliveryStatus next) {

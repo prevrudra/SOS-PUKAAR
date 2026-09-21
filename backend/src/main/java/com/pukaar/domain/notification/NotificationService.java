@@ -27,7 +27,7 @@ public class NotificationService {
         alertDeliveryService.deliverInactivityAlert(userId, eventId, deliveryId, level);
     }
 
-    @Async
+    /** Prefer {@link EmergencyOrchestrator#markSafe} after-commit hook; kept for admin/legacy callers. */
     public void notifyEmergencyClosed(UUID eventId) {
         log.info("Emergency {} closed — notifying contacts user is safe", eventId);
         deliveryStatusService.notifyContactsUserSafe(eventId);

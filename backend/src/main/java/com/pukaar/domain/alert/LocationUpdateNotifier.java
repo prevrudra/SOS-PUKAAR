@@ -52,6 +52,7 @@ public class LocationUpdateNotifier {
         String maps = String.format(Locale.US, "https://maps.google.com/?q=%.6f,%.6f",
                 event.getLatitude(), event.getLongitude());
         String body = who + " — live location update (" + when + " IST)\n" + maps;
+        String address = "Live location · " + when + " IST";
 
         int sent = 0;
         for (ContactDeliveryEntity d : deliveryRepo.findByEventId(eventId)) {
@@ -60,11 +61,15 @@ public class LocationUpdateNotifier {
                 log.warn("Skip location WhatsApp — invalid phone {}", phone);
                 continue;
             }
-            if (whatsApp.sendText(phone, body)) sent++;
+            boolean ok = whatsApp.sendLocation(phone, event.getLatitude(), event.getLongitude(), who, address)
+                    || whatsApp.sendText(phone, body);
+            if (ok) sent++;
         }
         if (sent > 0) {
             lastSent.put(eventId, now);
             log.info("Live location WhatsApp sent for event {} to {} contact(s)", eventId, sent);
+        } else if (prev == null || now.isAfter(prev.plusSeconds(interval))) {
+            log.warn("Live location WhatsApp skipped for event {} — no deliverable contacts", eventId);
         }
     }
 

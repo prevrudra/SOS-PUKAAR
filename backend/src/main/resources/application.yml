@@ -127,7 +127,8 @@ pukaar:
       phone-number-id: ${WHATSAPP_PHONE_NUMBER_ID:}
       template-name: ${WHATSAPP_TEMPLATE_NAME:pukaar_sos}
       template-language: ${WHATSAPP_TEMPLATE_LANGUAGE:en}
-      safe-template-name: ${WHATSAPP_SAFE_TEMPLATE_NAME:pukaar_safe}
+      safe-template-name: ${WHATSAPP_SAFE_TEMPLATE_NAME:}
+      location-scan-ms: ${WHATSAPP_LOCATION_SCAN_MS:60000}
       safe-template-language: ${WHATSAPP_SAFE_TEMPLATE_LANGUAGE:en}
       webhook-verify-token: ${WHATSAPP_WEBHOOK_VERIFY_TOKEN:}
       location-updates-enabled: ${WHATSAPP_LOCATION_UPDATES_ENABLED:true}

@@ -362,10 +362,15 @@ private fun EmergencyActiveRoute(
                             PukaarApp.instance.sessionStore.setProtectionReady(true)
                         }
                     } else {
-                        runCatching { PukaarApp.instance.repository.markSafe(eventId) }
+                        val safeResult = runCatching { PukaarApp.instance.repository.markSafe(eventId) }
                         android.widget.Toast.makeText(
                             context,
-                            "Contacts notified via WhatsApp that you are safe",
+                            if (safeResult.isSuccess) {
+                                "Contacts notified that you are safe"
+                            } else {
+                                safeResult.exceptionOrNull()?.message
+                                    ?: "Could not notify contacts — check network and try again"
+                            },
                             android.widget.Toast.LENGTH_LONG
                         ).show()
                     }

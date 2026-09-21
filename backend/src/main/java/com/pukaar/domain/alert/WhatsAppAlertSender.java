@@ -51,7 +51,12 @@ public class WhatsAppAlertSender {
         );
     }
 
-    /** I'm Safe closure — uses WHATSAPP_SAFE_TEMPLATE_NAME (default pukaar_safe, 2 body vars). */
+    public boolean hasSafeTemplate() {
+        String name = props.getAlerts().getWhatsapp().getSafeTemplateName();
+        return name != null && !name.isBlank();
+    }
+
+    /** I'm Safe closure — uses WHATSAPP_SAFE_TEMPLATE_NAME when set (e.g. pukaar_safe, 2 body vars). */
     public boolean sendSafeTemplate(String toPhoneE164, String userName, String closedAtIst) {
         var wa = props.getAlerts().getWhatsapp();
         String templateName = wa.getSafeTemplateName();
@@ -122,6 +127,48 @@ public class WhatsAppAlertSender {
         }
     }
 
+    /** Native WhatsApp location pin — works in the post-SOS 24h session window. */
+    public boolean sendLocation(String toPhoneE164, double lat, double lng, String name, String address) {
+        if (!isConfigured()) return false;
+        try {
+            String phone = PhoneNumbers.forWhatsApp(toPhoneE164);
+            var wa = props.getAlerts().getWhatsapp();
+            String url = "https://graph.facebook.com/v26.0/" + wa.getPhoneNumberId() + "/messages";
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.setBearerAuth(wa.getToken());
+
+            Map<String, Object> location = new LinkedHashMap<>();
+            location.put("latitude", lat);
+            location.put("longitude", lng);
+            location.put("name", sanitize(name));
+            location.put("address", sanitize(address));
+
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("messaging_product", "whatsapp");
+            payload.put("to", phone);
+            payload.put("type", "location");
+            payload.put("location", location);
+
+            ResponseEntity<String> resp = restTemplate.exchange(
+                    url, HttpMethod.POST, new HttpEntity<>(payload, headers), String.class);
+            boolean ok = resp.getStatusCode().is2xxSuccessful();
+            if (ok) {
+                log.info("WhatsApp location sent to {} — meta: {}", phone, resp.getBody());
+            } else {
+                log.warn("WhatsApp location failed {} -> {}", phone, resp.getBody());
+            }
+            return ok;
+        } catch (org.springframework.web.client.HttpStatusCodeException e) {
+            log.error("WhatsApp location HTTP {} for {}: {}",
+                    e.getStatusCode().value(), toPhoneE164, e.getResponseBodyAsString());
+            return false;
+        } catch (Exception e) {
+            log.error("WhatsApp location send failed for {}", toPhoneE164, e);
+            return false;
+        }
+    }
+
     public boolean sendText(String toPhoneE164, String body) {
         if (!isConfigured()) return false;
         try {
@@ -140,7 +187,17 @@ public class WhatsAppAlertSender {
 
             ResponseEntity<String> resp = restTemplate.exchange(
                     url, HttpMethod.POST, new HttpEntity<>(payload, headers), String.class);
-            return resp.getStatusCode().is2xxSuccessful();
+            boolean ok = resp.getStatusCode().is2xxSuccessful();
+            if (ok) {
+                log.info("WhatsApp text sent to {} — meta: {}", phone, resp.getBody());
+            } else {
+                log.warn("WhatsApp text failed {} -> {}", phone, resp.getBody());
+            }
+            return ok;
+        } catch (org.springframework.web.client.HttpStatusCodeException e) {
+            log.error("WhatsApp text HTTP {} for {}: {}",
+                    e.getStatusCode().value(), toPhoneE164, e.getResponseBodyAsString());
+            return false;
         } catch (Exception e) {
             log.error("WhatsApp text send failed for {}", toPhoneE164, e);
             return false;
