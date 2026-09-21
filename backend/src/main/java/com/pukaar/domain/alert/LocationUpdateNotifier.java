@@ -52,8 +52,11 @@ public class LocationUpdateNotifier {
         String when = TIME_FMT.format(now.atZone(IST));
         String maps = String.format(Locale.US, "https://maps.google.com/?q=%.6f,%.6f",
                 event.getLatitude(), event.getLongitude());
-        String body = who + " — live location update (" + when + " IST)\n" + maps;
-        String address = "Live location · " + when + " IST";
+        String body = "*PUKAAR LIVE LOCATION*\n"
+                + who + " — updated " + when + " IST\n"
+                + "Open map: " + maps;
+        String address = "PUKAAR live · " + when + " IST";
+        String smsBody = "PUKAAR LIVE LOCATION: " + who + " @ " + when + " IST " + maps;
 
         int sent = 0;
         for (ContactDeliveryEntity d : deliveryRepo.findByEventId(eventId)) {
@@ -62,14 +65,14 @@ public class LocationUpdateNotifier {
                 log.warn("Skip location WhatsApp — invalid phone {}", phone);
                 continue;
             }
-            // Text first — more reliable internationally than location pins (Dubai, roaming, etc.).
-            boolean ok = whatsApp.sendText(phone, body)
+            boolean waOk = whatsApp.sendText(phone, body)
                     || whatsApp.sendLocation(phone, event.getLatitude(), event.getLongitude(), who, address);
-            if (!ok && smsSender.isConfigured()) {
-                String sms = who + " live location (" + when + " IST): " + maps;
-                ok = smsSender.send(phone, sms);
+            // Always SMS as well during testing — Oppo/Motorola often miss WA session texts.
+            boolean smsOk = smsSender.isConfigured() && smsSender.send(phone, smsBody);
+            if (waOk || smsOk) {
+                sent++;
+                log.info("Location update to {} wa={} sms={}", phone, waOk, smsOk);
             }
-            if (ok) sent++;
         }
         if (sent > 0) {
             lastSent.put(eventId, now);

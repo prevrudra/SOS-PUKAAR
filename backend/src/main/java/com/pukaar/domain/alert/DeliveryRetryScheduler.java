@@ -71,7 +71,8 @@ public class DeliveryRetryScheduler {
         for (ContactDeliveryEntity d : rows) {
             EmergencyEventEntity event = eventRepo.findById(d.getEventId()).orElse(null);
             if (event == null || event.getClosedAt() != null) continue;
-            if (d.getStatus() == DeliveryStatus.READ || d.getAcknowledgedAt() != null) continue;
+            // Always place one voice call ~25s after SOS even if High Alert/WhatsApp
+            // already marked DELIVERED/READ — Oppo often auto-acks before the call.
             boolean placed = alertDeliveryService.forceVoiceEscalation(event.getUserId(), event.getId(), d.getId());
             if (placed) {
                 log.info("Voice call placed {}s after alert — delivery {} phone={}",

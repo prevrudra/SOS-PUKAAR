@@ -58,9 +58,7 @@ public interface ContactDeliveryRepository extends JpaRepository<ContactDelivery
 
     @Query(value = """
             SELECT d.* FROM emergency_contact_deliveries d
-            WHERE d.status IN ('SENT', 'PENDING', 'DELIVERED')
-              AND d.acknowledged_at IS NULL
-              AND d.created_at <= :olderThan
+            WHERE d.created_at <= :olderThan
               AND d.created_at >= :since
               AND (d.channel IS NULL OR d.channel NOT LIKE '%VOICE%')
               AND NOT EXISTS (

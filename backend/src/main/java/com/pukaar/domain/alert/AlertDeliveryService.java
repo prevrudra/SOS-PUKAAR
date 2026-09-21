@@ -219,18 +219,17 @@ public class AlertDeliveryService {
         return sb.isEmpty() ? "NONE" : sb.toString();
     }
 
-    /** AuthKey voice IVR ~25s after SOS if the contact has not acknowledged yet. */
+    /** AuthKey voice IVR ~25s after SOS — one call per event+phone even if FCM/WhatsApp already read. */
     @Transactional
     public boolean forceVoiceEscalation(UUID userId, UUID eventId, UUID deliveryId) {
         ContactDeliveryEntity delivery = deliveryRepo.findById(deliveryId).orElse(null);
         if (delivery == null) return false;
-        if (delivery.getAcknowledgedAt() != null) return false;
         if (channelHasVoice(delivery) || voiceDedup.alreadySent(eventId, delivery.getContactPhone())) {
             return false;
         }
         EmergencyEventEntity event = eventRepo.findById(eventId).orElse(null);
         UserEntity user = userRepo.findById(userId).orElse(null);
-        if (event == null || user == null) return false;
+        if (event == null || user == null || event.getClosedAt() != null) return false;
         return tryVoiceEscalation(user, event, delivery.getContactPhone(), delivery);
     }
 
