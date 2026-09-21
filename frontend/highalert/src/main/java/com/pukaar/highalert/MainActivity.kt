@@ -65,7 +65,9 @@ class MainActivity : ComponentActivity() {
 
     private val notifPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
-    ) { }
+    ) { granted ->
+        if (granted) ensureMonitoring()
+    }
 
     private val contactsPermission = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -85,7 +87,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        callerIdSavedState.value = PukaarCallerIdContact.isSaved(this)
+        callerIdSavedState.value = runCatching { PukaarCallerIdContact.isSaved(this) }.getOrDefault(false)
         setContent {
             var phoneDigits by remember { mutableStateOf("") }
             var otp by remember { mutableStateOf("") }
@@ -106,6 +108,7 @@ class MainActivity : ComponentActivity() {
                             step = Step.Active
                             kotlinx.coroutines.delay(400)
                             refreshCallerIdSaved()
+                            kotlinx.coroutines.delay(800)
                             ensureMonitoring()
                         }
                     }
@@ -263,18 +266,20 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun ensureMonitoring() {
-        runCatching {
-            AlertReliabilityEngine.armAll(this, allowForegroundService = true)
-        }.onFailure {
-            android.util.Log.e("HighAlert", "ensureMonitoring failed: ${it.message}", it)
-        }
-        // Only auto-ask notification permission — battery/fullscreen stay on "Fix permissions"
-        // so login feels like a normal alarm app, not a permission gauntlet.
         if (Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
             != PackageManager.PERMISSION_GRANTED
         ) {
             runCatching { notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS) }
+            // FGS without notification permission crashes on Motorola — watchdog only until granted.
+            runCatching { AlertReliabilityEngine.armAll(this, allowForegroundService = false) }
+            return
+        }
+        runCatching {
+            AlertReliabilityEngine.armAll(this, allowForegroundService = true)
+        }.onFailure {
+            android.util.Log.e("HighAlert", "ensureMonitoring failed: ${it.message}", it)
+            runCatching { AlertReliabilityEngine.armAll(this, allowForegroundService = false) }
         }
     }
 

@@ -200,7 +200,7 @@ object AlertFireHelper {
         val builder = NotificationCompat.Builder(context, CHANNEL_ALERT)
             .setContentTitle(title)
             .setContentText(body)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_stat_highalert)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)

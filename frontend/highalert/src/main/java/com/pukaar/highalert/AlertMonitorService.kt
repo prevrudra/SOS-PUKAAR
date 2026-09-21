@@ -11,12 +11,15 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.Manifest
 import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -101,7 +104,17 @@ class AlertMonitorService : Service() {
         }
     }
 
+    private fun canShowForegroundNotification(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return true
+        return ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+    }
+
     private fun enterForeground(notifId: Int, notification: Notification) {
+        if (!canShowForegroundNotification()) {
+            Log.w(TAG, "POST_NOTIFICATIONS missing — skip FGS (Motorola/OEM safe path)")
+            return
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
@@ -190,7 +203,7 @@ class AlertMonitorService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_MONITOR)
             .setContentTitle("PUKAAR High Alert")
             .setContentText("Checking for emergency alerts…")
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_stat_highalert)
             .setOngoing(false)
             .setContentIntent(open)
             .setPriority(NotificationCompat.PRIORITY_MIN)
@@ -206,7 +219,7 @@ class AlertMonitorService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_GUARD)
             .setContentTitle("PUKAAR Alert Guard")
             .setContentText("Ready to receive SOS — do not force stop this app")
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_stat_highalert)
             .setOngoing(true)
             .setContentIntent(open)
             .setPriority(NotificationCompat.PRIORITY_LOW)
@@ -268,6 +281,15 @@ class AlertMonitorService : Service() {
 
         /** Persistent guard — hard-coded max reliability when logged in. */
         fun startGuard(ctx: Context) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED
+            ) {
+                Log.w(TAG, "Skip guard FGS — notification permission not granted yet")
+                MonitorWatchdogReceiver.schedule(ctx.applicationContext)
+                MonitorKeepAliveWorker.enqueue(ctx.applicationContext)
+                return
+            }
             safeStart(ctx, ACTION_GUARD)
         }
 

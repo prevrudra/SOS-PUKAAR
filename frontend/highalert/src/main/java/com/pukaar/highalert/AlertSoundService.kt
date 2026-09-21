@@ -35,6 +35,16 @@ class AlertSoundService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        return try {
+            onStartCommandInternal(intent)
+        } catch (e: Exception) {
+            android.util.Log.e("HighAlertSound", "Sound service failed — stopping", e)
+            stopSelfSafe()
+            START_NOT_STICKY
+        }
+    }
+
+    private fun onStartCommandInternal(intent: Intent?): Int {
         if (intent?.action == ACTION_STOP) {
             stopSelfSafe()
             return START_NOT_STICKY
@@ -99,7 +109,7 @@ class AlertSoundService : Service() {
         val builder = NotificationCompat.Builder(this, CHANNEL)
             .setContentTitle(title)
             .setContentText(body)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_stat_highalert)
             .setOngoing(true)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setPriority(NotificationCompat.PRIORITY_MAX)

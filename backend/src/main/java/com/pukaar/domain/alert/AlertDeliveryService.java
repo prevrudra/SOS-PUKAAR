@@ -221,15 +221,17 @@ public class AlertDeliveryService {
 
     /** AuthKey voice IVR ~25s after SOS if the contact has not acknowledged yet. */
     @Transactional
-    public void forceVoiceEscalation(UUID userId, UUID eventId, UUID deliveryId) {
+    public boolean forceVoiceEscalation(UUID userId, UUID eventId, UUID deliveryId) {
         ContactDeliveryEntity delivery = deliveryRepo.findById(deliveryId).orElse(null);
-        if (delivery == null) return;
-        if (delivery.getAcknowledgedAt() != null) return;
-        if (channelHasVoice(delivery)) return;
+        if (delivery == null) return false;
+        if (delivery.getAcknowledgedAt() != null) return false;
+        if (channelHasVoice(delivery) || voiceDedup.alreadySent(eventId, delivery.getContactPhone())) {
+            return false;
+        }
         EmergencyEventEntity event = eventRepo.findById(eventId).orElse(null);
         UserEntity user = userRepo.findById(userId).orElse(null);
-        if (event == null || user == null) return;
-        tryVoiceEscalation(user, event, delivery.getContactPhone(), delivery);
+        if (event == null || user == null) return false;
+        return tryVoiceEscalation(user, event, delivery.getContactPhone(), delivery);
     }
 
     /** Called by DeliveryRetryScheduler when contact has not acked within 30s. */
@@ -289,14 +291,22 @@ public class AlertDeliveryService {
         }
         String who = displayName(user);
         if (voiceSender.sendEmergency(phone, who)) {
-            String existing = delivery.getChannel();
-            delivery.setChannel(existing == null || existing.isBlank() ? "VOICE" : existing + "+VOICE");
-            delivery.setLastError(null);
-            deliveryRepo.save(delivery);
+            markVoiceOnAllDeliveries(event.getId(), phone);
             log.info("Voice escalation alert placed to {} for {}", phone, who);
             return true;
         }
         return false;
+    }
+
+    private void markVoiceOnAllDeliveries(UUID eventId, String phone) {
+        String normalized = normalizeContactPhone(phone);
+        for (ContactDeliveryEntity row : deliveryRepo.findByEventIdAndContactPhone(eventId, normalized)) {
+            String existing = row.getChannel();
+            if (channelHasVoice(row)) continue;
+            row.setChannel(existing == null || existing.isBlank() ? "VOICE" : existing + "+VOICE");
+            row.setLastError(null);
+            deliveryRepo.save(row);
+        }
     }
 
     private static boolean channelHasVoice(ContactDeliveryEntity delivery) {

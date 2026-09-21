@@ -12,6 +12,7 @@ import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import com.google.android.gms.location.*
+import com.google.android.gms.tasks.CancellationTokenSource
 import com.google.android.gms.tasks.Tasks
 import com.pukaar.app.MainActivity
 import com.pukaar.app.PukaarApp
@@ -169,8 +170,7 @@ class EmergencyForegroundService : Service() {
                 val id = eventId ?: break
                 if (!hasLocationPermission()) continue
                 runCatching {
-                    val client = fused ?: continue
-                    val loc = Tasks.await(client.lastLocation) ?: continue
+                    val loc = fetchBestLocation() ?: return@runCatching
                     PukaarApp.instance.repository.updateLocation(
                         id, loc.latitude, loc.longitude, loc.accuracy.toDouble()
                     )
@@ -179,6 +179,16 @@ class EmergencyForegroundService : Service() {
                 }
             }
         }
+    }
+
+    private fun fetchBestLocation(): android.location.Location? {
+        val client = fused ?: return null
+        val last = Tasks.await(client.lastLocation)
+        if (last != null) return last
+        val token = CancellationTokenSource()
+        return Tasks.await(
+            client.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, token.token)
+        )
     }
 
     private fun startTelemetryLoop() {

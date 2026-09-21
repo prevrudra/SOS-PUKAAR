@@ -18,11 +18,13 @@ public interface ContactDeliveryRepository extends JpaRepository<ContactDelivery
                                com.pukaar.common.DeliveryStatus.UNKNOWN)
               AND d.attempts < :maxAttempts
               AND d.createdAt >= :since
+              AND (d.attempts > 0 OR d.createdAt <= :graceBefore OR d.status <> com.pukaar.common.DeliveryStatus.PENDING)
             ORDER BY d.createdAt ASC
             """)
     List<ContactDeliveryEntity> findRetryable(
             @Param("maxAttempts") int maxAttempts,
-            @Param("since") Instant since
+            @Param("since") Instant since,
+            @Param("graceBefore") Instant graceBefore
     );
 
     /** SENT via FCM/SMS only — WhatsApp still missing; retry WhatsApp. */
@@ -54,19 +56,31 @@ public interface ContactDeliveryRepository extends JpaRepository<ContactDelivery
             @Param("since") Instant since
     );
 
-    @Query("""
-            SELECT d FROM ContactDeliveryEntity d
-            WHERE d.status IN (com.pukaar.common.DeliveryStatus.SENT,
-                               com.pukaar.common.DeliveryStatus.PENDING,
-                               com.pukaar.common.DeliveryStatus.DELIVERED)
-              AND d.acknowledgedAt IS NULL
-              AND d.createdAt <= :olderThan
-              AND d.createdAt >= :since
+    @Query(value = """
+            SELECT d.* FROM emergency_contact_deliveries d
+            WHERE d.status IN ('SENT', 'PENDING', 'DELIVERED')
+              AND d.acknowledged_at IS NULL
+              AND d.created_at <= :olderThan
+              AND d.created_at >= :since
               AND (d.channel IS NULL OR d.channel NOT LIKE '%VOICE%')
-            ORDER BY d.createdAt ASC
-            """)
+              AND NOT EXISTS (
+                  SELECT 1 FROM voice_sos_sent v
+                  WHERE v.event_id = d.event_id
+                    AND v.phone_e164 = d.contact_phone
+              )
+            ORDER BY d.created_at ASC
+            """, nativeQuery = true)
     List<ContactDeliveryEntity> findUnackedNeedingVoice(
             @Param("olderThan") Instant olderThan,
             @Param("since") Instant since
+    );
+
+    @Query("""
+            SELECT d FROM ContactDeliveryEntity d
+            WHERE d.eventId = :eventId AND d.contactPhone = :phone
+            """)
+    List<ContactDeliveryEntity> findByEventIdAndContactPhone(
+            @Param("eventId") UUID eventId,
+            @Param("phone") String phone
     );
 }

@@ -33,7 +33,9 @@ public class DeliveryRetryScheduler {
     public void retryFailed() {
         int max = Math.max(1, props.getNotification().getRetryMax());
         Instant since = Instant.now().minusSeconds(6 * 3600L);
-        List<ContactDeliveryEntity> rows = deliveryRepo.findRetryable(max, since);
+        // Do not retry brand-new PENDING rows — async first delivery may still be running.
+        Instant graceBefore = Instant.now().minusSeconds(60);
+        List<ContactDeliveryEntity> rows = deliveryRepo.findRetryable(max, since, graceBefore);
         for (ContactDeliveryEntity d : rows) {
             EmergencyEventEntity event = eventRepo.findById(d.getEventId()).orElse(null);
             if (event == null || event.getClosedAt() != null) continue;
@@ -70,9 +72,11 @@ public class DeliveryRetryScheduler {
             EmergencyEventEntity event = eventRepo.findById(d.getEventId()).orElse(null);
             if (event == null || event.getClosedAt() != null) continue;
             if (d.getStatus() == DeliveryStatus.READ || d.getAcknowledgedAt() != null) continue;
-            log.info("Placing voice call {}s after alert — delivery {} phone={}",
-                    delaySec, d.getId(), d.getContactPhone());
-            alertDeliveryService.forceVoiceEscalation(event.getUserId(), event.getId(), d.getId());
+            boolean placed = alertDeliveryService.forceVoiceEscalation(event.getUserId(), event.getId(), d.getId());
+            if (placed) {
+                log.info("Voice call placed {}s after alert — delivery {} phone={}",
+                        delaySec, d.getId(), d.getContactPhone());
+            }
         }
     }
 
