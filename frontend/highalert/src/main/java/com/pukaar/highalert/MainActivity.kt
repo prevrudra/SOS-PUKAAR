@@ -7,7 +7,6 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.widget.Toast
 import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -61,34 +60,15 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 
 class MainActivity : ComponentActivity() {
-    private val callerIdSavedState = mutableStateOf(false)
-
     private val notifPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) ensureMonitoring()
     }
 
-    private val contactsPermission = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { results ->
-        val ok = results[Manifest.permission.READ_CONTACTS] == true &&
-            results[Manifest.permission.WRITE_CONTACTS] == true
-        if (ok) {
-            val saved = PukaarCallerIdContact.ensureSaved(this)
-            callerIdSavedState.value = saved
-            Toast.makeText(
-                this,
-                if (saved) "PUKAAR High Alert saved to contacts" else "Could not save contact — try again",
-                Toast.LENGTH_LONG
-            ).show()
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         runCatching {
-            callerIdSavedState.value = runCatching { PukaarCallerIdContact.isSaved(this) }.getOrDefault(false)
             setContent {
                 var phoneDigits by remember { mutableStateOf("") }
                 var otp by remember { mutableStateOf("") }
@@ -96,7 +76,6 @@ class MainActivity : ComponentActivity() {
                 var loading by remember { mutableStateOf(false) }
                 var error by remember { mutableStateOf<String?>(null) }
                 var activePhone by remember { mutableStateOf("") }
-                var callerIdSaved by callerIdSavedState
                 val scope = rememberCoroutineScope()
                 val phoneE164 = remember(phoneDigits) { toE164(phoneDigits) }
 
@@ -107,9 +86,7 @@ class MainActivity : ComponentActivity() {
                             if (!session.token().isNullOrBlank()) {
                                 activePhone = session.phone().orEmpty()
                                 step = Step.Active
-                                kotlinx.coroutines.delay(600)
-                                runCatching { refreshCallerIdSaved() }
-                                kotlinx.coroutines.delay(400)
+                                kotlinx.coroutines.delay(500)
                                 runCatching { ensureMonitoring() }
                             }
                         }
@@ -126,8 +103,6 @@ class MainActivity : ComponentActivity() {
                                     startActivity(Intent(this@MainActivity, SamplePreviewActivity::class.java))
                                 },
                                 monitoringPhone = activePhone.ifBlank { "Ready" },
-                                callerIdSaved = callerIdSaved,
-                                onSaveCallerIdContact = { refreshCallerIdSaved(showFeedback = true) },
                                 onFixPermissions = { enableGrabbing() },
                                 onSignOut = {
                                     scope.launch {
@@ -235,7 +210,6 @@ class MainActivity : ComponentActivity() {
                                                         activePhone = phoneE164
                                                         step = Step.Active
                                                         ensureMonitoring()
-                                                        refreshCallerIdSaved()
                                                         scope.launch {
                                                             FcmRegistrar.registerAfterLogin(this@MainActivity)
                                                         }
@@ -283,41 +257,6 @@ class MainActivity : ComponentActivity() {
             android.util.Log.e("HighAlert", "ensureMonitoring failed: ${it.message}", it)
             runCatching { AlertReliabilityEngine.armAll(this, allowForegroundService = false) }
         }
-    }
-
-    private fun refreshCallerIdSaved(showFeedback: Boolean = false): Boolean {
-        if (PukaarCallerIdContact.isSaved(this)) {
-            callerIdSavedState.value = true
-            if (showFeedback) {
-                Toast.makeText(this, "PUKAAR High Alert is already in contacts", Toast.LENGTH_SHORT).show()
-            }
-            return true
-        }
-        if (!PukaarCallerIdContact.hasPermissions(this)) {
-            runCatching {
-                contactsPermission.launch(
-                    arrayOf(
-                        Manifest.permission.READ_CONTACTS,
-                        Manifest.permission.WRITE_CONTACTS
-                    )
-                )
-            }
-            callerIdSavedState.value = false
-            if (showFeedback) {
-                Toast.makeText(this, "Allow contacts access to save caller ID", Toast.LENGTH_LONG).show()
-            }
-            return false
-        }
-        val saved = PukaarCallerIdContact.ensureSaved(this)
-        callerIdSavedState.value = saved
-        if (showFeedback) {
-            Toast.makeText(
-                this,
-                if (saved) "PUKAAR High Alert saved to contacts" else "Could not save contact — try again",
-                Toast.LENGTH_LONG
-            ).show()
-        }
-        return saved
     }
 
     /**
@@ -385,7 +324,6 @@ class MainActivity : ComponentActivity() {
                 val token = (application as HighAlertApp).session.token()
                 if (!token.isNullOrBlank()) {
                     ensureMonitoring()
-                    refreshCallerIdSaved()
                 }
             }
         }
