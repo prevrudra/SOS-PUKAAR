@@ -294,6 +294,8 @@ public class AlertDeliveryService {
             log.info("Voice escalation alert placed to {} for {}", phone, who);
             return true;
         }
+        voiceDedup.release(event.getId(), phone);
+        log.warn("AuthKey voice failed for {} — claim released for retry", phone);
         return false;
     }
 

@@ -1,5 +1,6 @@
 package com.pukaar.domain.alert;
 
+import com.pukaar.common.PhoneNumbers;
 import com.pukaar.config.PukaarProperties;
 import com.pukaar.domain.emergency.ContactDeliveryEntity;
 import com.pukaar.domain.emergency.ContactDeliveryRepository;
@@ -13,12 +14,14 @@ import org.springframework.stereotype.Component;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-/** Throttled WhatsApp live-location pings to contacts during an active SOS. */
+/** Throttled WhatsApp/SMS live-location pings to contacts during an active SOS. */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -34,19 +37,38 @@ public class LocationUpdateNotifier {
     private final UserRepository userRepo;
 
     private final Map<UUID, Instant> lastSent = new ConcurrentHashMap<>();
+    /** Prevents double-send when GPS callback + scheduler race. */
+    private final Set<UUID> inFlight = ConcurrentHashMap.newKeySet();
 
     public void maybeNotify(UUID eventId, EmergencyEventEntity event) {
         var wa = props.getAlerts().getWhatsapp();
         if (!wa.isLocationUpdatesEnabled() || !whatsApp.isConfigured()) return;
         if (event.getLatitude() == null || event.getLongitude() == null) return;
+        if (!inFlight.add(eventId)) {
+            log.debug("Skip location — already sending for event {}", eventId);
+            return;
+        }
+        try {
+            notifyLocked(eventId, event, wa.getLocationUpdateIntervalSeconds());
+        } finally {
+            inFlight.remove(eventId);
+        }
+    }
 
-        int interval = Math.max(60, wa.getLocationUpdateIntervalSeconds());
+    private void notifyLocked(UUID eventId, EmergencyEventEntity event, int intervalSeconds) {
+        int interval = Math.max(60, intervalSeconds);
         Instant now = Instant.now();
         Instant prev = lastSent.get(eventId);
         if (prev != null && now.isBefore(prev.plusSeconds(interval))) return;
 
+        // Claim the slot before network I/O so a racing thread cannot double-send.
+        lastSent.put(eventId, now);
+
         UserEntity user = userRepo.findById(event.getUserId()).orElse(null);
-        if (user == null) return;
+        if (user == null) {
+            lastSent.remove(eventId);
+            return;
+        }
 
         String who = displayName(user);
         String when = TIME_FMT.format(now.atZone(IST));
@@ -55,19 +77,20 @@ public class LocationUpdateNotifier {
         String body = "*PUKAAR LIVE LOCATION*\n"
                 + who + " — updated " + when + " IST\n"
                 + "Open map: " + maps;
-        String address = "PUKAAR live · " + when + " IST";
         String smsBody = "PUKAAR LIVE LOCATION: " + who + " @ " + when + " IST " + maps;
 
+        Set<String> phonesSeen = new LinkedHashSet<>();
         int sent = 0;
         for (ContactDeliveryEntity d : deliveryRepo.findByEventId(eventId)) {
             String phone = d.getContactPhone();
-            if (!com.pukaar.common.PhoneNumbers.isDeliverable(phone)) {
-                log.warn("Skip location WhatsApp — invalid phone {}", phone);
+            if (!PhoneNumbers.isDeliverable(phone)) {
+                log.warn("Skip location — invalid phone {}", phone);
                 continue;
             }
-            boolean waOk = whatsApp.sendText(phone, body)
-                    || whatsApp.sendLocation(phone, event.getLatitude(), event.getLongitude(), who, address);
-            // Always SMS as well during testing — Oppo/Motorola often miss WA session texts.
+            String key = PhoneNumbers.digitsOnly(phone);
+            if (!phonesSeen.add(key)) continue; // one message per number
+
+            boolean waOk = whatsApp.sendText(phone, body);
             boolean smsOk = smsSender.isConfigured() && smsSender.send(phone, smsBody);
             if (waOk || smsOk) {
                 sent++;
@@ -75,15 +98,16 @@ public class LocationUpdateNotifier {
             }
         }
         if (sent > 0) {
-            lastSent.put(eventId, now);
-            log.info("Live location WhatsApp sent for event {} to {} contact(s)", eventId, sent);
-        } else if (prev == null || now.isAfter(prev.plusSeconds(interval))) {
-            log.warn("Live location WhatsApp skipped for event {} — no deliverable contacts", eventId);
+            log.info("Live location sent for event {} to {} contact(s)", eventId, sent);
+        } else {
+            lastSent.remove(eventId); // allow retry soon if nothing delivered
+            log.warn("Live location skipped for event {} — no deliverable contacts", eventId);
         }
     }
 
     public void clear(UUID eventId) {
         lastSent.remove(eventId);
+        inFlight.remove(eventId);
     }
 
     private static String displayName(UserEntity user) {
