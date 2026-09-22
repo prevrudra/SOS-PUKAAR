@@ -25,7 +25,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 
 /**
  * Hard-coded SOS receiver.
@@ -96,12 +95,15 @@ class AlertMonitorService : Service() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        runCatching {
-            val loggedIn = runBlocking { !AlertSession(this@AlertMonitorService).token().isNullOrBlank() }
-            if (loggedIn) {
-                Log.i(TAG, "Task removed — re-arming watchdog (no background FGS)")
-                MonitorWatchdogReceiver.schedule(applicationContext)
-                MonitorKeepAliveWorker.enqueue(applicationContext)
+        // Use coroutine instead of runBlocking to avoid ANR on main thread.
+        scope.launch {
+            runCatching {
+                val loggedIn = !AlertSession(this@AlertMonitorService).token().isNullOrBlank()
+                if (loggedIn) {
+                    Log.i(TAG, "Task removed — re-arming watchdog (no background FGS)")
+                    MonitorWatchdogReceiver.schedule(applicationContext)
+                    MonitorKeepAliveWorker.enqueue(applicationContext)
+                }
             }
         }
     }

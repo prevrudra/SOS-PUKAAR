@@ -41,7 +41,6 @@ import com.pukaar.highalert.ui.SampleAlertScreen
 import com.pukaar.highalert.ui.theme.PukaarAlertTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import androidx.lifecycle.lifecycleScope
 
 class AlertActivity : ComponentActivity() {
@@ -245,14 +244,16 @@ class AlertActivity : ComponentActivity() {
         val eventId = intent.getStringExtra("event_id")
         if (!eventId.isNullOrBlank() && !deliveredAcked) {
             deliveredAcked = true
-            Thread {
+            // Use lifecycleScope instead of Thread + runBlocking to avoid ANR.
+            lifecycleScope.launch {
                 runCatching {
-                    val session = AlertSession(this)
+                    val session = AlertSession(this@AlertActivity)
                     // Keep local "handled" only after UI is up — poll can still re-fire if process dies.
-                    val api = AlertNetwork.api { runBlocking { session.token() } }
-                    runBlocking { api.acknowledge(AcknowledgeRequest(eventId, "DELIVERED")) }
+                    val token = session.token()
+                    val api = AlertNetwork.api { token }
+                    api.acknowledge(AcknowledgeRequest(eventId, "DELIVERED"))
                 }
-            }.start()
+            }
         }
     }
 
