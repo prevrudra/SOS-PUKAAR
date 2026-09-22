@@ -199,6 +199,7 @@ public class AlertDeliveryService {
                 + formatPhoneParam(user.getPhoneE164()) + ". Map: " + maps;
         if (whatsApp.sendText(phone, fallback)) {
             log.warn("WhatsApp templates failed for {} — sent short SOS text fallback", phone);
+            sendFullAddressFollowUp(phone, user, event);
             return true;
         }
         waDedup.releaseClaim(event.getId(), phone);
@@ -330,63 +331,79 @@ public class AlertDeliveryService {
     private String buildAlertFollowUpMessage(UserEntity user, EmergencyEventEntity event) {
         if (user == null || event == null) return null;
         String who = displayName(user);
-        boolean help = event.getTriggerType() == com.pukaar.common.TriggerType.HELP;
-        boolean inactivity = event.getTriggerType() == com.pukaar.common.TriggerType.INACTIVITY;
+        String when = event.getStartedAt() != null
+                ? SOS_TIME.format(event.getStartedAt().atZone(IST)) + " IST"
+                : SOS_TIME.format(java.time.Instant.now().atZone(IST)) + " IST";
         NearbySnapshot n = resolveNearby(event);
         List<TrustedContactEntity> all = contactRepo
                 .findByOwnerUserIdAndActiveTrueOrderByPriorityOrderAsc(user.getId());
+        List<TrustedContactEntity> trusted = all.stream()
+                .filter(c -> c.getContactRole() == ContactRole.SOS_TRUSTED)
+                .limit(3)
+                .toList();
         List<TrustedContactEntity> helpContacts = all.stream()
                 .filter(c -> c.getContactRole() == ContactRole.DOCTOR
                         || c.getContactRole() == ContactRole.NEIGHBOUR
                         || c.getContactRole() == ContactRole.HELP_MONITOR)
+                .limit(3)
                 .toList();
 
         StringBuilder sb = new StringBuilder();
-        if (inactivity) {
-            sb.append("*PUKAAR INACTIVITY ALERT*\n");
-            sb.append(who).append(" has not used their phone for a long time.\n");
-            sb.append("Please call and check on ").append(who).append(" now.\n\n");
-        } else if (help) {
-            sb.append("*PUKAAR HELP — ASSISTANCE*\n");
-            sb.append(who).append(" has activated HELP and may need assistance.\n");
-            sb.append("Please check on ").append(who).append(" now.\n\n");
-        } else {
-            sb.append("*PUKAAR SOS — DETAILS*\n");
-            sb.append("Please check on ").append(who).append(" immediately.\n\n");
-        }
-
-        sb.append("📍 LOCATION\n");
+        sb.append("🟣 *PUKAAR — ADDITIONAL SAFETY INFORMATION*\n");
+        sb.append(who).append("\n");
+        sb.append("Last active: ").append(when).append("\n");
         if (event.getLatitude() != null && event.getLongitude() != null) {
-            sb.append(String.format(java.util.Locale.US, "%.6f, %.6f\n",
-                    event.getLatitude(), event.getLongitude()));
+            sb.append("Current / Last available location:\n");
             sb.append(mapsLink(event)).append("\n\n");
         } else {
-            sb.append("Location pending\n\n");
+            sb.append("Current / Last available location: pending\n\n");
         }
 
-        sb.append("HELP / DOCTOR / NEIGHBOUR NUMBERS\n");
+        sb.append("👥 *TRUSTED CONTACTS*\n");
+        if (trusted.isEmpty()) {
+            sb.append("- (none added)\n");
+        } else {
+            for (TrustedContactEntity c : trusted) {
+                String rel = c.getRelationship() != null && !c.getRelationship().isBlank()
+                        ? c.getRelationship() : roleLabel(c.getContactRole());
+                sb.append(c.getName()).append(" — ").append(rel).append(" — ")
+                        .append(formatPhoneParam(c.getPhoneE164())).append("\n");
+            }
+        }
+        sb.append("You may coordinate with the other trusted contact to check on ")
+                .append(who).append(".\n\n");
+
+        sb.append("📞 *PRE-SAVED HELP NUMBERS*\n");
         if (helpContacts.isEmpty()) {
             sb.append("- (none added)\n");
         } else {
-            for (TrustedContactEntity c : helpContacts.stream().limit(5).toList()) {
+            for (TrustedContactEntity c : helpContacts) {
                 String rel = c.getRelationship() != null && !c.getRelationship().isBlank()
                         ? c.getRelationship() : roleLabel(c.getContactRole());
-                sb.append("👤 ").append(c.getName()).append(" (").append(rel).append(") - ")
-                        .append(c.getPhoneE164()).append("\n");
+                sb.append(c.getName()).append(" — ").append(rel).append(" — ")
+                        .append(formatPhoneParam(c.getPhoneE164())).append("\n");
             }
         }
-        sb.append("\n");
-        sb.append("NEAREST SERVICES — FULL ADDRESS\n");
-        sb.append("🚔 Police: ").append(n.policeName()).append("\n");
-        sb.append("Address: ").append(blankToDash(n.policeAddress())).append("\n");
-        sb.append("Phone: ").append(blankToDash(n.policePhone())).append("\n\n");
-        sb.append("🚑 Ambulance: ").append(n.ambName()).append("\n");
-        sb.append("Address: ").append(blankToDash(n.ambAddress())).append("\n");
-        sb.append("Phone: ").append(blankToDash(n.ambPhone())).append("\n\n");
-        sb.append("🏥 Hospital: ").append(n.hospitalName()).append("\n");
-        sb.append("Address: ").append(blankToDash(n.hospitalAddress())).append("\n");
-        sb.append("Phone: ").append(blankToDash(n.hospitalPhone())).append("\n");
-        sb.append("🆘 National Emergency: 112");
+        sb.append("If required, you may call these pre-saved help numbers if they can provide immediate help.\n\n");
+
+        sb.append("🚔 *NEAREST POLICE*\n");
+        sb.append(blankToDash(n.policeName())).append("\n");
+        sb.append(blankToDash(n.policeAddress())).append("\n");
+        sb.append("📞 ").append(blankToDash(n.policePhone())).append("\n\n");
+
+        sb.append("🚑 *NEAREST AMBULANCE*\n");
+        sb.append(blankToDash(n.ambName())).append("\n");
+        sb.append(blankToDash(n.ambAddress())).append("\n");
+        sb.append("📞 ").append(blankToDash(n.ambPhone())).append("\n\n");
+
+        sb.append("🏥 *NEAREST HOSPITAL*\n");
+        sb.append(blankToDash(n.hospitalName())).append("\n");
+        sb.append(blankToDash(n.hospitalAddress())).append("\n");
+        sb.append("📞 ").append(blankToDash(n.hospitalPhone())).append("\n\n");
+
+        sb.append("🆘 *EMERGENCY*\n");
+        sb.append("112 — National Emergency\n");
+        sb.append("PUKAAR — Information that can help when you need it most.");
         return sb.toString();
     }
 
@@ -500,13 +517,12 @@ public class AlertDeliveryService {
         addContactTriple(params, emergency, 0);  // 17-19
         addContactTriple(params, emergency, 1);  // 20-22
         addContactTriple(params, emergency, 2);  // 23-25
-        // Include street address in name slots; keep clipped so total body stays ≤1024.
-        // Full uncut addresses go in the free-form follow-up after the template.
-        params.add(clip(serviceNameWithAddress(nearby.policeName(), nearby.policeAddress()), 80)); // 26
+        // Short names ONLY in template (Meta 1024 body cap). Full addresses in follow-up text.
+        params.add(clip(blankToDash(nearby.policeName()), 28));   // 26
         params.add(clip(blankToDash(nearby.policePhone()), 16));  // 27
-        params.add(clip(serviceNameWithAddress(nearby.ambName(), nearby.ambAddress()), 80));       // 28
+        params.add(clip(blankToDash(nearby.ambName()), 28));      // 28
         params.add(clip(blankToDash(nearby.ambPhone()), 16));     // 29
-        params.add(clip(serviceNameWithAddress(nearby.hospitalName(), nearby.hospitalAddress()), 80)); // 30
+        params.add(clip(blankToDash(nearby.hospitalName()), 28)); // 30
         params.add(clip(blankToDash(nearby.hospitalPhone()), 16));// 31
         params.add(who);       // 32
         return params;
@@ -609,13 +625,13 @@ public class AlertDeliveryService {
         params.add(contactLine(emergency, 0)); // 10
         params.add(contactLine(emergency, 1)); // 11
         params.add(contactLine(emergency, 2)); // 12
-        // Template is "Name - Phone" — put full address on the name side so it shows.
-        params.add(serviceNameWithAddress(nearby.policeName, nearby.policeAddress)); // 13
-        params.add(nearby.policePhone);        // 14
-        params.add(serviceNameWithAddress(nearby.ambName, nearby.ambAddress));       // 15
-        params.add(nearby.ambPhone);           // 16
-        params.add(serviceNameWithAddress(nearby.hospitalName, nearby.hospitalAddress)); // 17
-        params.add(nearby.hospitalPhone);      // 18
+        // Short names in template — full street addresses go in follow-up text (no "…").
+        params.add(clip(blankToDash(nearby.policeName()), 40)); // 13
+        params.add(clip(blankToDash(nearby.policePhone()), 18)); // 14
+        params.add(clip(blankToDash(nearby.ambName()), 40));     // 15
+        params.add(clip(blankToDash(nearby.ambPhone()), 18));    // 16
+        params.add(clip(blankToDash(nearby.hospitalName()), 40)); // 17
+        params.add(clip(blankToDash(nearby.hospitalPhone()), 18)); // 18
         return params;
     }
 
@@ -663,12 +679,13 @@ public class AlertDeliveryService {
         params.add(c2p);
         params.add(c3n);
         params.add(c3p);
-        params.add(serviceNameWithAddress(nearby.policeName, nearby.policeAddress));
-        params.add(nearby.policePhone);
-        params.add(serviceNameWithAddress(nearby.ambName, nearby.ambAddress));
-        params.add(nearby.ambPhone);
-        params.add(serviceNameWithAddress(nearby.hospitalName, nearby.hospitalAddress));
-        params.add(nearby.hospitalPhone);
+        // Short names only — full address is in the free-form follow-up (no truncation).
+        params.add(clip(blankToDash(nearby.policeName()), 40));
+        params.add(clip(blankToDash(nearby.policePhone()), 18));
+        params.add(clip(blankToDash(nearby.ambName()), 40));
+        params.add(clip(blankToDash(nearby.ambPhone()), 18));
+        params.add(clip(blankToDash(nearby.hospitalName()), 40));
+        params.add(clip(blankToDash(nearby.hospitalPhone()), 18));
         params.add("112");
         params.add(who);
         return params;
