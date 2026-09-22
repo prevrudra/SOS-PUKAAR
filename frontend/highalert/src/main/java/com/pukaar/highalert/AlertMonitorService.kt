@@ -51,20 +51,20 @@ class AlertMonitorService : Service() {
                     START_NOT_STICKY
                 }
                 ACTION_GUARD -> {
-                    createChannels()
                     if (!enterForeground(GUARD_NOTIF_ID, buildGuardNotification())) {
                         abortFgsStart()
                         return START_NOT_STICKY
                     }
+                    createChannels()
                     startGuardInternal(alreadyForeground = true)
                     START_STICKY
                 }
                 ACTION_CHECK_ONCE, null -> {
-                    createChannels()
                     if (!enterForeground(NOTIF_ID, buildQuietNotification())) {
                         abortFgsStart()
                         return START_NOT_STICKY
                     }
+                    createChannels()
                     MonitorWatchdogReceiver.schedule(this)
                     MonitorKeepAliveWorker.enqueue(this)
                     if (checkJob?.isActive != true) {
@@ -345,10 +345,15 @@ class AlertMonitorService : Service() {
                 val appCtx = ctx.applicationContext
                 MonitorWatchdogReceiver.cancel(appCtx)
                 MonitorKeepAliveWorker.cancel(appCtx)
-                val i = Intent(appCtx, AlertMonitorService::class.java).apply {
-                    action = ACTION_STOP
+                appCtx.stopService(Intent(appCtx, AlertMonitorService::class.java))
+            }.onFailure {
+                runCatching {
+                    val appCtx = ctx.applicationContext
+                    val i = Intent(appCtx, AlertMonitorService::class.java).apply {
+                        action = ACTION_STOP
+                    }
+                    appCtx.startService(i)
                 }
-                appCtx.startService(i)
             }
         }
     }

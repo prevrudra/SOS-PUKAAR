@@ -18,11 +18,15 @@ import android.os.PowerManager
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 
 /**
  * Alarm-clock audio — keeps ringing on lock screen even when Activity is blocked.
+ *
+ * CRITICAL: After startForegroundService, startForeground MUST run within ~5s or
+ * Android kills the process ("keeps stopping"). Promote BEFORE any other work.
  */
 class AlertSoundService : Service() {
     private var player: MediaPlayer? = null
@@ -31,59 +35,98 @@ class AlertSoundService : Service() {
     private var previousAlarmVolume: Int? = null
     private var vibrator: Vibrator? = null
     private var audioFocusRequest: AudioFocusRequest? = null
+    private var promoted = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Promote FIRST — even before reading extras / STOP action.
+        val whoHint = intent?.getStringExtra(EXTRA_WHO)?.takeIf { it.isNotBlank() } ?: "PUKAAR user"
+        val isHelpHint = intent?.getBooleanExtra(EXTRA_HELP, false) == true
+        val mockHint = intent?.getBooleanExtra(EXTRA_MOCK, false) == true
+        if (!promoteForeground(whoHint, isHelpHint, mockHint, AlertRingState.getActive(this))) {
+            // Last resort: bare notification so the 5s contract is never broken.
+            runCatching { barePromote(whoHint, isHelpHint, mockHint) }
+            stopSelfSafe()
+            return START_NOT_STICKY
+        }
+
         return try {
-            onStartCommandInternal(intent)
+            if (intent?.action == ACTION_STOP) {
+                stopSelfSafe()
+                return START_NOT_STICKY
+            }
+            wakeScreen()
+            requestAlarmAudioFocus()
+            boostVolume()
+            startSound()
+            startVibrate()
+            START_STICKY
         } catch (e: Exception) {
-            android.util.Log.e("HighAlertSound", "Sound service failed — stopping", e)
+            Log.e(TAG, "Sound service failed after promote — stopping cleanly", e)
             stopSelfSafe()
             START_NOT_STICKY
         }
     }
 
-    private fun onStartCommandInternal(intent: Intent?): Int {
-        if (intent?.action == ACTION_STOP) {
-            stopSelfSafe()
-            return START_NOT_STICKY
-        }
-        val who = intent?.getStringExtra(EXTRA_WHO)?.takeIf { it.isNotBlank() } ?: "PUKAAR user"
-        val isHelp = intent?.getBooleanExtra(EXTRA_HELP, false) == true
-        val mock = intent?.getBooleanExtra(EXTRA_MOCK, false) == true
-        val alert = AlertRingState.getActive(this)
-        wakeScreen()
-        startAsForeground(who, isHelp, mock, alert)
-        requestAlarmAudioFocus()
-        boostVolume()
-        startSound()
-        startVibrate()
-        return START_STICKY
-    }
-
-    private fun wakeScreen() {
-        runCatching {
-            val pm = getSystemService(POWER_SERVICE) as PowerManager
-            @Suppress("DEPRECATION")
-            screenWakeLock = pm.newWakeLock(
-                PowerManager.FULL_WAKE_LOCK or
-                    PowerManager.ACQUIRE_CAUSES_WAKEUP or
-                    PowerManager.ON_AFTER_RELEASE,
-                "pukaar:alert_screen"
-            ).also { it.acquire(10 * 60 * 1000L) }
-            holdWakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "pukaar:alert_hold")
-                .also { it.acquire(10 * 60 * 1000L) }
-        }
-    }
-
-    private fun startAsForeground(
+    private fun promoteForeground(
         who: String,
         isHelp: Boolean,
         mock: Boolean,
         alert: PendingAlertResponse?
-    ) {
+    ): Boolean {
         ensureChannel()
+        val notif = buildNotification(who, isHelp, mock, alert)
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                try {
+                    ServiceCompat.startForeground(
+                        this, NOTIF_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+                    )
+                } catch (e: Exception) {
+                    Log.e(TAG, "MEDIA_PLAYBACK promote failed, bare fallback", e)
+                    @Suppress("DEPRECATION")
+                    startForeground(NOTIF_ID, notif)
+                }
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                try {
+                    ServiceCompat.startForeground(
+                        this, NOTIF_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+                    )
+                } catch (e: Exception) {
+                    Log.e(TAG, "typed promote failed, bare", e)
+                    @Suppress("DEPRECATION")
+                    startForeground(NOTIF_ID, notif)
+                }
+            } else {
+                @Suppress("DEPRECATION")
+                startForeground(NOTIF_ID, notif)
+            }
+            promoted = true
+            true
+        } catch (e: Exception) {
+            Log.e(TAG, "startForeground failed", e)
+            runCatching {
+                @Suppress("DEPRECATION")
+                startForeground(NOTIF_ID, notif)
+                promoted = true
+            }.isSuccess
+        }
+    }
+
+    private fun barePromote(who: String, isHelp: Boolean, mock: Boolean) {
+        val notif = buildNotification(who, isHelp, mock, null)
+        @Suppress("DEPRECATION")
+        startForeground(NOTIF_ID, notif)
+        promoted = true
+    }
+
+    private fun buildNotification(
+        who: String,
+        isHelp: Boolean,
+        mock: Boolean,
+        alert: PendingAlertResponse?
+    ): Notification {
         val fullScreenIntent = if (alert != null) {
             PendingIntent.getActivity(
                 this, alert.eventId.hashCode(),
@@ -120,15 +163,7 @@ class AlertSoundService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             builder.setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
         }
-        val notif = builder.build()
-        if (Build.VERSION.SDK_INT >= 29) {
-            ServiceCompat.startForeground(
-                this, NOTIF_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
-            )
-        } else {
-            @Suppress("DEPRECATION")
-            startForeground(NOTIF_ID, notif)
-        }
+        return builder.build()
     }
 
     private fun ensureChannel() {
@@ -143,6 +178,21 @@ class AlertSoundService : Service() {
                 enableVibration(false)
             }
         )
+    }
+
+    private fun wakeScreen() {
+        runCatching {
+            val pm = getSystemService(POWER_SERVICE) as PowerManager
+            @Suppress("DEPRECATION")
+            screenWakeLock = pm.newWakeLock(
+                PowerManager.FULL_WAKE_LOCK or
+                    PowerManager.ACQUIRE_CAUSES_WAKEUP or
+                    PowerManager.ON_AFTER_RELEASE,
+                "pukaar:alert_screen"
+            ).also { it.acquire(10 * 60 * 1000L) }
+            holdWakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "pukaar:alert_hold")
+                .also { it.acquire(10 * 60 * 1000L) }
+        }
     }
 
     private fun requestAlarmAudioFocus() {
@@ -249,7 +299,9 @@ class AlertSoundService : Service() {
         runCatching { if (holdWakeLock?.isHeld == true) holdWakeLock?.release() }
         screenWakeLock = null
         holdWakeLock = null
-        stopForeground(STOP_FOREGROUND_REMOVE)
+        if (promoted) {
+            runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
+        }
         stopSelf()
     }
 
@@ -270,6 +322,7 @@ class AlertSoundService : Service() {
     }
 
     companion object {
+        private const val TAG = "HighAlertSound"
         private const val CHANNEL = "highalert_sound_v2"
         private const val NOTIF_ID = 9005
         const val ACTION_STOP = "com.pukaar.highalert.STOP_SOUND"
@@ -297,14 +350,21 @@ class AlertSoundService : Service() {
                     context.startService(i)
                 }
             }.onFailure { e ->
-                android.util.Log.w("AlertSoundService", "FGS start blocked: ${e.message}")
+                Log.w(TAG, "FGS start blocked: ${e.message}")
             }
         }
 
         fun stop(context: Context) {
-            context.startService(
-                Intent(context, AlertSoundService::class.java).setAction(ACTION_STOP)
-            )
+            // Prefer stopService — startService from background can crash on Android 12+.
+            runCatching {
+                context.stopService(Intent(context, AlertSoundService::class.java))
+            }.onFailure {
+                runCatching {
+                    context.startService(
+                        Intent(context, AlertSoundService::class.java).setAction(ACTION_STOP)
+                    )
+                }
+            }
         }
     }
 }

@@ -43,17 +43,23 @@ class EmergencyForegroundService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Promote FIRST — Android kills the process if startForeground is skipped (~5s).
         val isSosHint = intent?.getBooleanExtra(EXTRA_IS_SOS, true) ?: true
         val recordHint = intent?.getBooleanExtra(EXTRA_RECORD_AUDIO, isSosHint) ?: isSosHint
-        // Promote FIRST — Android kills the process if startForeground is skipped (~5s).
-        runCatching { startAsForeground(isSosHint, recordHint) }
-            .onFailure { e ->
-                android.util.Log.e("PUKAAR", "Emergency promote failed, bare fallback", e)
-                runCatching {
-                    @Suppress("DEPRECATION")
-                    startForeground(NOTIF_ID, buildEmergencyNotification(isSosHint, recordHint))
-                }
+        val promoted = runCatching { startAsForeground(isSosHint, recordHint); true }
+            .recoverCatching {
+                android.util.Log.e("PUKAAR", "Emergency promote failed, bare fallback", it)
+                @Suppress("DEPRECATION")
+                startForeground(NOTIF_ID, buildEmergencyNotification(isSosHint, recordHint))
+                true
+            }.getOrElse {
+                android.util.Log.e("PUKAAR", "Emergency bare promote failed", it)
+                false
             }
+        if (!promoted) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
 
         if (intent?.action == ACTION_STOP) {
             stopSelfSafe()

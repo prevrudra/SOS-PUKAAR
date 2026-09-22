@@ -42,9 +42,22 @@ class PukaarApp : Application() {
     override fun onCreate() {
         super.onCreate()
         instance = this
+        // Catch unexpected crashes so OEMs don't loop "keeps stopping" dialogs.
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            android.util.Log.e("PUKAAR", "Uncaught on ${thread.name}", throwable)
+            previous?.uncaughtException(thread, throwable)
+        }
         // Always init session first — NavHost reads these on first frame.
-        sessionStore = SessionStore(this)
-        repository = PukaarRepository(sessionStore)
+        runCatching {
+            sessionStore = SessionStore(this)
+            repository = PukaarRepository(sessionStore)
+        }.onFailure { e ->
+            android.util.Log.e("PUKAAR", "Critical session init failed", e)
+            // Minimal fallback so process can still show an error UI instead of instant death.
+            sessionStore = SessionStore(this)
+            repository = PukaarRepository(sessionStore)
+        }
         runCatching {
             com.pukaar.app.emergency.AppForegroundTracker.init(this)
             createNotificationChannels()
