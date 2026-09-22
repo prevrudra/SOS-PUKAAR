@@ -73,6 +73,11 @@ public class AdminController {
         return adminService.testVoiceCall(req.getPhone(), req.getUserName());
     }
 
+    @PostMapping("/test-whatsapp")
+    public Map<String, Object> testWhatsApp(@RequestBody TestWhatsAppRequest req) {
+        return adminService.testWhatsApp(req.getPhone(), req.getUserName(), req.getTypes());
+    }
+
     private static ResponseEntity<Resource> audioResponse(Resource resource, String filename) throws java.io.IOException {
         long len = resource.contentLength();
         ResponseEntity.BodyBuilder builder = ResponseEntity.ok()
@@ -95,5 +100,12 @@ public class AdminController {
     public static class TestVoiceRequest {
         private String phone;
         private String userName;
+    }
+
+    @Data
+    public static class TestWhatsAppRequest {
+        private String phone;
+        private String userName;
+        private String types; // "all" or comma-separated: "alert,safe,location,text"
     }
 }

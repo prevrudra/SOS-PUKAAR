@@ -4,6 +4,7 @@ import com.pukaar.common.ApiException;
 import com.pukaar.common.PhoneNumbers;
 import com.pukaar.common.PaymentOrderStatus;
 import com.pukaar.domain.alert.AuthKeyVoiceSender;
+import com.pukaar.domain.alert.WhatsAppAlertSender;
 import com.pukaar.common.SubscriptionStatus;
 import com.pukaar.common.UploadStatus;
 import com.pukaar.common.UserRole;
@@ -46,6 +47,7 @@ public class AdminService {
     private final AudioSegmentRepository audioRepo;
     private final EvidenceStorageService evidenceStorage;
     private final AuthKeyVoiceSender voiceSender;
+    private final WhatsAppAlertSender whatsAppSender;
 
     public Map<String, Object> stats() {
         Map<String, Object> m = new LinkedHashMap<>();
@@ -197,6 +199,77 @@ public class AdminService {
             throw new ApiException("VOICE_FAILED", "AuthKey voice request failed");
         }
         return Map.of("phone", normalized, "userName", who, "status", "SUBMITTED");
+    }
+
+    /**
+     * Send all types of WhatsApp messages for testing.
+     * @param phone Phone number to send to
+     * @param userName Test user name for templates
+     * @param types Comma-separated list of message types: alert, safe, location, text (or "all")
+     */
+    public Map<String, Object> testWhatsApp(String phone, String userName, String types) {
+        if (!whatsAppSender.isConfigured()) {
+            throw new ApiException("WHATSAPP_NOT_CONFIGURED", "WhatsApp is not enabled on this server");
+        }
+        String normalized = PhoneNumbers.toE164(phone);
+        String who = userName != null && !userName.isBlank() ? userName.trim() : "Test User";
+        String now = formatIst(Instant.now());
+        double testLat = 12.9716;  // Bangalore
+        double testLng = 77.5946;
+        String mapsLink = String.format(java.util.Locale.US, "https://maps.google.com/?q=%.6f,%.6f", testLat, testLng);
+
+        Map<String, Object> results = new LinkedHashMap<>();
+        results.put("phone", normalized);
+        results.put("userName", who);
+
+        String typeList = types == null || types.isBlank() ? "all" : types.toLowerCase();
+        boolean all = typeList.equals("all");
+
+        // 1. Alert template (32 params)
+        if (all || typeList.contains("alert")) {
+            List<String> alertParams = List.of(
+                    who, now, // 1-2: name, time
+                    "Test Address, Mumbai, MH", mapsLink, // 3-4: address, maps
+                    "75%", "Good (4G)", // 5-6: battery, network
+                    "TEST_CONTACT_1", "Friend", "+919999999001", // 7-9: contact1
+                    "TEST_CONTACT_2", "Family", "+919999999002", // 10-12: contact2
+                    "TEST_CONTACT_3", "Friend", "+919999999003", // 13-15: contact3
+                    "-", "-", "-", // 16-18: help1
+                    "-", "-", "-", // 19-21: help2
+                    "-", "-", "-", // 22-24: help3
+                    "Test Police", "100", // 25-26: police
+                    "Test Ambulance", "108", // 27-28: ambulance
+                    "Test Hospital", "+91-22-12345678", // 29-30: hospital
+                    "100", // 31: emergency number
+                    who  // 32: name again
+            );
+            boolean alertOk = whatsAppSender.sendEmergencyTemplate(normalized, alertParams);
+            results.put("alert_template", alertOk ? "SENT" : "FAILED");
+        }
+
+        // 2. Safe template (4 params)
+        if (all || typeList.contains("safe")) {
+            boolean safeOk = whatsAppSender.sendSafeTemplate(normalized, who, mapsLink, now);
+            results.put("safe_template", safeOk ? "SENT" : "FAILED");
+        }
+
+        // 3. Location pin
+        if (all || typeList.contains("location")) {
+            boolean locOk = whatsAppSender.sendLocation(normalized, testLat, testLng, who + " live location", mapsLink);
+            results.put("location_pin", locOk ? "SENT" : "FAILED");
+        }
+
+        // 4. Plain text
+        if (all || typeList.contains("text")) {
+            String textMsg = "🚨 PUKAAR TEST MESSAGE\n\n" + who + " is testing WhatsApp alerts.\n\n" +
+                    "📍 Location: " + mapsLink + "\n" +
+                    "🕐 Time: " + now + "\n\n" +
+                    "This is a test message from PUKAAR.";
+            boolean textOk = whatsAppSender.sendText(normalized, textMsg);
+            results.put("text_message", textOk ? "SENT" : "FAILED");
+        }
+
+        return results;
     }
 
     private static String formatIst(Instant instant) {
