@@ -31,6 +31,9 @@
     <string name="menu_how_pukaar_works_subtitle">Learn how PUKAAR keeps you safe</string>
     <string name="menu_mock_drill">Mock Drill</string>
     <string name="menu_mock_drill_subtitle">Drill today. Be ready for any day.</string>
+    <string name="menu_inactivity">Inactivity Protection</string>
+    <string name="menu_inactivity_subtitle">Welfare check if you\'re unreachable</string>
+    <string name="menu_inactivity_badge">For Elderly &amp; Solo Living</string>
     <string name="menu_tripshield">TRIPSHIELD</string>
     <string name="menu_tripshield_badge">For International Travellers</string>
     <string name="menu_coming_soon">Coming Soon</string>

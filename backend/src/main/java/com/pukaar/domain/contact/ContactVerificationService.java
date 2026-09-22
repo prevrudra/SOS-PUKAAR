@@ -49,20 +49,32 @@ public class ContactVerificationService {
         contact = contactRepo.save(contact);
 
         String who = ownerDisplayName == null || ownerDisplayName.isBlank() ? "a PUKAAR user" : ownerDisplayName.trim();
-        String body = "PUKAAR: " + who + " added you as a trusted contact. Your verification code is "
-                + code + ". It expires in " + OTP_TTL_MINUTES + " minutes. Install High Alert to receive their safety alerts.";
         String phone = contact.getPhoneE164();
         boolean sent = false;
-        if (smsSender.isConfigured()) {
-            sent = smsSender.send(phone, body);
+
+        // Prefer WhatsApp — no DLT template restrictions.
+        if (whatsApp.isConfigured()) {
+            String waBody = "PUKAAR: " + who + " added you as a trusted contact.\n\n"
+                    + "Your verification code is: *" + code + "*\n\n"
+                    + "It expires in " + OTP_TTL_MINUTES + " minutes.\n\n"
+                    + "Install PUKAAR High Alert to receive their safety alerts.";
+            sent = whatsApp.sendText(phone, waBody);
+            if (sent) {
+                log.info("Contact verification OTP sent via WhatsApp to {}", phone);
+            }
         }
-        if (!sent && whatsApp.isConfigured()) {
-            sent = whatsApp.sendText(phone, body);
+
+        // Fallback to SMS using DLT OTP template format.
+        if (!sent && smsSender.isConfigured()) {
+            // Use sendOtp which applies the DLT-approved OTP template.
+            sent = smsSender.sendOtp(phone, code);
+            if (sent) {
+                log.info("Contact verification OTP sent via SMS to {}", phone);
+            }
         }
+
         if (!sent) {
             log.warn("Could not deliver contact OTP to {} — code generated for verify API", phone);
-        } else {
-            log.info("Contact verification OTP sent to {}", phone);
         }
         return contact;
     }

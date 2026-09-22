@@ -6,6 +6,7 @@ import androidx.compose.material.icons.automirrored.filled.DirectionsRun
 import androidx.compose.material.icons.automirrored.filled.Help
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.ContactEmergency
+import androidx.compose.material.icons.filled.Elderly
 import androidx.compose.material.icons.filled.Flight
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.HowToReg
@@ -100,6 +101,16 @@ enum class MenuItem(
         R.string.menu_mock_drill_subtitle,
         iconBackground = PukaarRed,
         isFeature = true
+    ),
+    INACTIVITY(
+        R.string.menu_inactivity,
+        Icons.Filled.Elderly,
+        TextPrimary,
+        Route.ElderlyHelp,
+        R.string.menu_inactivity_subtitle,
+        iconBackground = PukaarOrange,
+        isFeature = true,
+        badgeRes = R.string.menu_inactivity_badge
     ),
     TRIPSHIELD(
         R.string.menu_tripshield,
@@ -202,6 +213,7 @@ enum class MenuItem(
             listOf(WHO_IS_PUKAAR_FOR),
             listOf(HOW_PUKAAR_WORKS),
             listOf(MOCK_DRILL),
+            listOf(INACTIVITY),
             listOf(TRIPSHIELD),
             listOf(EMERGENCY_CARD),
             listOf(PAYMENT_REFERRAL),
