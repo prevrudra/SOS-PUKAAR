@@ -19,7 +19,11 @@ import com.pukaar.domain.subscription.SubscriptionEntity;
 import com.pukaar.domain.subscription.SubscriptionRepository;
 import com.pukaar.domain.elderly.ElderlySettingsEntity;
 import com.pukaar.domain.elderly.ElderlySettingsRepository;
+import com.pukaar.domain.elderly.InactivityEpisodeEntity;
+import com.pukaar.domain.elderly.InactivityEpisodeRepository;
 import com.pukaar.domain.elderly.InactivityService;
+import com.pukaar.common.ContactRole;
+import com.pukaar.domain.contact.TrustedContactEntity;
 import com.pukaar.domain.user.UserEntity;
 import com.pukaar.domain.user.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -53,6 +57,8 @@ public class AdminService {
     private final WhatsAppAlertSender whatsAppSender;
     private final ElderlySettingsRepository elderlySettingsRepo;
     private final InactivityService inactivityService;
+    private final InactivityEpisodeRepository inactivityEpisodeRepo;
+    private final com.pukaar.domain.contact.TrustedContactRepository contactRepo;
 
     public Map<String, Object> stats() {
         Map<String, Object> m = new LinkedHashMap<>();
@@ -308,6 +314,13 @@ public class AdminService {
         settings.setInactivityMonitoringEnabled(enable);
         elderlySettingsRepo.save(settings);
 
+        // Close any prior open episode so a fresh test cycle can alert again.
+        inactivityEpisodeRepo.findFirstByUserIdAndResolvedAtIsNullOrderByCreatedAtDesc(userId)
+                .ifPresent(ep -> {
+                    ep.setResolvedAt(Instant.now());
+                    inactivityEpisodeRepo.save(ep);
+                });
+
         Instant now = Instant.now();
         // Start quiet clock now — alert when minutesQuiet >= minutes
         user.setLastActivityAt(now);
@@ -393,7 +406,75 @@ public class AdminService {
             result.put("durationMinutes", 0);
             result.put("inactivityMonitoringEnabled", false);
         }
+
+        var episode = inactivityEpisodeRepo
+                .findFirstByUserIdAndResolvedAtIsNullOrderByCreatedAtDesc(userId)
+                .orElse(null);
+        if (episode != null) {
+            result.put("episodeOpen", true);
+            result.put("episodeAlerted", episode.isAlerted());
+            result.put("episodeId", episode.getId());
+            result.put("eventId", episode.getEventId());
+            result.put("viewToken", episode.getViewToken());
+            if (episode.isAlerted()) {
+                result.put("alertStatus", "ALREADY_ALERTED — waiting for user activity before next cycle");
+            } else {
+                result.put("alertStatus", "OPEN — not alerted yet");
+            }
+        } else {
+            result.put("episodeOpen", false);
+            result.put("episodeAlerted", false);
+            result.put("alertStatus", "No open episode");
+        }
+
+        List<TrustedContactEntity> backups = contactRepo
+                .findByOwnerUserIdAndContactRoleInAndActiveTrue(userId, List.of(ContactRole.HELP_BACKUP));
+        result.put("trustedContacts", backups.stream().map(c -> {
+            Map<String, Object> row = new LinkedHashMap<>();
+            row.put("name", c.getName());
+            row.put("phone", c.getPhoneE164());
+            row.put("verified", c.isVerified());
+            row.put("isSelf", user.getPhoneE164() != null && user.getPhoneE164().equals(c.getPhoneE164()));
+            row.put("willReceiveAlert", c.isVerified()
+                    && (user.getPhoneE164() == null || !user.getPhoneE164().equals(c.getPhoneE164())));
+            return row;
+        }).toList());
+        long eligible = backups.stream()
+                .filter(TrustedContactEntity::isVerified)
+                .filter(c -> user.getPhoneE164() == null || !user.getPhoneE164().equals(c.getPhoneE164()))
+                .count();
+        result.put("eligibleTrustedCount", eligible);
+        if (eligible == 0) {
+            result.put("warning", "No verified inactivity trusted contact (other than yourself). Alert will not reach anyone.");
+        }
+
         return result;
+    }
+
+    /** Resolve open episode + reset last activity so a new test cycle can run. */
+    public Map<String, Object> resetInactivityCycle(UUID userId) {
+        UserEntity user = userRepo.findById(userId)
+                .orElseThrow(() -> new ApiException("USER_NOT_FOUND", "User not found"));
+        inactivityEpisodeRepo.findFirstByUserIdAndResolvedAtIsNullOrderByCreatedAtDesc(userId)
+                .ifPresent(ep -> {
+                    ep.setResolvedAt(Instant.now());
+                    inactivityEpisodeRepo.save(ep);
+                });
+        user.setLastActivityAt(Instant.now());
+        userRepo.save(user);
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("userId", userId);
+        m.put("phone", user.getPhoneE164());
+        m.put("reset", true);
+        m.put("lastActivityAt", formatIst(user.getLastActivityAt()));
+        m.put("note", "Episode closed. Save a new duration to start the next test.");
+        return m;
+    }
+
+    public Map<String, Object> resetInactivityCycleByPhone(String phone) {
+        UserEntity user = userRepo.findByPhoneE164(PhoneNumbers.toE164(phone))
+                .orElseThrow(() -> new ApiException("USER_NOT_FOUND", "No user with phone " + phone));
+        return resetInactivityCycle(user.getId());
     }
 
     public Map<String, Object> getInactivityStatusByPhone(String phone) {

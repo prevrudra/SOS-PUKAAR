@@ -158,6 +158,14 @@ public class AdminController {
         return adminService.forceInactivityCheckByPhone(req.getPhone());
     }
 
+    @PostMapping("/inactivity/reset")
+    public Map<String, Object> resetInactivityCycle(@RequestBody PhoneRequest req) {
+        if (req.getPhone() == null || req.getPhone().isBlank()) {
+            throw new com.pukaar.common.ApiException("PHONE_REQUIRED", "phone is required");
+        }
+        return adminService.resetInactivityCycleByPhone(req.getPhone());
+    }
+
     /**
      * Get inactivity status for a user (current settings, last activity, alert threshold).
      */

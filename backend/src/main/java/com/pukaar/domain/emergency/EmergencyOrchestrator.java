@@ -494,14 +494,18 @@ public class EmergencyOrchestrator {
             int durationHours
     ) {
         List<ContactRole> roles = List.of(ContactRole.HELP_BACKUP);
+        UserEntity owner = userRepo.findById(userId).orElse(null);
+        String ownerPhone = owner != null ? owner.getPhoneE164() : null;
         List<TrustedContactEntity> contacts = contactRepo
                 .findByOwnerUserIdAndContactRoleInAndActiveTrue(userId, roles)
                 .stream()
+                .filter(TrustedContactEntity::isVerified)
+                .filter(c -> ownerPhone == null || !ownerPhone.equals(c.getPhoneE164()))
                 .sorted(Comparator.comparingInt(TrustedContactEntity::getPriorityOrder))
                 .limit(2)
                 .toList();
         if (contacts.isEmpty()) {
-            log.warn("Inactivity alert skipped — no HELP_BACKUP contacts for user {}", userId);
+            log.warn("Inactivity alert skipped — no verified HELP_BACKUP contacts (≠ self) for user {}", userId);
             return existingEventId;
         }
 

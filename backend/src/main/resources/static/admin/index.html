@@ -107,6 +107,7 @@
           <button onclick="loadInactivityStatus()">Load status</button>
           <button onclick="saveInactivityDuration()">Save duration</button>
           <button class="secondary" onclick="forceInactivityCheck()">Force check now</button>
+          <button class="secondary" onclick="resetInactivityCycle()">Reset cycle</button>
           <button class="secondary" onclick="presetInactivity(5)">5 min</button>
           <button class="secondary" onclick="presetInactivity(15)">15 min</button>
           <button class="secondary" onclick="presetInactivity(60)">1 hour</button>
@@ -259,8 +260,17 @@ function showInaResult(data, ok) {
     'Hours (display only): ' + data.durationHours,
     'Last activity: ' + (data.lastActivityAt || '—'),
     'Alert threshold: ' + (data.alertThreshold || '—'),
-    'Will alert in: ' + (data.willAlertIn || '—')
-  ].join('\n');
+    'Will alert in: ' + (data.willAlertIn || '—'),
+    'Alert status: ' + (data.alertStatus || '—'),
+    'Eligible trusted contacts: ' + (data.eligibleTrustedCount ?? '—'),
+    data.warning ? ('⚠ ' + data.warning) : '',
+    (data.trustedContacts || []).map(c =>
+      '  • ' + (c.name || '') + ' ' + c.phone +
+      (c.verified ? ' ✓verified' : ' ✗unverified') +
+      (c.isSelf ? ' (self)' : '') +
+      (c.willReceiveAlert ? ' → WILL GET ALERT' : '')
+    ).join('\n')
+  ].filter(Boolean).join('\n');
 }
 
 async function loadInactivityStatus() {
@@ -313,12 +323,30 @@ async function forceInactivityCheck() {
     const phone = inaPhoneValue();
     if (!phone) throw new Error('Enter user phone');
     document.getElementById('inaPhone').value = phone;
-    const data = await api('/api/v1/admin/inactivity/check', {
+    await api('/api/v1/admin/inactivity/check', {
       method: 'POST',
       body: JSON.stringify({ phone })
     });
     document.getElementById('inaErr').style.color = '#22c55e';
     document.getElementById('inaErr').textContent = 'Force check done — if past threshold, WhatsApp should send.';
+    await loadInactivityStatus();
+  } catch (e) {
+    document.getElementById('inaErr').textContent = e.message;
+  }
+}
+
+async function resetInactivityCycle() {
+  document.getElementById('inaErr').textContent = '';
+  try {
+    const phone = inaPhoneValue();
+    if (!phone) throw new Error('Enter user phone');
+    document.getElementById('inaPhone').value = phone;
+    const data = await api('/api/v1/admin/inactivity/reset', {
+      method: 'POST',
+      body: JSON.stringify({ phone })
+    });
+    document.getElementById('inaErr').style.color = '#22c55e';
+    document.getElementById('inaErr').textContent = data.note || 'Cycle reset';
     await loadInactivityStatus();
   } catch (e) {
     document.getElementById('inaErr').textContent = e.message;
