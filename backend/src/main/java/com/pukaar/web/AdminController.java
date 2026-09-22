@@ -128,12 +128,34 @@ public class AdminController {
         return adminService.setInactivityDuration(userId, minutes, enable);
     }
 
+    /** Set by phone (easier from admin UI). Body: hours, minutes, enable. */
+    @PostMapping("/inactivity/duration")
+    public Map<String, Object> setInactivityDurationByPhone(@RequestBody InactivityDurationByPhoneRequest req) {
+        if (req.getPhone() == null || req.getPhone().isBlank()) {
+            throw new com.pukaar.common.ApiException("PHONE_REQUIRED", "phone is required");
+        }
+        int minutes = 0;
+        if (req.getMinutes() != null) minutes += req.getMinutes();
+        if (req.getHours() != null) minutes += req.getHours() * 60;
+        if (minutes < 1) minutes = 5; // default quick test
+        boolean enable = req.getEnable() != null ? req.getEnable() : true;
+        return adminService.setInactivityDurationByPhone(req.getPhone(), minutes, enable);
+    }
+
     /**
      * Force run inactivity check for a user (for testing — triggers alert if past threshold).
      */
     @PostMapping("/inactivity/{userId}/check")
     public Map<String, Object> forceInactivityCheck(@PathVariable UUID userId) {
         return adminService.forceInactivityCheck(userId);
+    }
+
+    @PostMapping("/inactivity/check")
+    public Map<String, Object> forceInactivityCheckByPhone(@RequestBody PhoneRequest req) {
+        if (req.getPhone() == null || req.getPhone().isBlank()) {
+            throw new com.pukaar.common.ApiException("PHONE_REQUIRED", "phone is required");
+        }
+        return adminService.forceInactivityCheckByPhone(req.getPhone());
     }
 
     /**
@@ -144,6 +166,11 @@ public class AdminController {
         return adminService.getInactivityStatus(userId);
     }
 
+    @GetMapping("/inactivity")
+    public Map<String, Object> getInactivityStatusByPhone(@RequestParam String phone) {
+        return adminService.getInactivityStatusByPhone(phone);
+    }
+
     @Data
     public static class InactivityDurationRequest {
         /** Duration in minutes (takes precedence over hours). */
@@ -152,5 +179,18 @@ public class AdminController {
         private Integer hours;
         /** Enable/disable monitoring (default true). */
         private Boolean enable;
+    }
+
+    @Data
+    public static class InactivityDurationByPhoneRequest {
+        private String phone;
+        private Integer hours;
+        private Integer minutes;
+        private Boolean enable;
+    }
+
+    @Data
+    public static class PhoneRequest {
+        private String phone;
     }
 }

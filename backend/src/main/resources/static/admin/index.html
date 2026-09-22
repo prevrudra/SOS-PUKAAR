@@ -75,6 +75,7 @@
 
     <div class="tabs">
       <button class="active" data-tab="users" onclick="switchTab('users')">Users</button>
+      <button data-tab="inactivity" onclick="switchTab('inactivity')">Inactivity</button>
       <button data-tab="recordings" onclick="switchTab('recordings')">Recordings</button>
       <button data-tab="subscriptions" onclick="switchTab('subscriptions')">Subscriptions</button>
       <button data-tab="payments" onclick="switchTab('payments')">Payments</button>
@@ -82,6 +83,38 @@
 
     <div class="card">
       <div id="tableUsers"></div>
+      <div id="tableInactivity" class="hidden">
+        <p class="sub" style="margin-top:0">Set any hours/minutes for testing. Alert is scheduled that many minutes from save.</p>
+        <div class="row" style="margin-bottom:12px;gap:12px;align-items:flex-end">
+          <div style="flex:1;min-width:180px">
+            <label class="sub" style="display:block;margin-bottom:4px">User phone</label>
+            <input id="inaPhone" placeholder="9243894594 or +91…" />
+          </div>
+          <div style="width:90px">
+            <label class="sub" style="display:block;margin-bottom:4px">Hours</label>
+            <input id="inaHours" type="number" min="0" value="0" />
+          </div>
+          <div style="width:90px">
+            <label class="sub" style="display:block;margin-bottom:4px">Minutes</label>
+            <input id="inaMinutes" type="number" min="0" value="5" />
+          </div>
+          <label class="row" style="gap:6px;margin-bottom:8px">
+            <input id="inaEnable" type="checkbox" checked />
+            <span class="sub">Enable</span>
+          </label>
+        </div>
+        <div class="row" style="gap:8px;margin-bottom:12px">
+          <button onclick="loadInactivityStatus()">Load status</button>
+          <button onclick="saveInactivityDuration()">Save duration</button>
+          <button class="secondary" onclick="forceInactivityCheck()">Force check now</button>
+          <button class="secondary" onclick="presetInactivity(5)">5 min</button>
+          <button class="secondary" onclick="presetInactivity(15)">15 min</button>
+          <button class="secondary" onclick="presetInactivity(60)">1 hour</button>
+          <button class="secondary" onclick="presetInactivity(12*60)">12 hours</button>
+        </div>
+        <div id="inaErr" class="err"></div>
+        <div id="inaStatus" style="margin-top:8px;color:var(--muted);font-size:.9rem;white-space:pre-wrap"></div>
+      </div>
       <div id="tableRecordings" class="hidden">
         <div class="filter">
           <input id="recUserFilter" placeholder="Filter by user phone…" oninput="renderRecordings()" />
@@ -189,12 +222,103 @@ function logout() {
   show(document.getElementById('loginView'));
 }
 
+function openInactivityFor(phone) {
+  document.getElementById('inaPhone').value = phone || '';
+  switchTab('inactivity');
+  if (phone) loadInactivityStatus();
+}
+
 function switchTab(tab) {
   document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-  ['users','recordings','subscriptions','payments'].forEach(t => {
+  ['users','inactivity','recordings','subscriptions','payments'].forEach(t => {
     const el = document.getElementById('table' + t.charAt(0).toUpperCase() + t.slice(1));
     t === tab ? show(el) : hide(el);
   });
+}
+
+function presetInactivity(totalMinutes) {
+  document.getElementById('inaHours').value = Math.floor(totalMinutes / 60);
+  document.getElementById('inaMinutes').value = totalMinutes % 60;
+}
+
+function inaPhoneValue() {
+  return normalizePhone(document.getElementById('inaPhone').value);
+}
+
+function showInaResult(data, ok) {
+  const err = document.getElementById('inaErr');
+  const box = document.getElementById('inaStatus');
+  err.style.color = ok ? '#22c55e' : '';
+  err.textContent = ok ? (data.note || 'OK') : '';
+  if (!ok) { box.textContent = ''; return; }
+  box.textContent = [
+    'User: ' + (data.fullName || '—') + '  ' + (data.phone || ''),
+    'User ID: ' + (data.userId || ''),
+    'Monitoring: ' + data.inactivityMonitoringEnabled,
+    'Duration hours (stored): ' + data.durationHours,
+    'Minutes requested: ' + (data.durationMinutesRequested ?? '—'),
+    'Last activity: ' + (data.lastActivityAt || '—'),
+    'Alert threshold: ' + (data.alertThreshold || '—'),
+    'Will alert in: ' + (data.willAlertIn || '—')
+  ].join('\n');
+}
+
+async function loadInactivityStatus() {
+  document.getElementById('inaErr').textContent = '';
+  try {
+    const phone = inaPhoneValue();
+    if (!phone) throw new Error('Enter user phone');
+    document.getElementById('inaPhone').value = phone;
+    const data = await api('/api/v1/admin/inactivity?phone=' + encodeURIComponent(phone));
+    showInaResult(data, true);
+    document.getElementById('inaErr').textContent = 'Status loaded';
+    if (data.durationHours != null) document.getElementById('inaHours').value = data.durationHours;
+  } catch (e) {
+    document.getElementById('inaErr').textContent = e.message;
+    document.getElementById('inaStatus').textContent = '';
+  }
+}
+
+async function saveInactivityDuration() {
+  document.getElementById('inaErr').textContent = '';
+  try {
+    const phone = inaPhoneValue();
+    if (!phone) throw new Error('Enter user phone');
+    document.getElementById('inaPhone').value = phone;
+    const hours = parseInt(document.getElementById('inaHours').value || '0', 10) || 0;
+    const minutes = parseInt(document.getElementById('inaMinutes').value || '0', 10) || 0;
+    if (hours + minutes < 1) throw new Error('Set at least 1 minute total');
+    const data = await api('/api/v1/admin/inactivity/duration', {
+      method: 'POST',
+      body: JSON.stringify({
+        phone,
+        hours,
+        minutes,
+        enable: document.getElementById('inaEnable').checked
+      })
+    });
+    showInaResult(data, true);
+  } catch (e) {
+    document.getElementById('inaErr').textContent = e.message;
+  }
+}
+
+async function forceInactivityCheck() {
+  document.getElementById('inaErr').textContent = '';
+  try {
+    const phone = inaPhoneValue();
+    if (!phone) throw new Error('Enter user phone');
+    document.getElementById('inaPhone').value = phone;
+    const data = await api('/api/v1/admin/inactivity/check', {
+      method: 'POST',
+      body: JSON.stringify({ phone })
+    });
+    document.getElementById('inaErr').style.color = '#22c55e';
+    document.getElementById('inaErr').textContent = 'Force check done — if past threshold, WhatsApp should send.';
+    await loadInactivityStatus();
+  } catch (e) {
+    document.getElementById('inaErr').textContent = e.message;
+  }
 }
 
 function table(headers, rows) {
@@ -359,10 +483,17 @@ async function loadDashboard(phone) {
     ['Recordings', stats.uploadedRecordings]
   ].map(([l,v]) => `<div class="card stat"><div class="label">${l}</div><div class="value">${v ?? 0}</div></div>`).join('');
 
-  const users = await api('/api/v1/admin/users');
+  const users = await api('/api/v1/admin/users?size=200');
   document.getElementById('tableUsers').innerHTML = table(
-    ['Phone','Name','Role','Protection','Created'],
-    users.items.map(u => [u.phone, u.fullName, u.role, u.protectionReady, (u.createdAt||'').slice(0,10)])
+    ['Phone','Name','Role','Protection','Created','Inactivity'],
+    users.items.map(u => [
+      u.phone,
+      u.fullName,
+      u.role,
+      u.protectionReady,
+      (u.createdAt||'').slice(0,10),
+      `<button class="secondary" style="padding:4px 10px;font-size:12px" onclick="openInactivityFor('${u.phone||''}')">Set time</button>`
+    ])
   );
 
   const recs = await api('/api/v1/admin/recordings?size=200');

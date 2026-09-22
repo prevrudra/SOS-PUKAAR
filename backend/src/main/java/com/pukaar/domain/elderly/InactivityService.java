@@ -58,13 +58,17 @@ public class InactivityService {
 
     @Transactional
     public void processUser(UserEntity user, ElderlySettingsEntity settings, Instant now) {
-        int durationHours = normalizeDuration(settings.getDurationHours());
-        long hoursQuiet = Duration.between(user.getLastActivityAt(), now).toHours();
+        // Allow any positive hours (admin test can set 1h); normalize only blanks/legacy zero.
+        int durationHours = settings.getDurationHours() > 0
+                ? settings.getDurationHours()
+                : normalizeDuration(settings.getUrgentHours());
+        long minutesQuiet = Duration.between(user.getLastActivityAt(), now).toMinutes();
+        long thresholdMinutes = (long) durationHours * 60L;
 
         Optional<InactivityEpisodeEntity> active =
                 episodeRepo.findFirstByUserIdAndResolvedAtIsNullOrderByCreatedAtDesc(user.getId());
 
-        if (hoursQuiet < durationHours) {
+        if (minutesQuiet < thresholdMinutes) {
             // Still within window — clear any stale unalerted episode / resolve if activity moved
             if (active.isPresent()) {
                 InactivityEpisodeEntity ep = active.get();

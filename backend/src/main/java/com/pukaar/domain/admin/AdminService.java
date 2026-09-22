@@ -287,8 +287,8 @@ public class AdminService {
     // ────────────────────────────────────────────────────────────────────────────
 
     /**
-     * Admin: set inactivity duration to ANY value for testing (bypasses 12/18/24/30/36 restriction).
-     * Accepts minutes (converted to hours stored in DB). Min 1 minute.
+     * Admin: set inactivity duration to ANY value for testing (bypasses 12/18/24/30/36).
+     * Always schedules the alert to fire after {@code minutes} from now by adjusting lastActivityAt.
      */
     public Map<String, Object> setInactivityDuration(UUID userId, int minutes, boolean enable) {
         if (minutes < 1) throw new ApiException("INVALID_DURATION", "Duration must be at least 1 minute");
@@ -298,10 +298,7 @@ public class AdminService {
         ElderlySettingsEntity settings = elderlySettingsRepo.findById(userId)
                 .orElseGet(() -> elderlySettingsRepo.save(ElderlySettingsEntity.builder().userId(userId).build()));
 
-        // Store as fractional hours for sub-hour testing (DB column is int, so multiply by 60 and divide)
-        // Actually the DB stores hours — for testing, we'll use a special column or convert.
-        // Simplest: add durationMinutes column OR just allow very small hours (treat 1 hour = 60 min).
-        // For now, store actual hours rounded, but also set lastActivityAt to trigger sooner.
+        // Store hours (ceil) so production logic still works; backdate activity so alert is due in N minutes.
         int hours = Math.max(1, (int) Math.ceil(minutes / 60.0));
         settings.setDurationHours(hours);
         settings.setSoftHours(hours);
@@ -310,13 +307,13 @@ public class AdminService {
         settings.setInactivityMonitoringEnabled(enable);
         elderlySettingsRepo.save(settings);
 
-        // If testing with < 1 hour, backdate lastActivityAt to trigger alert soon
-        if (minutes < 60) {
-            Instant backdatedActivity = Instant.now().minusSeconds((long) hours * 3600 - minutes * 60);
-            user.setLastActivityAt(backdatedActivity);
-            userRepo.save(user);
-        }
+        Instant now = Instant.now();
+        long backdateSeconds = (long) hours * 3600L - (long) minutes * 60L;
+        Instant lastActivity = now.minusSeconds(Math.max(0, backdateSeconds));
+        user.setLastActivityAt(lastActivity);
+        userRepo.save(user);
 
+        Instant alertAt = lastActivity.plusSeconds((long) hours * 3600L);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("userId", userId);
         result.put("phone", user.getPhoneE164());
@@ -325,10 +322,16 @@ public class AdminService {
         result.put("durationMinutesRequested", minutes);
         result.put("inactivityMonitoringEnabled", enable);
         result.put("lastActivityAt", formatIst(user.getLastActivityAt()));
-        result.put("note", minutes < 60
-                ? "lastActivityAt backdated so alert triggers in ~" + minutes + " minutes"
-                : "Duration set to " + hours + " hours");
+        result.put("alertThreshold", formatIst(alertAt));
+        result.put("willAlertIn", Math.max(0, java.time.Duration.between(now, alertAt).toMinutes()) + " minutes");
+        result.put("note", "Test mode: alert scheduled ~" + minutes + " minute(s) from now");
         return result;
+    }
+
+    public Map<String, Object> setInactivityDurationByPhone(String phone, int minutes, boolean enable) {
+        UserEntity user = userRepo.findByPhoneE164(PhoneNumbers.toE164(phone))
+                .orElseThrow(() -> new ApiException("USER_NOT_FOUND", "No user with phone " + phone));
+        return setInactivityDuration(user.getId(), minutes, enable);
     }
 
     /**
@@ -340,13 +343,19 @@ public class AdminService {
         ElderlySettingsEntity settings = elderlySettingsRepo.findById(userId)
                 .orElseThrow(() -> new ApiException("NO_SETTINGS", "Inactivity settings not found for user"));
         inactivityService.processUser(user, settings, Instant.now());
-        return Map.of(
-                "userId", userId,
-                "phone", user.getPhoneE164(),
-                "fullName", user.getFullName() != null ? user.getFullName() : "",
-                "lastActivityAt", formatIst(user.getLastActivityAt()) != null ? formatIst(user.getLastActivityAt()) : "",
-                "processed", true
-        );
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("userId", userId);
+        m.put("phone", user.getPhoneE164());
+        m.put("fullName", user.getFullName());
+        m.put("lastActivityAt", formatIst(user.getLastActivityAt()));
+        m.put("processed", true);
+        return m;
+    }
+
+    public Map<String, Object> forceInactivityCheckByPhone(String phone) {
+        UserEntity user = userRepo.findByPhoneE164(PhoneNumbers.toE164(phone))
+                .orElseThrow(() -> new ApiException("USER_NOT_FOUND", "No user with phone " + phone));
+        return forceInactivityCheck(user.getId());
     }
 
     /**
@@ -364,17 +373,26 @@ public class AdminService {
         result.put("lastActivityAt", formatIst(user.getLastActivityAt()));
 
         if (settings != null) {
-            result.put("durationHours", settings.getDurationHours());
+            int hours = settings.getDurationHours();
+            result.put("durationHours", hours);
             result.put("inactivityMonitoringEnabled", settings.isInactivityMonitoringEnabled());
-            if (user.getLastActivityAt() != null && settings.getDurationHours() > 0) {
-                Instant threshold = user.getLastActivityAt().plusSeconds((long) settings.getDurationHours() * 3600);
+            if (user.getLastActivityAt() != null && hours > 0) {
+                Instant threshold = user.getLastActivityAt().plusSeconds((long) hours * 3600);
                 result.put("alertThreshold", formatIst(threshold));
-                result.put("willAlertIn", java.time.Duration.between(Instant.now(), threshold).toMinutes() + " minutes");
+                long mins = java.time.Duration.between(Instant.now(), threshold).toMinutes();
+                result.put("willAlertIn", mins + " minutes");
+                result.put("willAlertInMinutes", mins);
             }
         } else {
             result.put("durationHours", null);
             result.put("inactivityMonitoringEnabled", false);
         }
         return result;
+    }
+
+    public Map<String, Object> getInactivityStatusByPhone(String phone) {
+        UserEntity user = userRepo.findByPhoneE164(PhoneNumbers.toE164(phone))
+                .orElseThrow(() -> new ApiException("USER_NOT_FOUND", "No user with phone " + phone));
+        return getInactivityStatus(user.getId());
     }
 }
