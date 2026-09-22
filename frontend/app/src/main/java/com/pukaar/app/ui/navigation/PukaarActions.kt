@@ -189,7 +189,7 @@ object NoOpPukaarActions : PukaarActions {
         )
     override fun saveElderlyHelp(window: InactivityWindow, medicationReminder: Boolean) = Unit
     override suspend fun loadElderlyHelp(): Pair<InactivityWindow, Boolean> =
-        InactivityWindow.SIX to false
+        InactivityWindow.TWELVE to false
     override fun saveEmergencyInfo(form: EmergencyInfoForm) = Unit
     override suspend fun loadEmergencyInfo(): EmergencyInfoForm = EmergencyInfoForm()
     override fun viewPaymentHistory() = Unit

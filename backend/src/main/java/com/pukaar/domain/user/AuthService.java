@@ -11,6 +11,7 @@ import com.pukaar.domain.elderly.ElderlySettingsEntity;
 import com.pukaar.domain.elderly.ElderlySettingsRepository;
 import com.pukaar.domain.referral.ReferralEntity;
 import com.pukaar.domain.referral.ReferralRepository;
+import com.pukaar.domain.subscription.PlanRegionService;
 import com.pukaar.security.JwtService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -34,6 +35,7 @@ public class AuthService {
     private final PukaarProperties props;
     private final AdminBootstrap adminBootstrap;
     private final YourBulkSmsSender smsSender;
+    private final PlanRegionService planRegionService;
 
     @Transactional
     public Map<String, Object> requestOtp(String phoneE164) {
@@ -184,6 +186,10 @@ public class AuthService {
         m.put("consentLocation", user.isConsentLocation());
         m.put("consentAudio", user.isConsentAudio());
         m.put("role", user.getRole());
+        var region = planRegionService.regionForUser(user.getId());
+        m.put("region", region.name());
+        m.put("indiaOnlyPhones", region == com.pukaar.common.PlanRegion.INDIA);
+        m.put("internationalLocation", region == com.pukaar.common.PlanRegion.GLOBAL);
         return m;
     }
 

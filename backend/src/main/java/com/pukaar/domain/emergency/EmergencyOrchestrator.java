@@ -18,6 +18,7 @@ import com.pukaar.domain.police.PoliceStationRepository;
 import com.pukaar.domain.user.UserEntity;
 import com.pukaar.domain.user.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -32,6 +33,7 @@ import java.time.Instant;
 import java.util.*;
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class EmergencyOrchestrator {
@@ -478,26 +480,30 @@ public class EmergencyOrchestrator {
             int priorityOrder,
             InactivityLevel level
     ) {
+        return deliverInactivityAlertToTrusted(userId, existingEventId, null, 12);
+    }
+
+    /**
+     * Inactivity V1 — notify up to 2 HELP_BACKUP trusted contacts once.
+     */
+    @Transactional
+    public UUID deliverInactivityAlertToTrusted(
+            UUID userId,
+            UUID existingEventId,
+            String viewToken,
+            int durationHours
+    ) {
         List<ContactRole> roles = List.of(ContactRole.HELP_BACKUP);
-        List<TrustedContactEntity> atPriority = contactRepo
+        List<TrustedContactEntity> contacts = contactRepo
                 .findByOwnerUserIdAndContactRoleInAndActiveTrue(userId, roles)
                 .stream()
-                .filter(c -> c.getPriorityOrder() == priorityOrder)
+                .sorted(Comparator.comparingInt(TrustedContactEntity::getPriorityOrder))
+                .limit(2)
                 .toList();
-        if (atPriority.isEmpty()) {
-            atPriority = contactRepo.findByOwnerUserIdAndActiveTrueOrderByPriorityOrderAsc(userId)
-                    .stream()
-                    .filter(c -> c.getContactRole() == ContactRole.HELP_BACKUP)
-                    .filter(c -> c.getPriorityOrder() == priorityOrder)
-                    .toList();
-        }
-        if (atPriority.isEmpty()) {
+        if (contacts.isEmpty()) {
+            log.warn("Inactivity alert skipped — no HELP_BACKUP contacts for user {}", userId);
             return existingEventId;
         }
-        TrustedContactEntity contact = atPriority.stream()
-                .filter(TrustedContactEntity::isVerified)
-                .findFirst()
-                .orElse(atPriority.get(0));
 
         EmergencyEventEntity event = null;
         if (existingEventId != null) {
@@ -511,38 +517,50 @@ public class EmergencyOrchestrator {
                     .mockDrill(false)
                     .build();
             event = eventRepo.save(event);
-            audit(event.getId(), userId, "INACTIVITY_TRIGGERED", Map.of("level", level.name()));
+            audit(event.getId(), userId, "INACTIVITY_TRIGGERED", Map.of(
+                    "durationHours", durationHours,
+                    "viewToken", viewToken == null ? "" : viewToken
+            ));
             event.setStatus(EmergencyStatus.WAITING_SAFE);
             event = eventRepo.save(event);
         }
 
-        UUID contactId = contact.getId();
-        boolean already = deliveryRepo.findByEventId(event.getId()).stream()
-                .anyMatch(d -> contactId.equals(d.getContactId()));
-        if (already) {
-            return event.getId();
+        UserEntity user = userRepo.findById(userId).orElse(null);
+        for (TrustedContactEntity contact : contacts) {
+            UUID contactId = contact.getId();
+            boolean already = deliveryRepo.findByEventId(event.getId()).stream()
+                    .anyMatch(d -> contactId.equals(d.getContactId()));
+            if (already) continue;
+
+            ContactDeliveryEntity delivery = ContactDeliveryEntity.builder()
+                    .eventId(event.getId())
+                    .contactId(contact.getId())
+                    .contactName(contact.getName())
+                    .contactPhone(contact.getPhoneE164())
+                    .status(DeliveryStatus.PENDING)
+                    .build();
+            delivery = deliveryRepo.save(delivery);
+
+            UUID finalEventId = event.getId();
+            UUID deliveryId = delivery.getId();
+            InactivityLevel level = InactivityLevel.MEDIUM;
+            if (TransactionSynchronizationManager.isSynchronizationActive()) {
+                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        notificationService.enqueueInactivityAlert(userId, finalEventId, deliveryId, level);
+                    }
+                });
+            } else {
+                notificationService.enqueueInactivityAlert(userId, finalEventId, deliveryId, level);
+            }
         }
-
-        ContactDeliveryEntity delivery = ContactDeliveryEntity.builder()
-                .eventId(event.getId())
-                .contactId(contact.getId())
-                .contactName(contact.getName())
-                .contactPhone(contact.getPhoneE164())
-                .status(DeliveryStatus.PENDING)
-                .build();
-        delivery = deliveryRepo.save(delivery);
-
-        UUID finalEventId = event.getId();
-        UUID deliveryId = delivery.getId();
-        if (TransactionSynchronizationManager.isSynchronizationActive()) {
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-                @Override
-                public void afterCommit() {
-                    notificationService.enqueueInactivityAlert(userId, finalEventId, deliveryId, level);
-                }
-            });
-        } else {
-            notificationService.enqueueInactivityAlert(userId, finalEventId, deliveryId, level);
+        if (user != null) {
+            // stash view token on audit for View More page linkage
+            audit(event.getId(), userId, "INACTIVITY_VIEW_TOKEN", Map.of(
+                    "viewToken", viewToken == null ? "" : viewToken,
+                    "durationHours", durationHours
+            ));
         }
         return event.getId();
     }

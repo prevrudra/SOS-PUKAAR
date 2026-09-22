@@ -49,11 +49,19 @@ fun InternationalPhoneField(
     onNationalChange: (String) -> Unit,
     modifier: Modifier = Modifier,
     placeholder: String = "Mobile number",
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    indiaOnlyPhones: Boolean = false
 ) {
     var menuOpen by remember { mutableStateOf(false) }
-    val selected = PhoneNumbers.countryForDialCode(dialCode)
-        ?: PhoneNumbers.Country("XX", dialCode, dialCode)
+    val lockedDial = indiaOnlyPhones
+    val effectiveDial = if (lockedDial) "+91" else dialCode
+    val selected = PhoneNumbers.countryForDialCode(effectiveDial)
+        ?: PhoneNumbers.Country("XX", effectiveDial, effectiveDial)
+    val countries = if (lockedDial) {
+        PhoneNumbers.countries.filter { it.dialCode == "+91" }
+    } else {
+        PhoneNumbers.countries
+    }
 
     Column(modifier = modifier.fillMaxWidth()) {
         FieldLabel(text = label)
@@ -70,7 +78,7 @@ fun InternationalPhoneField(
             Box {
                 Row(
                     Modifier
-                        .clickable(enabled = enabled) { menuOpen = true }
+                        .clickable(enabled = enabled && !lockedDial) { menuOpen = true }
                         .padding(end = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -79,24 +87,28 @@ fun InternationalPhoneField(
                         color = TextPrimary,
                         fontSize = 13.sp
                     )
-                    Icon(
-                        Icons.Filled.ArrowDropDown,
-                        contentDescription = null,
-                        tint = TextSecondary,
-                        modifier = Modifier.width(18.dp)
-                    )
-                }
-                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                    PhoneNumbers.countries.forEach { country ->
-                        DropdownMenuItem(
-                            text = {
-                                Text("${country.dialCode}  ${country.name}", fontSize = 13.sp)
-                            },
-                            onClick = {
-                                onDialCodeChange(country.dialCode)
-                                menuOpen = false
-                            }
+                    if (!lockedDial) {
+                        Icon(
+                            Icons.Filled.ArrowDropDown,
+                            contentDescription = null,
+                            tint = TextSecondary,
+                            modifier = Modifier.width(18.dp)
                         )
+                    }
+                }
+                if (!lockedDial) {
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        countries.forEach { country ->
+                            DropdownMenuItem(
+                                text = {
+                                    Text("${country.dialCode}  ${country.name}", fontSize = 13.sp)
+                                },
+                                onClick = {
+                                    onDialCodeChange(country.dialCode)
+                                    menuOpen = false
+                                }
+                            )
+                        }
                     }
                 }
             }

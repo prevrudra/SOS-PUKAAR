@@ -463,10 +463,13 @@ fun ContactStatusCard(
     contact: OnboardingContact,
     accent: Color,
     onResend: () -> Unit,
-    onVerify: () -> Unit,
+    onVerify: (code: String) -> Unit,
     modifier: Modifier = Modifier,
     onDelete: (() -> Unit)? = null
 ) {
+    var code by remember(contact.id, contact.resendCount) { mutableStateOf("") }
+    var verifying by remember { mutableStateOf(false) }
+
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -528,9 +531,39 @@ fun ContactStatusCard(
             }
 
             Spacer(modifier = Modifier.height(10.dp))
+            BasicTextField(
+                value = code,
+                onValueChange = { code = it.filter { ch -> ch.isDigit() }.take(6) },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                cursorBrush = SolidColor(accent),
+                textStyle = TextStyle(color = TextPrimary, fontSize = 16.sp, letterSpacing = 2.sp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(SurfaceInput, FieldShape)
+                    .border(1.dp, Outline, FieldShape)
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                decorationBox = { inner ->
+                    if (code.isEmpty()) {
+                        Text(
+                            text = stringResource(R.string.onboarding_enter_code),
+                            color = TextTertiary,
+                            fontSize = 13.sp
+                        )
+                    }
+                    inner()
+                }
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
             StatusAction(
                 text = stringResource(R.string.onboarding_verify_now),
-                onClick = onVerify,
+                onClick = {
+                    if (verifying || code.length < 4) return@StatusAction
+                    verifying = true
+                    onVerify(code)
+                    verifying = false
+                },
                 accent = accent,
                 modifier = Modifier.fillMaxWidth()
             )

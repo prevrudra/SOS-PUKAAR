@@ -3,6 +3,7 @@ package com.pukaar.web;
 import com.pukaar.common.ApiException;
 import com.pukaar.common.ContactRole;
 import com.pukaar.common.PhoneNumbers;
+import com.pukaar.domain.contact.ContactVerificationService;
 import com.pukaar.domain.contact.TrustedContactEntity;
 import com.pukaar.domain.contact.TrustedContactRepository;
 import com.pukaar.security.SecurityUtils;
@@ -18,9 +19,13 @@ import java.util.*;
 @RequestMapping("/api/v1/contacts")
 @RequiredArgsConstructor
 public class ContactController {
-    private static final int MAX_PER_ROLE = 3;
+    /** SOS / HELP_MONITOR etc. — product caps applied per role group below. */
+    private static final int MAX_SOS = 3;
+    private static final int MAX_INACTIVITY_TRUSTED = 2;
+    private static final int MAX_HELP_NUMBERS = 2;
 
     private final TrustedContactRepository contactRepo;
+    private final ContactVerificationService verificationService;
 
     @GetMapping
     public List<Map<String, Object>> list() {
@@ -32,6 +37,7 @@ public class ContactController {
     public Map<String, Object> add(@RequestBody ContactRequest req) {
         UUID ownerId = SecurityUtils.currentUserId();
         String phone = normalize(req.getPhone());
+        verificationService.enforcePhoneRegion(ownerId, phone);
         ContactRole role = req.getRole() == null ? ContactRole.SOS_TRUSTED : req.getRole();
 
         Optional<TrustedContactEntity> match = findMatching(ownerId, phone, role);
@@ -39,8 +45,11 @@ public class ContactController {
             TrustedContactEntity c = match.get();
             applyRequest(c, req, phone, role);
             c.setActive(true);
-            c.setVerified(true);
-            return toDto(contactRepo.save(c));
+            c = contactRepo.save(c);
+            if (!c.isVerified()) {
+                c = verificationService.issueAndSendOtp(c, verificationService.ownerDisplayName(ownerId));
+            }
+            return toDto(c);
         }
 
         enforceRoleLimit(ownerId, role);
@@ -52,40 +61,51 @@ public class ContactController {
                 .relationship(req.getRelationship())
                 .notes(req.getNotes())
                 .priorityOrder(req.getPriorityOrder() == null ? 1 : req.getPriorityOrder())
-                .verified(true)
+                .verified(false)
                 .active(true)
                 .build();
         try {
-            return toDto(contactRepo.save(c));
+            c = contactRepo.save(c);
         } catch (DataIntegrityViolationException ex) {
-            // Soft-deleted or race: reuse the conflicting row instead of 409.
             TrustedContactEntity existing = findMatching(ownerId, phone, role)
                     .orElseThrow(() -> new ApiException("CONTACT_EXISTS", "This contact already exists"));
             applyRequest(existing, req, phone, role);
             existing.setActive(true);
-            existing.setVerified(true);
-            return toDto(contactRepo.save(existing));
+            c = contactRepo.save(existing);
         }
+        c = verificationService.issueAndSendOtp(c, verificationService.ownerDisplayName(ownerId));
+        return toDto(c);
     }
 
     @PostMapping("/{id}/verify")
     public Map<String, Object> verify(@PathVariable UUID id, @RequestBody(required = false) VerifyRequest req) {
+        String code = req == null ? null : req.getCode();
+        return toDto(verificationService.verify(SecurityUtils.currentUserId(), id, code));
+    }
+
+    @PostMapping("/{id}/resend-verification")
+    public Map<String, Object> resend(@PathVariable UUID id) {
         TrustedContactEntity c = owned(id);
-        c.setVerified(true);
-        return toDto(contactRepo.save(c));
+        if (c.isVerified()) {
+            return toDto(c);
+        }
+        c = verificationService.issueAndSendOtp(c, verificationService.ownerDisplayName(SecurityUtils.currentUserId()));
+        return toDto(c);
     }
 
     @PutMapping("/{id}")
     public Map<String, Object> update(@PathVariable UUID id, @RequestBody ContactRequest req) {
         TrustedContactEntity c = owned(id);
+        final UUID contactId = c.getId();
         UUID ownerId = SecurityUtils.currentUserId();
         String newPhone = req.getPhone() != null ? normalize(req.getPhone()) : c.getPhoneE164();
+        verificationService.enforcePhoneRegion(ownerId, newPhone);
         ContactRole newRole = req.getRole() != null ? req.getRole() : c.getContactRole();
+        boolean phoneChanged = !PhoneNumbers.sameNumber(c.getPhoneE164(), newPhone);
 
         Optional<TrustedContactEntity> conflict = findMatching(ownerId, newPhone, newRole)
-                .filter(other -> !other.getId().equals(c.getId()));
+                .filter(other -> !other.getId().equals(contactId));
         if (conflict.isPresent()) {
-            // Phone/role already on another row — merge into that row and retire this one.
             TrustedContactEntity other = conflict.get();
             applyRequest(other, req, newPhone, newRole);
             if (req.getName() == null) other.setName(c.getName());
@@ -94,27 +114,36 @@ public class ContactController {
             }
             if (req.getNotes() == null && c.getNotes() != null) other.setNotes(c.getNotes());
             other.setActive(true);
-            other.setVerified(true);
             c.setActive(false);
             contactRepo.save(c);
-            return toDto(contactRepo.save(other));
+            other = contactRepo.save(other);
+            if (phoneChanged || !other.isVerified()) {
+                other = verificationService.issueAndSendOtp(other, verificationService.ownerDisplayName(ownerId));
+            }
+            return toDto(other);
         }
 
         applyRequest(c, req, newPhone, newRole);
         c.setActive(true);
+        if (phoneChanged) {
+            c.setVerified(false);
+        }
         try {
-            return toDto(contactRepo.save(c));
+            c = contactRepo.save(c);
         } catch (DataIntegrityViolationException ex) {
             TrustedContactEntity existing = findMatching(ownerId, newPhone, newRole)
-                    .filter(other -> !other.getId().equals(c.getId()))
+                    .filter(other -> !other.getId().equals(contactId))
                     .orElseThrow(() -> new ApiException("CONTACT_EXISTS", "This contact already exists"));
             applyRequest(existing, req, newPhone, newRole);
             existing.setActive(true);
-            existing.setVerified(true);
             c.setActive(false);
             contactRepo.save(c);
-            return toDto(contactRepo.save(existing));
+            c = contactRepo.save(existing);
         }
+        if (phoneChanged || !c.isVerified()) {
+            c = verificationService.issueAndSendOtp(c, verificationService.ownerDisplayName(ownerId));
+        }
+        return toDto(c);
     }
 
     @DeleteMapping("/{id}")
@@ -134,10 +163,6 @@ public class ContactController {
         if (req.getPriorityOrder() != null) c.setPriorityOrder(req.getPriorityOrder());
     }
 
-    /**
-     * Match by exact E.164 + role, then by last-10-digit suffix + role
-     * (covers formatting drift and soft-deleted rows).
-     */
     private Optional<TrustedContactEntity> findMatching(UUID ownerId, String phone, ContactRole role) {
         Optional<TrustedContactEntity> exact =
                 contactRepo.findByOwnerUserIdAndPhoneE164AndContactRole(ownerId, phone, role);
@@ -178,14 +203,31 @@ public class ContactController {
         m.put("notes", c.getNotes());
         m.put("priorityOrder", c.getPriorityOrder());
         m.put("verified", c.isVerified());
+        m.put("verificationPending", !c.isVerified());
         return m;
     }
 
     private void enforceRoleLimit(UUID ownerId, ContactRole role) {
         long count = contactRepo.countByOwnerUserIdAndContactRoleAndActiveTrue(ownerId, role);
-        if (count >= MAX_PER_ROLE) {
+        int max = switch (role) {
+            case SOS_TRUSTED -> MAX_SOS;
+            case HELP_BACKUP -> MAX_INACTIVITY_TRUSTED;
+            case HELP_MONITOR, DOCTOR, NEIGHBOUR -> MAX_HELP_NUMBERS;
+            default -> MAX_SOS;
+        };
+        // Help numbers share a combined pool of 2 across HELP_MONITOR/DOCTOR/NEIGHBOUR
+        if (role == ContactRole.HELP_MONITOR || role == ContactRole.DOCTOR || role == ContactRole.NEIGHBOUR) {
+            long helpTotal = contactRepo.countByOwnerUserIdAndContactRoleAndActiveTrue(ownerId, ContactRole.HELP_MONITOR)
+                    + contactRepo.countByOwnerUserIdAndContactRoleAndActiveTrue(ownerId, ContactRole.DOCTOR)
+                    + contactRepo.countByOwnerUserIdAndContactRoleAndActiveTrue(ownerId, ContactRole.NEIGHBOUR);
+            if (helpTotal >= MAX_HELP_NUMBERS) {
+                throw new ApiException("CONTACT_LIMIT", "Maximum " + MAX_HELP_NUMBERS + " pre-saved help numbers allowed");
+            }
+            return;
+        }
+        if (count >= max) {
             throw new ApiException("CONTACT_LIMIT",
-                    "Maximum " + MAX_PER_ROLE + " contacts allowed for " + role.name());
+                    "Maximum " + max + " contacts allowed for " + role.name());
         }
     }
 

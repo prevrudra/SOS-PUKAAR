@@ -33,6 +33,7 @@ data class EmergencyInfoForm(
     val bloodGroup: String = "",
     val allergies: String = "",
     val conditions: String = "",
+    val medications: String = "",
     val doctorPhone: String = ""
 )
 
@@ -46,12 +47,27 @@ fun EmergencyInfoScreen(
     var bloodGroup by remember { mutableStateOf(initial.bloodGroup) }
     var allergies by remember { mutableStateOf(initial.allergies) }
     var conditions by remember { mutableStateOf(initial.conditions) }
+    var medications by remember { mutableStateOf(initial.medications) }
     val initialDoctor = remember(initial.doctorPhone) {
         if (initial.doctorPhone.isBlank()) "+91" to ""
         else PhoneNumbers.splitE164(initial.doctorPhone)
     }
     var doctorDial by remember { mutableStateOf(initialDoctor.first) }
     var doctorNational by remember { mutableStateOf(initialDoctor.second) }
+    var indiaOnlyPhones by remember { mutableStateOf(true) }
+
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        val store = com.pukaar.app.PukaarApp.instance.sessionStore
+        indiaOnlyPhones = store.indiaOnlyPhones()
+        if (indiaOnlyPhones) doctorDial = "+91"
+        runCatching {
+            val me = com.pukaar.app.PukaarApp.instance.repository.me()
+            store.syncFromUser(me)
+            indiaOnlyPhones = me.indiaOnlyPhones
+                ?: (me.region ?: "INDIA").equals("INDIA", ignoreCase = true)
+            if (indiaOnlyPhones) doctorDial = "+91"
+        }
+    }
 
     PukaarScreen(
         title = null,
@@ -72,6 +88,7 @@ fun EmergencyInfoScreen(
                             bloodGroup = bloodGroup,
                             allergies = allergies,
                             conditions = conditions,
+                            medications = medications,
                             doctorPhone = doctorPhone
                         )
                     )
@@ -116,13 +133,21 @@ fun EmergencyInfoScreen(
                 placeholder = stringResource(R.string.emergency_info_conditions_hint)
             )
             Spacer(modifier = Modifier.height(12.dp))
+            LabeledTextField(
+                label = stringResource(R.string.emergency_info_medications),
+                value = medications,
+                onValueChange = { medications = it },
+                placeholder = stringResource(R.string.emergency_info_medications_hint)
+            )
+            Spacer(modifier = Modifier.height(12.dp))
             InternationalPhoneField(
                 label = stringResource(R.string.emergency_info_doctor),
                 dialCode = doctorDial,
                 nationalNumber = doctorNational,
                 onDialCodeChange = { doctorDial = it },
                 onNationalChange = { doctorNational = it },
-                placeholder = stringResource(R.string.add_contact_mobile_hint)
+                placeholder = stringResource(R.string.add_contact_mobile_hint),
+                indiaOnlyPhones = indiaOnlyPhones
             )
         }
     }

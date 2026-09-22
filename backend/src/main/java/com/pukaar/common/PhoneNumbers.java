@@ -87,4 +87,24 @@ public final class PhoneNumbers {
         String lb = last10(b);
         return la.length() >= 10 && la.equals(lb);
     }
+
+    /** True when E.164 is an Indian (+91) number. */
+    public static boolean isIndiaNumber(String raw) {
+        try {
+            return toE164(raw).startsWith("+91");
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * Enforce plan region: INDIA subscriptions may only store +91 contacts.
+     */
+    public static void requireAllowedForRegion(String raw, PlanRegion region) {
+        String e164 = toE164(raw);
+        if (region == PlanRegion.INDIA && !e164.startsWith("+91")) {
+            throw new ApiException("INDIA_PLAN_PHONE",
+                    "India plan allows +91 phone numbers only. Upgrade to Global for international contacts.");
+        }
+    }
 }

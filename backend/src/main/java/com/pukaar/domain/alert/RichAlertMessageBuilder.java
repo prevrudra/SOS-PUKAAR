@@ -34,7 +34,7 @@ public class RichAlertMessageBuilder {
         if (event.isMockDrill()) {
             sb.append("This is a practice drill.\n");
         } else if (event.getTriggerType() == TriggerType.INACTIVITY) {
-            sb.append("Has not used their phone for a long time — please check on them.\n");
+            sb.append("Has had no activity for their selected period — please check on them.\n");
         } else if (event.getTriggerType() == TriggerType.HELP) {
             sb.append("Needs assistance — call immediately.\n");
         } else {
@@ -100,9 +100,7 @@ public class RichAlertMessageBuilder {
     public String buildPushTitle(EmergencyEventEntity event, InactivityLevel level) {
         if (event.isMockDrill()) return "PUKAAR TEST ALERT";
         if (event.getTriggerType() == TriggerType.INACTIVITY) {
-            return level == InactivityLevel.URGENT
-                    ? "PUKAAR INACTIVITY — HIGH ALERT"
-                    : "PUKAAR INACTIVITY — CHECK IN";
+            return "PUKAAR INACTIVITY ALERT";
         }
         return event.getTriggerType() == TriggerType.HELP
                 ? "PUKAAR HELP — EMERGENCY"
@@ -119,10 +117,7 @@ public class RichAlertMessageBuilder {
             return who + " has activated a practice SOS. Tap for live location.";
         }
         if (event.getTriggerType() == TriggerType.INACTIVITY) {
-            if (level == InactivityLevel.URGENT) {
-                return who + " has been inactive for a long time. High alert — call now.";
-            }
-            return who + " may be inactive. Please check on them.";
+            return who + " has had no activity for their selected period. Please check on them.";
         }
         if (event.getTriggerType() == TriggerType.HELP) {
             return who + " has activated HELP and may need assistance. Tap for location.";

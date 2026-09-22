@@ -34,6 +34,9 @@ interface PukaarApi {
     @POST("api/v1/contacts/{id}/verify")
     suspend fun verifyContact(@Path("id") id: String, @Body body: VerifyContactRequest): ContactDto
 
+    @POST("api/v1/contacts/{id}/resend-verification")
+    suspend fun resendVerification(@Path("id") id: String): ContactDto
+
     @POST("api/v1/emergencies/trigger")
     suspend fun trigger(@Body body: TriggerRequest): EmergencyDto
 
@@ -133,7 +136,9 @@ data class NearbyResponse(
     val police: List<NearbyPlaceDto>? = null,
     val hospitals: List<NearbyPlaceDto>? = null,
     val ambulance: List<NearbyPlaceDto>? = null,
-    val source: String? = null
+    val source: String? = null,
+    val regionBlocked: Boolean? = null,
+    val message: String? = null
 )
 
 data class NearbyPlaceDto(

@@ -14,11 +14,14 @@ import org.springframework.web.bind.annotation.*;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/v1/elderly")
 @RequiredArgsConstructor
 public class ElderlyController {
+    private static final Set<Integer> ALLOWED = Set.of(12, 18, 24, 30, 36);
+
     private final ElderlySettingsRepository settingsRepo;
     private final UserRepository userRepo;
     private final InactivityService inactivityService;
@@ -31,9 +34,23 @@ public class ElderlyController {
     @PutMapping("/settings")
     public Map<String, Object> update(@RequestBody SettingsRequest req) {
         ElderlySettingsEntity s = settings();
-        if (req.getSoftHours() != null) s.setSoftHours(req.getSoftHours());
-        if (req.getMediumHours() != null) s.setMediumHours(req.getMediumHours());
-        if (req.getUrgentHours() != null) s.setUrgentHours(req.getUrgentHours());
+        if (req.getDurationHours() != null) {
+            int d = req.getDurationHours();
+            if (!ALLOWED.contains(d)) {
+                throw new ApiException("INVALID_DURATION", "Duration must be one of 12, 18, 24, 30, 36 hours");
+            }
+            s.setDurationHours(d);
+            // Keep legacy columns aligned for older clients
+            s.setSoftHours(d);
+            s.setMediumHours(d);
+            s.setUrgentHours(d);
+        } else if (req.getUrgentHours() != null) {
+            int d = InactivityService.normalizeDuration(req.getUrgentHours());
+            s.setDurationHours(d);
+            s.setSoftHours(d);
+            s.setMediumHours(d);
+            s.setUrgentHours(d);
+        }
         if (req.getEscalationMinutes() != null) s.setEscalationMinutes(req.getEscalationMinutes());
         if (req.getInactivityMonitoringEnabled() != null) s.setInactivityMonitoringEnabled(req.getInactivityMonitoringEnabled());
         if (req.getAmbulanceNumber() != null) s.setAmbulanceNumber(req.getAmbulanceNumber());
@@ -42,6 +59,7 @@ public class ElderlyController {
         if (req.getBloodGroup() != null) s.setBloodGroup(req.getBloodGroup());
         if (req.getAllergies() != null) s.setAllergies(req.getAllergies());
         if (req.getMedicalConditions() != null) s.setMedicalConditions(req.getMedicalConditions());
+        if (req.getMedications() != null) s.setMedications(req.getMedications());
         if (req.getMedicationReminderEnabled() != null) s.setMedicationReminderEnabled(req.getMedicationReminderEnabled());
         return toDto(settingsRepo.save(s));
     }
@@ -56,7 +74,6 @@ public class ElderlyController {
         return Map.of("lastActivityAt", user.getLastActivityAt());
     }
 
-    /** User tapped "I'm OK" on the inactivity soft check-in notification. */
     @PostMapping("/inactivity/acknowledge")
     public Map<String, Object> acknowledgeInactivity() {
         UserEntity user = userRepo.findById(SecurityUtils.currentUserId())
@@ -73,10 +90,12 @@ public class ElderlyController {
     }
 
     private Map<String, Object> toDto(ElderlySettingsEntity s) {
+        int duration = InactivityService.normalizeDuration(s.getDurationHours() > 0 ? s.getDurationHours() : s.getUrgentHours());
         Map<String, Object> m = new LinkedHashMap<>();
-        m.put("softHours", s.getSoftHours());
-        m.put("mediumHours", s.getMediumHours());
-        m.put("urgentHours", s.getUrgentHours());
+        m.put("durationHours", duration);
+        m.put("softHours", duration);
+        m.put("mediumHours", duration);
+        m.put("urgentHours", duration);
         m.put("escalationMinutes", s.getEscalationMinutes());
         m.put("inactivityMonitoringEnabled", s.isInactivityMonitoringEnabled());
         m.put("ambulanceNumber", s.getAmbulanceNumber());
@@ -85,12 +104,15 @@ public class ElderlyController {
         m.put("bloodGroup", s.getBloodGroup());
         m.put("allergies", s.getAllergies());
         m.put("medicalConditions", s.getMedicalConditions());
+        m.put("medications", s.getMedications());
         m.put("medicationReminderEnabled", s.isMedicationReminderEnabled());
+        m.put("allowedDurations", ALLOWED);
         return m;
     }
 
     @Data
     public static class SettingsRequest {
+        private Integer durationHours;
         private Integer softHours;
         private Integer mediumHours;
         private Integer urgentHours;
@@ -102,6 +124,7 @@ public class ElderlyController {
         private String bloodGroup;
         private String allergies;
         private String medicalConditions;
+        private String medications;
         private Boolean medicationReminderEnabled;
     }
 }

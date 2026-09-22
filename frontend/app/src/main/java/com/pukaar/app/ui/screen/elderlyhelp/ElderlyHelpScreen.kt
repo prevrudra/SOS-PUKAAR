@@ -29,9 +29,11 @@ import com.pukaar.app.ui.theme.TextPrimary
 
 /** How long without activity before Pukaar raises the alarm on its own. */
 enum class InactivityWindow(val hours: Int) {
-    SIX(6),
-    TEN(10),
-    TWELVE(12)
+    TWELVE(12),
+    EIGHTEEN(18),
+    TWENTY_FOUR(24),
+    THIRTY(30),
+    THIRTY_SIX(36)
 }
 
 /** Menu item 5. Passive monitoring for someone who may not press anything. */
@@ -40,7 +42,7 @@ fun ElderlyHelpScreen(
     onBack: () -> Unit,
     onSave: (window: InactivityWindow, medicationReminder: Boolean) -> Unit,
     modifier: Modifier = Modifier,
-    initialWindow: InactivityWindow = InactivityWindow.TEN,
+    initialWindow: InactivityWindow = InactivityWindow.TWELVE,
     initialMedicationReminder: Boolean = true
 ) {
     var window by remember { mutableStateOf(initialWindow) }
@@ -65,21 +67,13 @@ fun ElderlyHelpScreen(
                 fontWeight = FontWeight.Medium,
                 modifier = Modifier.padding(bottom = 4.dp)
             )
-            ChoiceRow(
-                title = stringResource(R.string.elderly_help_6_hours),
-                selected = window == InactivityWindow.SIX,
-                onSelect = { window = InactivityWindow.SIX }
-            )
-            ChoiceRow(
-                title = stringResource(R.string.elderly_help_10_hours),
-                selected = window == InactivityWindow.TEN,
-                onSelect = { window = InactivityWindow.TEN }
-            )
-            ChoiceRow(
-                title = stringResource(R.string.elderly_help_12_hours),
-                selected = window == InactivityWindow.TWELVE,
-                onSelect = { window = InactivityWindow.TWELVE }
-            )
+            InactivityWindow.entries.forEach { option ->
+                ChoiceRow(
+                    title = stringResource(R.string.elderly_help_hours, option.hours),
+                    selected = window == option,
+                    onSelect = { window = option }
+                )
+            }
 
             Spacer(modifier = Modifier.height(8.dp))
             RowDivider()

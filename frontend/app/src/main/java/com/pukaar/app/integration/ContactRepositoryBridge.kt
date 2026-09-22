@@ -2,6 +2,7 @@ package com.pukaar.app.integration
 
 import android.content.Context
 import com.pukaar.app.PukaarApp
+import com.pukaar.app.data.api.ContactDto
 import com.pukaar.app.data.api.ContactRequest
 import com.pukaar.app.ui.screen.contacts.ContactDraft
 import com.pukaar.app.ui.screen.contacts.ContactType
@@ -81,6 +82,10 @@ object ContactRepositoryBridge {
         }
     }
 
+    /**
+     * Creates/updates a contact. Server issues the OTP on create/update.
+     * Does **not** auto-verify — the user must enter the code via [verifyContact].
+     */
     suspend fun saveContact(
         context: Context,
         draft: ContactDraft,
@@ -95,10 +100,9 @@ object ContactRepositoryBridge {
                 PukaarApp.instance.repository.addContact(req)
             }
             val id = contact.id ?: return Result.failure(Exception("Contact not saved"))
-            markVerified(id)
-            // Silent SMS with Play link — never open SMS/WhatsApp apps.
+            // Optional High Alert install invite — not used as the OTP source.
             if (shareHighAlert) {
-                sendVerificationInvite(context, draft.name, contact.phone ?: req.phone, senderName)
+                sendHighAlertInvite(context, draft.name, contact.phone ?: req.phone, senderName)
             }
             Result.success(id)
         } catch (e: HttpException) {
@@ -131,9 +135,8 @@ object ContactRepositoryBridge {
         val id = existing?.id ?: draft.id?.takeIf { it.isNotBlank() } ?: return null
         return try {
             PukaarApp.instance.repository.updateContact(id, req)
-            markVerified(id)
             if (shareHighAlert) {
-                sendVerificationInvite(context, draft.name, req.phone, senderName)
+                sendHighAlertInvite(context, draft.name, req.phone, senderName)
             }
             id
         } catch (_: Exception) {
@@ -142,11 +145,14 @@ object ContactRepositoryBridge {
     }
 
     /**
-     * Onboarding batch save: create/update + mark verified on the server so SOS
-     * alerts can fire. Does not open WhatsApp (that interrupted multi-contact saves).
+     * Onboarding batch save: create/update without auto-verifying.
+     * Trusted contacts must already be verified via OTP, or will remain pending.
      */
-    suspend fun saveVerifiedQuiet(draft: ContactDraft): Result<String> =
+    suspend fun saveQuiet(draft: ContactDraft): Result<String> =
         saveContact(context = PukaarApp.instance, draft = draft, senderName = null, shareHighAlert = false)
+
+    @Deprecated("Use saveQuiet — contacts must be verified with the user-entered OTP")
+    suspend fun saveVerifiedQuiet(draft: ContactDraft): Result<String> = saveQuiet(draft)
 
     suspend fun deleteContact(id: String): Result<Unit> = try {
         PukaarApp.instance.repository.deleteContact(id)
@@ -155,30 +161,45 @@ object ContactRepositoryBridge {
         Result.failure(e)
     }
 
+    /** Asks the server to re-issue and send the OTP. Optionally shares High Alert install SMS. */
     suspend fun resendVerification(
         context: Context,
         contact: ContactUiModel,
-        senderName: String?
-    ) {
-        markVerified(contact.id)
-        sendVerificationInvite(context, contact.name, contact.phoneNumber, senderName)
+        senderName: String?,
+        shareHighAlert: Boolean = true
+    ): Result<ContactDto> = try {
+        val updated = PukaarApp.instance.repository.resendVerification(contact.id)
+        if (shareHighAlert) {
+            sendHighAlertInvite(context, contact.name, contact.phoneNumber, senderName)
+        }
+        Result.success(updated)
+    } catch (e: Exception) {
+        Result.failure(e)
     }
 
-    private suspend fun markVerified(id: String) {
-        PukaarApp.instance.repository.verifyContact(id)
+    suspend fun verifyContact(id: String, code: String): Result<ContactDto> = try {
+        if (code.isBlank()) {
+            Result.failure(Exception("Enter the verification code"))
+        } else {
+            Result.success(PukaarApp.instance.repository.verifyContact(id, code.trim()))
+        }
+    } catch (e: Exception) {
+        Result.failure(Exception(e.userMessage()))
     }
 
-    private suspend fun sendVerificationInvite(
+    /** High Alert Play Store invite — not the server OTP. */
+    private suspend fun sendHighAlertInvite(
         context: Context,
         name: String,
         phone: String,
         senderName: String?
     ) {
-        val code = SmsHelper.generateVerificationCode()
-        val message = SmsHelper.buildVerificationMessage(name, code, senderName)
+        val from = senderName?.takeIf { it.isNotBlank() } ?: "I"
+        val message = "$from added you as a PUKAAR emergency contact ($name). " +
+            "Install PUKAAR High Alert to receive their safety alerts: " +
+            "https://play.google.com/store/apps/details?id=com.pukaar.highalert"
         withContext(Dispatchers.IO) {
             SmsHelper.sendSmsInBackground(context, phone, message)
         }
-        // Do not open WhatsApp or the SMS app — the Play Store link is in the SMS body.
     }
 }

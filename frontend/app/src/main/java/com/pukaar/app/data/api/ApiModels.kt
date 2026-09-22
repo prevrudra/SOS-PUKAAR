@@ -22,7 +22,10 @@ data class UserDto(
     val onboardingComplete: Boolean?,
     val mockDrillPassed: Boolean?,
     val protectionReady: Boolean?,
-    val referralCode: String?
+    val referralCode: String?,
+    val region: String? = null,
+    val indiaOnlyPhones: Boolean? = null,
+    val internationalLocation: Boolean? = null
 )
 data class ProfileUpdateRequest(
     val fullName: String? = null,
@@ -126,7 +129,12 @@ data class LocationRequest(val latitude: Double, val longitude: Double, val accu
 data class SegmentRequest(val index: Int, val checksumSha256: String? = null, val byteSize: Long? = null)
 data class UploadConfirmRequest(val storageKey: String)
 data class SegmentResponse(val segmentId: String?, val uploadStatus: String?, val cloudSafe: Boolean?, val message: String?)
-data class ActivateRequest(val plan: String = "INDIVIDUAL", val purchaseToken: String? = "dev-token", val storePlatform: String = "PLAY")
+data class ActivateRequest(
+    val plan: String = "INDIVIDUAL",
+    val region: String? = "INDIA",
+    val purchaseToken: String? = "dev-token",
+    val storePlatform: String = "PLAY"
+)
 data class PlansDto(
     val individual: Int? = null,
     val family: Int? = null,
@@ -136,6 +144,7 @@ data class PlansDto(
 data class SubscriptionDto(
     val id: String? = null,
     val plan: String? = null,
+    val region: String? = null,
     val status: String? = null,
     val priceInr: Int? = null,
     val startsAt: String? = null,
@@ -162,7 +171,7 @@ data class PaymentOrderDto(
     val userPhone: String?,
     val description: String?
 )
-data class CreatePaymentOrderRequest(val plan: String)
+data class CreatePaymentOrderRequest(val plan: String, val region: String? = "INDIA")
 data class VerifyPaymentRequest(val orderId: String, val paymentId: String, val signature: String)
 data class PaymentVerifyResponse(
     val status: String?,
@@ -174,6 +183,7 @@ data class PaymentVerifyResponse(
 )
 data class OkResponse(val ok: Boolean? = true, val deleted: Boolean? = null, val lastActivityAt: String? = null)
 data class ElderlySettingsDto(
+    val durationHours: Int? = null,
     val softHours: Int? = null,
     val mediumHours: Int? = null,
     val urgentHours: Int? = null,
@@ -185,7 +195,9 @@ data class ElderlySettingsDto(
     val bloodGroup: String? = null,
     val allergies: String? = null,
     val medicalConditions: String? = null,
-    val medicationReminderEnabled: Boolean? = null
+    val medications: String? = null,
+    val medicationReminderEnabled: Boolean? = null,
+    val allowedDurations: List<Int>? = null
 )
 data class DrillCompleteResponse(
     val result: String? = null,

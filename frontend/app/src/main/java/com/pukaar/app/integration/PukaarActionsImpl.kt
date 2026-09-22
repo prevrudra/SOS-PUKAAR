@@ -23,7 +23,6 @@ import com.pukaar.app.ui.screen.notifications.NotificationPreferences
 import com.pukaar.app.ui.screen.sossettings.SosSettingsForm
 import com.pukaar.app.util.DeviceTelemetry
 import com.pukaar.app.util.EmergencyAlertHelper
-import com.pukaar.app.util.SmsHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -141,31 +140,28 @@ class PukaarActionsImpl(
     override fun loadContacts(): List<ContactUiModel> = emptyList()
 
     override fun openContact(contact: ContactUiModel) {
-        val code = SmsHelper.generateVerificationCode()
         scope.launch {
             val name = runCatching { PukaarApp.instance.repository.me().fullName }.getOrNull()
-            val message = SmsHelper.buildVerificationMessage(contact.name, code, name)
-            withContext(Dispatchers.IO) {
-                SmsHelper.sendSmsInBackground(context, contact.phoneNumber, message)
-            }
-            runCatching { PukaarApp.instance.repository.verifyContact(contact.id, code) }
+            ContactRepositoryBridge.resendVerification(context, contact, name)
+                .onFailure { onError(it.message ?: "Could not resend verification") }
         }
     }
 
     override fun saveElderlyHelp(window: InactivityWindow, medicationReminder: Boolean) {
         scope.launch {
             runCatching {
-                val soft = (window.hours / 2).coerceAtLeast(2)
+                val hours = window.hours
                 PukaarApp.instance.repository.updateElderlySettings(
                     ElderlySettingsDto(
-                        softHours = soft,
-                        mediumHours = window.hours,
-                        urgentHours = window.hours + 2,
+                        durationHours = hours,
+                        softHours = hours,
+                        mediumHours = hours,
+                        urgentHours = hours,
                         inactivityMonitoringEnabled = true,
                         medicationReminderEnabled = medicationReminder
                     )
                 )
-                com.pukaar.app.emergency.InactivityMonitor.syncFromServer(context, soft, true)
+                com.pukaar.app.emergency.InactivityMonitor.syncFromServer(context, hours, true)
                 promptUsageAccessIfNeeded()
             }.onFailure { onError(it.message ?: "Could not save elderly settings") }
         }
@@ -173,11 +169,9 @@ class PukaarActionsImpl(
 
     override suspend fun loadElderlyHelp(): Pair<InactivityWindow, Boolean> {
         val s = runCatching { PukaarApp.instance.repository.elderlySettings() }.getOrNull()
-        val window = when (s?.mediumHours) {
-            6 -> InactivityWindow.SIX
-            12 -> InactivityWindow.TWELVE
-            else -> InactivityWindow.TEN
-        }
+        val hours = s?.durationHours ?: s?.mediumHours ?: 12
+        val window = InactivityWindow.entries.firstOrNull { it.hours == hours }
+            ?: InactivityWindow.TWELVE
         return window to (s?.medicationReminderEnabled != false)
     }
 
@@ -190,7 +184,8 @@ class PukaarActionsImpl(
                         doctorPhone = form.doctorPhone.ifBlank { null },
                         bloodGroup = form.bloodGroup.ifBlank { null },
                         allergies = form.allergies.ifBlank { null },
-                        medicalConditions = form.conditions.ifBlank { null }
+                        medicalConditions = form.conditions.ifBlank { null },
+                        medications = form.medications.ifBlank { null }
                     )
                 )
             }.onFailure { onError(it.message ?: "Could not save emergency info") }
@@ -203,6 +198,7 @@ class PukaarActionsImpl(
             bloodGroup = s?.bloodGroup.orEmpty(),
             allergies = s?.allergies.orEmpty(),
             conditions = s?.medicalConditions.orEmpty(),
+            medications = s?.medications.orEmpty(),
             doctorPhone = s?.doctorPhone ?: PukaarApp.instance.sessionStore.doctorPhone()
         )
     }
@@ -213,28 +209,45 @@ class PukaarActionsImpl(
             com.pukaar.app.ui.screen.payment.SubscriptionPlan.GLOBAL_GROUP -> "FAMILY"
             else -> "INDIVIDUAL"
         }
-        upgradePlanInternal(apiPlan, onSuccess = {}, onFailure = { onError(it) })
+        val region = when (plan) {
+            com.pukaar.app.ui.screen.payment.SubscriptionPlan.PERSONAL,
+            com.pukaar.app.ui.screen.payment.SubscriptionPlan.PERSONAL_GROUP -> "INDIA"
+            com.pukaar.app.ui.screen.payment.SubscriptionPlan.GLOBAL,
+            com.pukaar.app.ui.screen.payment.SubscriptionPlan.GLOBAL_GROUP -> "GLOBAL"
+            else -> "INDIA"
+        }
+        upgradePlanInternal(apiPlan, region, onSuccess = {}, onFailure = { onError(it) })
     }
 
     fun upgradePlan(
         plan: String = "INDIVIDUAL",
+        region: String = "INDIA",
         onSuccess: () -> Unit = {},
         onFailure: (String) -> Unit = {}
-    ) = upgradePlanInternal(plan, onSuccess, onFailure)
+    ) = upgradePlanInternal(plan, region, onSuccess, onFailure)
 
-    private fun upgradePlanInternal(plan: String, onSuccess: () -> Unit, onFailure: (String) -> Unit) {
+    private fun upgradePlanInternal(
+        plan: String,
+        region: String,
+        onSuccess: () -> Unit,
+        onFailure: (String) -> Unit
+    ) {
         scope.launch {
             try {
                 val config = runCatching { PukaarApp.instance.repository.paymentConfig() }.getOrNull()
                 val razorpayEnabled = config?.enabled == true
                 if (!razorpayEnabled) {
-                    PukaarApp.instance.repository.activate(plan)
+                    val sub = PukaarApp.instance.repository.activate(plan, region)
+                    PukaarApp.instance.sessionStore.saveRegion(
+                        region = sub.region ?: region,
+                        indiaOnlyPhones = (sub.region ?: region).equals("INDIA", ignoreCase = true)
+                    )
                     PukaarApp.instance.repository.completeOnboarding()
                     PukaarApp.instance.sessionStore.setProtectionReady(true)
                     onSuccess()
                     return@launch
                 }
-                val order = PukaarApp.instance.repository.createPaymentOrder(plan)
+                val order = PukaarApp.instance.repository.createPaymentOrder(plan, region)
                 val activity = context as? Activity
                 if (activity == null) {
                     onFailure("Payment requires app activity")
@@ -249,6 +262,10 @@ class PukaarActionsImpl(
                                         payment.orderId,
                                         payment.paymentId,
                                         payment.signature
+                                    )
+                                    PukaarApp.instance.sessionStore.saveRegion(
+                                        region = region,
+                                        indiaOnlyPhones = region.equals("INDIA", ignoreCase = true)
                                     )
                                     PukaarApp.instance.repository.completeOnboarding()
                                     PukaarApp.instance.sessionStore.setProtectionReady(true)
@@ -280,10 +297,17 @@ class PukaarActionsImpl(
                         ContactType.INACTIVITY
                 }
 
-                // Replace existing contacts for this protection only.
+                // Replace existing contacts for this protection only — keep already-verified
+                // rows that are still in the result so OTP status is not wiped.
                 val existing = ContactRepositoryBridge.loadContacts()
+                val trusted = result.primaryContacts + result.secondaryContacts
                 existing.filter { it.type == protectionType }.forEach { old ->
-                    ContactRepositoryBridge.deleteContact(old.id)
+                    val keep = trusted.any {
+                        ContactRepositoryBridge.phonesMatch(it.phone, old.phoneNumber)
+                    }
+                    if (!keep) {
+                        ContactRepositoryBridge.deleteContact(old.id)
+                    }
                 }
                 // Clear prior help/pre-saved rows for this protection.
                 existing.filter {
@@ -298,7 +322,7 @@ class PukaarActionsImpl(
                 }
 
                 var order = 1
-                val trusted = result.primaryContacts + result.secondaryContacts
+                val latest = ContactRepositoryBridge.loadContacts()
                 for (c in trusted) {
                     val e164 = runCatching {
                         com.pukaar.app.util.PhoneNumbers.toE164(c.phone)
@@ -306,8 +330,18 @@ class PukaarActionsImpl(
                         val digits = c.phone.filter { it.isDigit() }
                         com.pukaar.app.util.PhoneNumbers.fromParts("+91", digits.takeLast(10))
                     }
+                    val match = latest.firstOrNull {
+                        it.type == protectionType &&
+                            ContactRepositoryBridge.phonesMatch(it.phoneNumber, e164)
+                    }
+                    // Already verified on the server during the OTP step — leave it.
+                    if (match != null && (match.verified || c.verified)) {
+                        order++
+                        continue
+                    }
                     val (dial, national) = com.pukaar.app.util.PhoneNumbers.splitE164(e164)
                     val draft = ContactDraft(
+                        id = match?.id,
                         name = c.name.trim(),
                         mobile = national,
                         dialCode = dial,
@@ -318,7 +352,7 @@ class PukaarActionsImpl(
                         type = protectionType,
                         priorityOrder = order++
                     )
-                    ContactRepositoryBridge.saveVerifiedQuiet(draft)
+                    ContactRepositoryBridge.saveQuiet(draft)
                         .onFailure { throw it }
                 }
 
@@ -349,22 +383,24 @@ class PukaarActionsImpl(
                         type = helpType,
                         priorityOrder = 1
                     )
-                    ContactRepositoryBridge.saveVerifiedQuiet(draft)
+                    ContactRepositoryBridge.saveQuiet(draft)
                         .onFailure { throw it }
                 }
 
                 result.timing?.let { timing ->
+                    val hours = timing.durationHours
                     PukaarApp.instance.repository.updateElderlySettings(
                         ElderlySettingsDto(
-                            softHours = timing.softCheckHours,
-                            mediumHours = timing.alertHours,
-                            urgentHours = timing.highAlertHours,
+                            durationHours = hours,
+                            softHours = hours,
+                            mediumHours = hours,
+                            urgentHours = hours,
                             inactivityMonitoringEnabled = true
                         )
                     )
                     com.pukaar.app.emergency.InactivityMonitor.syncFromServer(
                         context,
-                        timing.softCheckHours,
+                        hours,
                         true
                     )
                     promptUsageAccessIfNeeded()
@@ -425,17 +461,19 @@ class PukaarActionsImpl(
     override fun saveInactivityTiming(timing: com.pukaar.app.ui.screen.onboarding.InactivityTiming) {
         scope.launch {
             runCatching {
+                val hours = timing.durationHours
                 PukaarApp.instance.repository.updateElderlySettings(
                     ElderlySettingsDto(
-                        softHours = timing.softCheckHours,
-                        mediumHours = timing.alertHours,
-                        urgentHours = timing.highAlertHours,
+                        durationHours = hours,
+                        softHours = hours,
+                        mediumHours = hours,
+                        urgentHours = hours,
                         inactivityMonitoringEnabled = true
                     )
                 )
                 com.pukaar.app.emergency.InactivityMonitor.syncFromServer(
                     context,
-                    timing.softCheckHours,
+                    hours,
                     true
                 )
                 promptUsageAccessIfNeeded()
@@ -492,6 +530,7 @@ class PukaarActionsImpl(
     override suspend fun loadSubscriptionUi(): SubscriptionUi {
         val user = runCatching { PukaarApp.instance.repository.me() }.getOrNull()
         val sub = runCatching { PukaarApp.instance.repository.subscription() }.getOrNull()
+        user?.let { PukaarApp.instance.sessionStore.syncFromUser(it) }
         user?.referralCode?.let { PukaarApp.instance.sessionStore.saveReferralCode(it) }
         val referral = user?.referralCode
             ?: PukaarApp.instance.sessionStore.referralCode()

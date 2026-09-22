@@ -35,6 +35,12 @@ public class TrustedContactEntity {
     private boolean verified = false;
     @Builder.Default
     private boolean active = true;
+    @Column(name = "verify_code_hash", length = 128)
+    private String verifyCodeHash;
+    @Column(name = "verify_code_expires_at")
+    private Instant verifyCodeExpiresAt;
+    @Column(name = "verify_sent_at")
+    private Instant verifySentAt;
     @CreationTimestamp @Column(name = "created_at", updatable = false)
     private Instant createdAt;
     @UpdateTimestamp @Column(name = "updated_at")

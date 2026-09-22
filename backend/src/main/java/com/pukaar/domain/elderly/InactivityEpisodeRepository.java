@@ -7,4 +7,8 @@ import java.util.UUID;
 
 public interface InactivityEpisodeRepository extends JpaRepository<InactivityEpisodeEntity, UUID> {
     Optional<InactivityEpisodeEntity> findFirstByUserIdAndResolvedAtIsNullOrderByCreatedAtDesc(UUID userId);
+
+    Optional<InactivityEpisodeEntity> findByViewToken(String viewToken);
+
+    Optional<InactivityEpisodeEntity> findFirstByEventIdOrderByCreatedAtDesc(UUID eventId);
 }

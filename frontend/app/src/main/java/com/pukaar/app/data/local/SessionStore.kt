@@ -29,12 +29,16 @@ class SessionStore(private val context: Context) {
     private val notifMarketingKey = booleanPreferencesKey("notif_marketing")
     private val doctorPhoneKey = stringPreferencesKey("doctor_phone")
     private val referralCodeKey = stringPreferencesKey("referral_code")
+    private val regionKey = stringPreferencesKey("plan_region")
+    private val indiaOnlyPhonesKey = booleanPreferencesKey("india_only_phones")
 
     val accessToken: Flow<String?> = context.dataStore.data.map { it[tokenKey] }
     val homeMode: Flow<String> = context.dataStore.data.map { it[homeModeKey] ?: "SOS" }
     val onboardingComplete: Flow<Boolean> = context.dataStore.data.map { it[onboardingKey] ?: false }
     val protectionReady: Flow<Boolean> = context.dataStore.data.map { it[protectionReadyKey] ?: false }
     val mockDrillPassed: Flow<Boolean> = context.dataStore.data.map { it[mockDrillPassedKey] ?: false }
+    val region: Flow<String> = context.dataStore.data.map { it[regionKey] ?: "INDIA" }
+    val indiaOnlyPhones: Flow<Boolean> = context.dataStore.data.map { it[indiaOnlyPhonesKey] ?: true }
 
     suspend fun token(): String? = accessToken.first()
 
@@ -67,6 +71,12 @@ class SessionStore(private val context: Context) {
             it[protectionReadyKey] = user.protectionReady == true
             it[mockDrillPassedKey] = user.mockDrillPassed == true
             user.referralCode?.let { c -> it[referralCodeKey] = c }
+            user.region?.let { r -> it[regionKey] = r }
+            if (user.indiaOnlyPhones != null) {
+                it[indiaOnlyPhonesKey] = user.indiaOnlyPhones
+            } else if (user.region != null) {
+                it[indiaOnlyPhonesKey] = user.region.equals("INDIA", ignoreCase = true)
+            }
         }
     }
 
@@ -137,6 +147,17 @@ class SessionStore(private val context: Context) {
     }
 
     suspend fun referralCode(): String = context.dataStore.data.first()[referralCodeKey] ?: ""
+
+    suspend fun saveRegion(region: String, indiaOnlyPhones: Boolean = region.equals("INDIA", ignoreCase = true)) {
+        context.dataStore.edit {
+            it[regionKey] = region
+            it[indiaOnlyPhonesKey] = indiaOnlyPhones
+        }
+    }
+
+    suspend fun region(): String = context.dataStore.data.first()[regionKey] ?: "INDIA"
+
+    suspend fun indiaOnlyPhones(): Boolean = context.dataStore.data.first()[indiaOnlyPhonesKey] ?: true
 }
 
 data class SosSettingsPrefs(

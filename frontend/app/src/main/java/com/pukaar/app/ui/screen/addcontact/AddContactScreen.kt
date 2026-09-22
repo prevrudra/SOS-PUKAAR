@@ -49,6 +49,20 @@ fun AddContactScreen(
     var relationship by remember { mutableStateOf("") }
     // SOS is preselected so a contact can never be saved reaching nobody.
     var type by remember { mutableStateOf(ContactType.SOS) }
+    var indiaOnlyPhones by remember { mutableStateOf(true) }
+
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        val store = com.pukaar.app.PukaarApp.instance.sessionStore
+        indiaOnlyPhones = store.indiaOnlyPhones()
+        if (indiaOnlyPhones) dialCode = "+91"
+        runCatching {
+            val me = com.pukaar.app.PukaarApp.instance.repository.me()
+            store.syncFromUser(me)
+            indiaOnlyPhones = me.indiaOnlyPhones
+                ?: (me.region ?: "INDIA").equals("INDIA", ignoreCase = true)
+            if (indiaOnlyPhones) dialCode = "+91"
+        }
+    }
 
     PukaarScreen(
         title = stringResource(R.string.add_contact_title),
@@ -85,7 +99,8 @@ fun AddContactScreen(
                 nationalNumber = mobile,
                 onDialCodeChange = { dialCode = it },
                 onNationalChange = { mobile = it },
-                placeholder = stringResource(R.string.add_contact_mobile_hint)
+                placeholder = stringResource(R.string.add_contact_mobile_hint),
+                indiaOnlyPhones = indiaOnlyPhones
             )
             Spacer(modifier = Modifier.height(14.dp))
             LabeledDropdownField(

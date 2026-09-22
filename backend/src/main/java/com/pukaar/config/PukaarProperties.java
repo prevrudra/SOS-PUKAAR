@@ -20,6 +20,8 @@ public class PukaarProperties {
     private Alerts alerts = new Alerts();
     private Google google = new Google();
     private DefaultTrustedContact defaultTrustedContact = new DefaultTrustedContact();
+    /** Public site origin for View More links (e.g. https://pukaar.app or http://host/pukaar). */
+    private String publicBaseUrl = "https://pukaaralert.com/pukaar";
 
     @Data
     public static class Google {
@@ -121,6 +123,9 @@ public class PukaarProperties {
             /** Meta template for I'm Safe closure (e.g. pukaar_safe). Falls back to text if blank. */
             private String safeTemplateName = "pukaar_safe";
             private String safeTemplateLanguage = "en";
+            /** Optional Meta template for inactivity welfare alerts. Blank → free-form text. */
+            private String inactivityTemplateName = "";
+            private String inactivityTemplateLanguage = "en";
             private String webhookVerifyToken = "";
             /** Send live location updates to alerted contacts during active SOS. */
             private boolean locationUpdatesEnabled = true;

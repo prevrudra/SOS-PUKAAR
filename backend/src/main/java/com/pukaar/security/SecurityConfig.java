@@ -41,6 +41,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/payments/webhook").permitAll()
                         .requestMatchers("/api/v1/whatsapp/webhook").permitAll()
+                        .requestMatchers("/view/**", "/api/v1/view/**").permitAll()
                         .requestMatchers("/admin/**").permitAll()
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()

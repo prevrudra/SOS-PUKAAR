@@ -2,6 +2,7 @@ package com.pukaar.domain.payment;
 
 import com.pukaar.common.ApiException;
 import com.pukaar.common.PaymentOrderStatus;
+import com.pukaar.common.PlanRegion;
 import com.pukaar.common.SubscriptionPlan;
 import com.pukaar.domain.referral.ReferralRepository;
 import com.pukaar.domain.subscription.SubscriptionEntity;
@@ -36,6 +37,11 @@ public class PaymentService {
 
     @Transactional
     public Map<String, Object> createOrder(UUID userId, SubscriptionPlan plan) {
+        return createOrder(userId, plan, PlanRegion.INDIA);
+    }
+
+    @Transactional
+    public Map<String, Object> createOrder(UUID userId, SubscriptionPlan plan, PlanRegion region) {
         if (!razorpay.isConfigured()) {
             throw new ApiException("RAZORPAY_NOT_CONFIGURED", "Payment gateway is not configured");
         }
@@ -43,6 +49,7 @@ public class PaymentService {
         if (!user.isMockDrillPassed()) {
             throw new ApiException("MOCK_DRILL_REQUIRED", "Complete mock drill before payment");
         }
+        PlanRegion resolved = region == null ? PlanRegion.INDIA : region;
         long referrals = referralRepo.countByReferrerUserIdAndPaidActivatedTrueAndAbuseFlaggedFalse(userId);
         int amountInr = subscriptionService.priceFor(plan, referrals);
         int amountPaise = amountInr * 100;
@@ -52,6 +59,7 @@ public class PaymentService {
         PaymentOrderEntity entity = PaymentOrderEntity.builder()
                 .userId(userId)
                 .plan(plan)
+                .region(resolved)
                 .amountInr(amountInr)
                 .amountPaise(amountPaise)
                 .razorpayOrderId(order.get("id").toString())
@@ -66,9 +74,10 @@ public class PaymentService {
         m.put("currency", "INR");
         m.put("keyId", razorpay.keyId());
         m.put("plan", plan);
+        m.put("region", resolved);
         m.put("userName", user.getFullName());
         m.put("userPhone", user.getPhoneE164());
-        m.put("description", "PUKAAR " + plan.name() + " plan — 1 year");
+        m.put("description", "PUKAAR " + plan.name() + " (" + resolved.name() + ") — 1 year");
         return m;
     }
 
@@ -101,7 +110,11 @@ public class PaymentService {
 
     private Map<String, Object> completeOrder(PaymentOrderEntity order, String paymentId) {
         SubscriptionEntity sub = subscriptionService.activateFromPayment(
-                order.getUserId(), order.getPlan(), paymentId, "RAZORPAY");
+                order.getUserId(),
+                order.getPlan(),
+                order.getRegion() == null ? PlanRegion.INDIA : order.getRegion(),
+                paymentId,
+                "RAZORPAY");
         order.setRazorpayPaymentId(paymentId);
         order.setStatus(PaymentOrderStatus.PAID);
         order.setPaidAt(Instant.now());
@@ -116,6 +129,7 @@ public class PaymentService {
         m.put("orderId", order.getRazorpayOrderId());
         m.put("paymentId", order.getRazorpayPaymentId());
         m.put("plan", order.getPlan());
+        m.put("region", order.getRegion() == null ? PlanRegion.INDIA : order.getRegion());
         m.put("amountInr", order.getAmountInr());
         m.put("subscriptionId", order.getSubscriptionId());
         m.put("message", "Payment successful — protection activated");

@@ -1,5 +1,6 @@
 package com.pukaar.domain.subscription;
 
+import com.pukaar.common.PlanRegion;
 import com.pukaar.common.SubscriptionPlan;
 import com.pukaar.common.SubscriptionStatus;
 import jakarta.persistence.*;
@@ -21,6 +22,10 @@ public class SubscriptionEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private SubscriptionPlan plan;
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    @Builder.Default
+    private PlanRegion region = PlanRegion.INDIA;
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     @Builder.Default

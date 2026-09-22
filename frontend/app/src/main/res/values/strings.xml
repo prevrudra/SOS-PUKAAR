@@ -314,6 +314,7 @@
     <string name="onboarding_remove">Remove</string>
     <string name="onboarding_edit">Edit</string>
     <string name="onboarding_verified">Verified</string>
+    <string name="onboarding_enter_code">Enter verification code</string>
     <string name="onboarding_verification_pending">Verification pending</string>
     <string name="onboarding_resend_code">Resend Code</string>
     <string name="onboarding_verify_now">Verify Now</string>
@@ -409,6 +410,8 @@
     <string name="onboarding_get_started">Get Started</string>
     <string name="onboarding_timing_title">Set Notification Timing</string>
     <string name="onboarding_timing_subtitle">Choose after how much time of no activity you want to be alerted.</string>
+    <string name="onboarding_alert_duration">Inactivity duration</string>
+    <string name="onboarding_alert_duration_note">Alert trusted contacts after this many quiet hours</string>
     <string name="onboarding_alert_soft">1st Alert — Soft Check</string>
     <string name="onboarding_alert_soft_note">Soft notification to your contacts</string>
     <string name="onboarding_alert_normal">2nd Alert — Alert</string>
@@ -820,6 +823,7 @@
     <string name="contact_section_help">Help Contacts</string>
     <string name="elderly_help_title">Elderly Help</string>
     <string name="elderly_help_inactivity">Inactivity Alert</string>
+    <string name="elderly_help_hours">%1$d Hours</string>
     <string name="elderly_help_6_hours">6 Hours</string>
     <string name="elderly_help_10_hours">10 Hours</string>
     <string name="elderly_help_12_hours">12 Hours</string>
@@ -830,6 +834,8 @@
     <string name="emergency_info_blood_group">Blood Group</string>
     <string name="emergency_info_allergies">Allergies</string>
     <string name="emergency_info_conditions">Conditions</string>
+    <string name="emergency_info_medications">Medications</string>
+    <string name="emergency_info_medications_hint">e.g. Insulin, Thyroxine</string>
     <string name="emergency_info_doctor">Doctor Contact</string>
     <string name="emergency_info_success">Information Saved\nSuccessfully</string>
     <string name="payment_title">Payment &amp; Referral</string>

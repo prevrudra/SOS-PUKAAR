@@ -28,6 +28,14 @@ class PukaarRepository(private val sessionStore: SessionStore) {
                 mockDrillPassed = user?.mockDrillPassed == true
             )
             user?.referralCode?.let { sessionStore.saveReferralCode(it) }
+            if (user?.region != null || user?.indiaOnlyPhones != null) {
+                val region = user.region ?: "INDIA"
+                sessionStore.saveRegion(
+                    region = region,
+                    indiaOnlyPhones = user.indiaOnlyPhones
+                        ?: region.equals("INDIA", ignoreCase = true)
+                )
+            }
         }
         return resp
     }
@@ -52,8 +60,10 @@ class PukaarRepository(private val sessionStore: SessionStore) {
     suspend fun addContact(req: ContactRequest) = api.addContact(req)
     suspend fun updateContact(id: String, req: ContactRequest) = api.updateContact(id, req)
     suspend fun deleteContact(id: String) = api.deleteContact(id)
-    suspend fun verifyContact(id: String, code: String = "123456") =
+    suspend fun verifyContact(id: String, code: String) =
         api.verifyContact(id, VerifyContactRequest(code))
+
+    suspend fun resendVerification(id: String) = api.resendVerification(id)
     suspend fun emergencyHistory() = api.emergencyHistory()
     suspend fun downloadAudioSegment(eventId: String, segmentId: String) =
         api.downloadAudioSegment(eventId, segmentId)
@@ -84,9 +94,11 @@ class PukaarRepository(private val sessionStore: SessionStore) {
 
     suspend fun markUploaded(id: String, segmentId: String, key: String) =
         api.markUploaded(id, segmentId, UploadConfirmRequest(key))
-    suspend fun activate(plan: String): SubscriptionDto = api.activate(ActivateRequest(plan))
+    suspend fun activate(plan: String, region: String = "INDIA"): SubscriptionDto =
+        api.activate(ActivateRequest(plan = plan, region = region))
     suspend fun paymentConfig() = api.paymentConfig()
-    suspend fun createPaymentOrder(plan: String) = api.createPaymentOrder(CreatePaymentOrderRequest(plan))
+    suspend fun createPaymentOrder(plan: String, region: String = "INDIA") =
+        api.createPaymentOrder(CreatePaymentOrderRequest(plan = plan, region = region))
     suspend fun verifyPayment(orderId: String, paymentId: String, signature: String) =
         api.verifyPayment(VerifyPaymentRequest(orderId, paymentId, signature))
     suspend fun subscription(): SubscriptionStatusResponse = api.subscription()

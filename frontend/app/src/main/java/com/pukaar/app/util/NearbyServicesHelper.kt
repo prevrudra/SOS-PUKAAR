@@ -89,6 +89,18 @@ object NearbyServicesHelper {
             return withNationalFallbacks(e)
         }
 
+        // India-plan outside India: keep national emergency numbers only.
+        if (nearby.regionBlocked == true) {
+            return withNationalFallbacks(
+                e.copy(
+                    policeStation = null,
+                    nearestHospital = null,
+                    nearestAmbulance = null,
+                    nearbySource = "NATIONAL"
+                )
+            )
+        }
+
         val police = nearby.police?.firstOrNull()?.toPolice()
         val hospital = nearby.hospitals?.firstOrNull()?.toHospital()
         val ambulance = nearby.ambulance

@@ -1,6 +1,7 @@
 package com.pukaar.domain.subscription;
 
 import com.pukaar.common.ApiException;
+import com.pukaar.common.PlanRegion;
 import com.pukaar.common.SubscriptionPlan;
 import com.pukaar.common.SubscriptionStatus;
 import com.pukaar.config.PukaarProperties;
@@ -29,10 +30,17 @@ public class SubscriptionService {
 
     @Transactional
     public SubscriptionEntity activateFromPayment(UUID userId, SubscriptionPlan plan, String paymentId, String platform) {
+        return activateFromPayment(userId, plan, PlanRegion.INDIA, paymentId, platform);
+    }
+
+    @Transactional
+    public SubscriptionEntity activateFromPayment(UUID userId, SubscriptionPlan plan, PlanRegion region,
+                                                  String paymentId, String platform) {
         UserEntity user = userRepo.findById(userId).orElseThrow(() -> new ApiException("USER_NOT_FOUND", "User not found"));
         if (!user.isMockDrillPassed()) {
             throw new ApiException("MOCK_DRILL_REQUIRED", "Complete mock drill before activation");
         }
+        PlanRegion resolvedRegion = region == null ? PlanRegion.INDIA : region;
 
         Optional<SubscriptionEntity> existing = subscriptionRepo.findFirstByUserIdAndStatusInOrderByEndsAtDesc(
                 userId, List.of(SubscriptionStatus.ACTIVE, SubscriptionStatus.GRACE));
@@ -45,6 +53,7 @@ public class SubscriptionService {
                 sub.setFamilySlotLimit(plan == SubscriptionPlan.FAMILY
                         ? props.getSubscription().getFamilyMemberLimit() : 1);
             }
+            sub.setRegion(resolvedRegion);
             sub.setStorePurchaseToken(paymentId);
             sub.setStorePlatform(platform);
             sub = subscriptionRepo.save(sub);
@@ -59,6 +68,7 @@ public class SubscriptionService {
         SubscriptionEntity sub = SubscriptionEntity.builder()
                 .userId(userId)
                 .plan(plan)
+                .region(resolvedRegion)
                 .status(SubscriptionStatus.ACTIVE)
                 .priceInr(price)
                 .familySlotLimit(plan == SubscriptionPlan.FAMILY ? props.getSubscription().getFamilyMemberLimit() : 1)
@@ -98,6 +108,7 @@ public class SubscriptionService {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("id", s.getId());
         m.put("plan", s.getPlan());
+        m.put("region", s.getRegion() == null ? PlanRegion.INDIA : s.getRegion());
         m.put("status", s.getStatus());
         m.put("priceInr", s.getPriceInr());
         m.put("startsAt", s.getStartsAt());

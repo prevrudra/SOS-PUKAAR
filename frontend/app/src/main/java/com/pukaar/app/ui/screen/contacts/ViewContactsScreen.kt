@@ -589,24 +589,10 @@ private fun TimingCard(
             )
 
             TimingRow(
-                title = stringResource(R.string.onboarding_alert_soft),
-                subtitle = stringResource(R.string.onboarding_alert_soft_note),
-                hours = draft.softCheckHours,
-                onHoursChange = { draft = draft.copy(softCheckHours = it) },
-                accent = accent
-            )
-            TimingRow(
-                title = stringResource(R.string.onboarding_alert_normal),
-                subtitle = stringResource(R.string.onboarding_alert_normal_note),
-                hours = draft.alertHours,
-                onHoursChange = { draft = draft.copy(alertHours = it) },
-                accent = accent
-            )
-            TimingRow(
-                title = stringResource(R.string.onboarding_alert_high),
-                subtitle = stringResource(R.string.onboarding_alert_high_note),
-                hours = draft.highAlertHours,
-                onHoursChange = { draft = draft.copy(highAlertHours = it) },
+                title = stringResource(R.string.onboarding_alert_duration),
+                subtitle = stringResource(R.string.onboarding_alert_duration_note),
+                hours = draft.durationHours,
+                onHoursChange = { draft = InactivityTiming(durationHours = it) },
                 accent = accent
             )
         }

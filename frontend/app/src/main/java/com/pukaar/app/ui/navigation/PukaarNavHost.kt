@@ -32,6 +32,7 @@ import com.pukaar.app.ui.screen.home.HomeScreen
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import com.pukaar.app.PukaarApp
+import com.pukaar.app.integration.ContactRepositoryBridge
 import com.pukaar.app.ui.screen.contacts.ContactDraft
 import com.pukaar.app.ui.screen.contacts.ContactFormScreen
 import com.pukaar.app.ui.screen.contacts.ContactType
@@ -413,6 +414,8 @@ fun PukaarNavHost(
             val contact = contacts.firstOrNull { it.id == contactId }
                 ?: actions.loadContacts().firstOrNull { it.id == contactId }
             if (contact != null) {
+                val scope = rememberCoroutineScope()
+                val context = androidx.compose.ui.platform.LocalContext.current
                 ContactFormScreen(
                     initial = contact.toDraft(),
                     onBack = { navController.popBackStack() },
@@ -427,7 +430,29 @@ fun PukaarNavHost(
                     onDelete = {
                         onDeleteContact?.invoke(contactId) { navController.popBackStack() }
                     },
-                    onResendVerification = { onResendVerification?.invoke(contact) }
+                    onResendVerification = { onResendVerification?.invoke(contact) },
+                    onVerifyCode = if (!contact.verified) {
+                        { code ->
+                            scope.launch {
+                                ContactRepositoryBridge.verifyContact(contact.id, code)
+                                    .onSuccess {
+                                        onContactsRefresh?.invoke()
+                                        android.widget.Toast.makeText(
+                                            context,
+                                            "Contact verified",
+                                            android.widget.Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                    .onFailure {
+                                        android.widget.Toast.makeText(
+                                            context,
+                                            it.message ?: "Verification failed",
+                                            android.widget.Toast.LENGTH_LONG
+                                        ).show()
+                                    }
+                            }
+                        }
+                    } else null
                 )
             }
         }

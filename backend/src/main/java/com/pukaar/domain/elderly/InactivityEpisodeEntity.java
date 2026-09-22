@@ -41,6 +41,15 @@ public class InactivityEpisodeEntity {
     @Column(name = "resolved_at")
     private Instant resolvedAt;
 
+    /** Public View More Information token (unguessable). */
+    @Column(name = "view_token", length = 64)
+    private String viewToken;
+
+    /** True after the one-shot inactivity alert was delivered. */
+    @Column(nullable = false)
+    @Builder.Default
+    private boolean alerted = false;
+
     @CreationTimestamp @Column(name = "created_at", updatable = false)
     private Instant createdAt;
 

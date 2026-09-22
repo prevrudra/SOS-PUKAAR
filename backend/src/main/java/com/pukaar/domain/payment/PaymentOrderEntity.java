@@ -1,6 +1,7 @@
 package com.pukaar.domain.payment;
 
 import com.pukaar.common.PaymentOrderStatus;
+import com.pukaar.common.PlanRegion;
 import com.pukaar.common.SubscriptionPlan;
 import jakarta.persistence.*;
 import lombok.*;
@@ -20,6 +21,10 @@ public class PaymentOrderEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private SubscriptionPlan plan;
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    @Builder.Default
+    private PlanRegion region = PlanRegion.INDIA;
     @Column(name = "amount_inr", nullable = false)
     private int amountInr;
     @Column(name = "amount_paise", nullable = false)

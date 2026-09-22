@@ -10,7 +10,12 @@ import com.pukaar.domain.emergency.ContactDeliveryEntity;
 import com.pukaar.domain.emergency.ContactDeliveryRepository;
 import com.pukaar.domain.emergency.EmergencyEventEntity;
 import com.pukaar.domain.emergency.EmergencyEventRepository;
+import com.pukaar.domain.elderly.ElderlySettingsRepository;
+import com.pukaar.domain.elderly.InactivityEpisodeRepository;
+import com.pukaar.domain.elderly.InactivityService;
+import com.pukaar.domain.elderly.InactivityViewMoreService;
 import com.pukaar.domain.nearby.NearbyPlacesService;
+import com.pukaar.common.TriggerType;
 import com.pukaar.domain.user.UserEntity;
 import com.pukaar.domain.user.UserRepository;
 import com.pukaar.config.PukaarProperties;
@@ -49,6 +54,9 @@ public class AlertDeliveryService {
     private final AuthKeyVoiceSender voiceSender;
     private final NearbyPlacesService nearbyPlacesService;
     private final PukaarProperties props;
+    private final InactivityEpisodeRepository inactivityEpisodeRepo;
+    private final InactivityViewMoreService viewMoreService;
+    private final ElderlySettingsRepository elderlySettingsRepo;
 
     @Transactional
     public void deliverInactivityAlert(UUID userId, UUID eventId, UUID deliveryId, InactivityLevel level) {
@@ -173,10 +181,17 @@ public class AlertDeliveryService {
         if (channelHasWhatsApp(delivery) || waDedup.alreadySent(event.getId(), phone)) {
             return true;
         }
-        // DB claim — multiple delivery rows for the same phone cannot all send.
         if (!waDedup.tryClaim(event.getId(), phone)) {
             log.info("WhatsApp already claimed for event {} phone {}", event.getId(), phone);
             return true;
+        }
+
+        if (event.getTriggerType() == TriggerType.INACTIVITY) {
+            if (sendInactivityWelfareWhatsApp(user, event, phone)) {
+                return true;
+            }
+            waDedup.releaseClaim(event.getId(), phone);
+            return false;
         }
 
         List<String> params = buildEmergencyTemplateParams(user, event);
@@ -192,7 +207,6 @@ public class AlertDeliveryService {
                 return true;
             }
         }
-        // Last resort: short free-form text so the 24h session opens for location pings.
         String who = displayName(user);
         String maps = compactMapsLink(event);
         String fallback = "PUKAAR SOS: " + who + " needs help now. Call "
@@ -205,6 +219,43 @@ public class AlertDeliveryService {
         waDedup.releaseClaim(event.getId(), phone);
         log.warn("WhatsApp template failed for {}", phone);
         return false;
+    }
+
+    private boolean sendInactivityWelfareWhatsApp(UserEntity user, EmergencyEventEntity event, String phone) {
+        String who = displayName(user);
+        String lastActive = user.getLastActivityAt() != null
+                ? SOS_TIME.format(user.getLastActivityAt().atZone(IST)) + " IST"
+                : "unknown";
+        int hours = elderlySettingsRepo.findById(user.getId())
+                .map(s -> InactivityService.normalizeDuration(s.getDurationHours()))
+                .orElse(12);
+        String viewUrl = inactivityEpisodeRepo.findFirstByEventIdOrderByCreatedAtDesc(event.getId())
+                .or(() -> inactivityEpisodeRepo.findFirstByUserIdAndResolvedAtIsNullOrderByCreatedAtDesc(user.getId()))
+                .map(ep -> ep.getViewToken() == null ? null : viewMoreService.publicViewUrl(ep.getViewToken()))
+                .orElse(null);
+
+        String maps = compactMapsLink(event);
+        boolean hasLoc = event.getLatitude() != null && event.getLongitude() != null;
+        StringBuilder body = new StringBuilder();
+        body.append("PUKAAR INACTIVITY ALERT\n\n");
+        body.append(who).append(" has had no activity or response for ").append(hours).append(" hours.\n");
+        body.append("Last active: ").append(lastActive).append("\n");
+        body.append("Please check on them.\n\n");
+        if (hasLoc) {
+            body.append("Last available location: ").append(maps).append("\n");
+            body.append("Current location: ").append(maps).append("\n\n");
+        } else {
+            body.append("Location: not available yet\n\n");
+        }
+        body.append("Call ").append(who);
+        if (user.getPhoneE164() != null) {
+            body.append(" (").append(formatPhoneParam(user.getPhoneE164())).append(")");
+        }
+        body.append("\n");
+        if (viewUrl != null) {
+            body.append("\nIf you cannot reach them and need additional information:\n").append(viewUrl);
+        }
+        return whatsApp.sendText(phone, body.toString());
     }
 
     private static boolean channelHasWhatsApp(ContactDeliveryEntity delivery) {

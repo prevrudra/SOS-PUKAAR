@@ -16,13 +16,17 @@ public class ElderlySettingsEntity {
     private UUID userId;
     @Column(name = "soft_hours", nullable = false)
     @Builder.Default
-    private int softHours = 6;
+    private int softHours = 12;
     @Column(name = "medium_hours", nullable = false)
     @Builder.Default
-    private int mediumHours = 10;
+    private int mediumHours = 12;
     @Column(name = "urgent_hours", nullable = false)
     @Builder.Default
     private int urgentHours = 12;
+    /** Single inactivity threshold (hours). Spec: 12 / 18 / 24 / 30 / 36. */
+    @Column(name = "duration_hours", nullable = false)
+    @Builder.Default
+    private int durationHours = 12;
     @Column(name = "escalation_minutes", nullable = false)
     @Builder.Default
     private int escalationMinutes = 5;
@@ -42,6 +46,8 @@ public class ElderlySettingsEntity {
     private String allergies;
     @Column(name = "medical_conditions", columnDefinition = "TEXT")
     private String medicalConditions;
+    @Column(columnDefinition = "TEXT")
+    private String medications;
     @Column(name = "medication_reminder_enabled", nullable = false)
     @Builder.Default
     private boolean medicationReminderEnabled = true;

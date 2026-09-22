@@ -27,6 +27,11 @@ class ContactSlots(private val items: SnapshotStateList<OnboardingContact?>) {
         it.copy(verified = false, resendCount = it.resendCount + 1)
     }
 
+    fun replace(id: String, contact: OnboardingContact) {
+        val index = items.indexOfFirst { it?.id == id }
+        if (index >= 0) items[index] = contact
+    }
+
     private fun update(id: String, block: (OnboardingContact) -> OnboardingContact) {
         val index = items.indexOfFirst { it?.id == id }
         if (index >= 0) items[index] = items[index]?.let(block)
@@ -64,6 +69,11 @@ class ContactRoster(
 
     fun resend(id: String) = update(id) {
         it.copy(verified = false, resendCount = it.resendCount + 1)
+    }
+
+    fun replace(id: String, contact: OnboardingContact) {
+        val index = items.indexOfFirst { it.id == id }
+        if (index >= 0) items[index] = contact
     }
 
     private fun update(id: String, block: (OnboardingContact) -> OnboardingContact) {

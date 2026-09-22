@@ -25,28 +25,37 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.widget.Toast
+import com.pukaar.app.PukaarApp
 import com.pukaar.app.R
+import com.pukaar.app.integration.ContactRepositoryBridge
+import com.pukaar.app.ui.screen.contacts.ContactDraft
+import com.pukaar.app.ui.screen.contacts.ContactType
 import com.pukaar.app.ui.screen.protection.ProtectionType
+import com.pukaar.app.util.PhoneNumbers
 import com.pukaar.app.ui.theme.Outline
 import com.pukaar.app.ui.theme.PukaarTheme
 import com.pukaar.app.ui.theme.SurfaceCard
 import com.pukaar.app.ui.theme.TextPrimary
 import com.pukaar.app.ui.theme.TextSecondary
 import com.pukaar.app.ui.theme.TextTertiary
+import kotlinx.coroutines.launch
 
 private const val InactivitySecondaryMax = 2
 private const val InactivityMinNumbers = 1
-private const val InactivityMaxNumbers = 3
+private const val InactivityMaxNumbers = 2
 
 /**
  * The pages, in order. Named rather than numbered because the flow is long
@@ -96,6 +105,8 @@ fun InactivityOnboardingScreen(
 ) {
     val type = ProtectionType.INACTIVITY
     val accent = type.accent
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     var page by remember { mutableStateOf(InactivityPage.INTRO) }
     var timing by remember { mutableStateOf(InactivityTiming()) }
@@ -109,26 +120,65 @@ fun InactivityOnboardingScreen(
 
     val takenPhones = (primary.contacts + secondary.contacts).map { it.phone }
 
+    suspend fun persistTrustedForOtp(roster: ContactRoster, contact: OnboardingContact): OnboardingContact {
+        val e164 = runCatching { PhoneNumbers.toE164(contact.phone) }.getOrElse {
+            val digits = contact.phone.filter { it.isDigit() }
+            PhoneNumbers.fromParts("+91", digits.takeLast(10))
+        }
+        val (dial, national) = PhoneNumbers.splitE164(e164)
+        val existing = ContactRepositoryBridge.loadContacts()
+        val existingId = existing.firstOrNull {
+            it.type == ContactType.INACTIVITY &&
+                ContactRepositoryBridge.phonesMatch(it.phoneNumber, e164)
+        }?.id ?: existing.firstOrNull { it.id == contact.id }?.id
+        val draft = ContactDraft(
+            id = existingId,
+            name = contact.name.trim(),
+            mobile = national,
+            dialCode = dial,
+            relationship = contact.relation?.name
+                ?.lowercase()
+                ?.replaceFirstChar { it.titlecase() }
+                .orEmpty(),
+            type = ContactType.INACTIVITY,
+            priorityOrder = 1
+        )
+        val savedId = ContactRepositoryBridge.saveQuiet(draft).getOrThrow()
+        val updated = contact.copy(id = savedId)
+        roster.replace(contact.id, updated)
+        return updated
+    }
+
     // The order is written out rather than derived from the enum: the number
     // picker sits between the slots and the summary in the enum, but the flow
     // only visits it when a slot is tapped.
     fun advance() {
-        page = when (page) {
-            InactivityPage.INTRO -> InactivityPage.TIMING
-            InactivityPage.TIMING -> InactivityPage.ADD_CONTACTS
-            // Skip OTP wait — server verifies on save so SOS/inactivity can alert.
+        when (page) {
+            InactivityPage.INTRO -> page = InactivityPage.TIMING
+            InactivityPage.TIMING -> page = InactivityPage.ADD_CONTACTS
             InactivityPage.ADD_CONTACTS -> {
-                primary.contacts.forEach { primary.verify(it.id) }
-                secondary.contacts.forEach { secondary.verify(it.id) }
-                InactivityPage.CONTACTS_SUMMARY
+                // Persist contacts so the server can send OTPs, then verify.
+                scope.launch {
+                    try {
+                        primary.contacts.toList().forEach { persistTrustedForOtp(primary, it) }
+                        secondary.contacts.toList().forEach { persistTrustedForOtp(secondary, it) }
+                        page = InactivityPage.VERIFY_PRIMARY
+                    } catch (e: Exception) {
+                        Toast.makeText(
+                            context,
+                            e.message ?: "Could not save contacts",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
             }
-            InactivityPage.VERIFY_PRIMARY -> InactivityPage.VERIFY_SECONDARY
-            InactivityPage.VERIFY_SECONDARY -> InactivityPage.CONTACTS_SUMMARY
-            InactivityPage.CONTACTS_SUMMARY -> InactivityPage.ADD_NUMBERS
-            InactivityPage.ADD_NUMBERS -> InactivityPage.NUMBERS_SUMMARY
-            InactivityPage.SELECT_NUMBER -> InactivityPage.ADD_NUMBERS
-            InactivityPage.NUMBERS_SUMMARY -> InactivityPage.COMPLETE
-            InactivityPage.COMPLETE -> InactivityPage.COMPLETE
+            InactivityPage.VERIFY_PRIMARY -> page = InactivityPage.VERIFY_SECONDARY
+            InactivityPage.VERIFY_SECONDARY -> page = InactivityPage.CONTACTS_SUMMARY
+            InactivityPage.CONTACTS_SUMMARY -> page = InactivityPage.ADD_NUMBERS
+            InactivityPage.ADD_NUMBERS -> page = InactivityPage.NUMBERS_SUMMARY
+            InactivityPage.SELECT_NUMBER -> page = InactivityPage.ADD_NUMBERS
+            InactivityPage.NUMBERS_SUMMARY -> page = InactivityPage.COMPLETE
+            InactivityPage.COMPLETE -> Unit
         }
     }
 
@@ -196,14 +246,104 @@ fun InactivityOnboardingScreen(
             InactivityPage.VERIFY_PRIMARY -> VerifyPrimaryPage(
                 primary = primary,
                 type = type,
-                onShareApp = onShareApp
+                onShareApp = onShareApp,
+                onVerify = { contact, code ->
+                    scope.launch {
+                        ContactRepositoryBridge.verifyContact(contact.id, code)
+                            .onSuccess {
+                                primary.verify(contact.id)
+                                onShareApp(contact.phone)
+                            }
+                            .onFailure {
+                                Toast.makeText(
+                                    context,
+                                    it.message ?: "Verification failed",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                    }
+                },
+                onResend = { contact ->
+                    scope.launch {
+                        val ui = com.pukaar.app.ui.screen.contacts.ContactUiModel(
+                            id = contact.id,
+                            name = contact.name,
+                            phoneNumber = contact.phone,
+                            type = ContactType.INACTIVITY,
+                            relation = contact.relation,
+                            relationship = contact.relation?.name.orEmpty(),
+                            verified = false
+                        )
+                        val name = runCatching {
+                            PukaarApp.instance.repository.me().fullName
+                        }.getOrNull()
+                        ContactRepositoryBridge.resendVerification(context, ui, name)
+                            .onSuccess { primary.resend(contact.id) }
+                            .onFailure {
+                                Toast.makeText(
+                                    context,
+                                    it.message ?: "Could not resend code",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                    }
+                }
             )
 
             InactivityPage.VERIFY_SECONDARY -> VerifySecondaryPage(
                 secondary = secondary,
                 type = type,
                 takenPhones = takenPhones,
-                onShareApp = onShareApp
+                onShareApp = onShareApp,
+                onVerify = { contact, code ->
+                    scope.launch {
+                        var current = contact
+                        if (ContactRepositoryBridge.loadContacts().none { it.id == contact.id }) {
+                            current = persistTrustedForOtp(secondary, contact)
+                        }
+                        ContactRepositoryBridge.verifyContact(current.id, code)
+                            .onSuccess {
+                                secondary.verify(current.id)
+                                onShareApp(current.phone)
+                            }
+                            .onFailure {
+                                Toast.makeText(
+                                    context,
+                                    it.message ?: "Verification failed",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                    }
+                },
+                onResend = { contact ->
+                    scope.launch {
+                        var current = contact
+                        if (ContactRepositoryBridge.loadContacts().none { it.id == contact.id }) {
+                            current = persistTrustedForOtp(secondary, contact)
+                        }
+                        val ui = com.pukaar.app.ui.screen.contacts.ContactUiModel(
+                            id = current.id,
+                            name = current.name,
+                            phoneNumber = current.phone,
+                            type = ContactType.INACTIVITY,
+                            relation = current.relation,
+                            relationship = current.relation?.name.orEmpty(),
+                            verified = false
+                        )
+                        val name = runCatching {
+                            PukaarApp.instance.repository.me().fullName
+                        }.getOrNull()
+                        ContactRepositoryBridge.resendVerification(context, ui, name)
+                            .onSuccess { secondary.resend(current.id) }
+                            .onFailure {
+                                Toast.makeText(
+                                    context,
+                                    it.message ?: "Could not resend code",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                    }
+                }
             )
 
             InactivityPage.CONTACTS_SUMMARY -> ContactsSummaryPage(
@@ -424,24 +564,10 @@ private fun ColumnScope.TimingPage(
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         AlertTimingRow(
-            title = stringResource(R.string.onboarding_alert_soft),
-            subtitle = stringResource(R.string.onboarding_alert_soft_note),
-            hours = timing.softCheckHours,
-            onHoursChange = { onTimingChange(timing.copy(softCheckHours = it)) },
-            accent = accent
-        )
-        AlertTimingRow(
-            title = stringResource(R.string.onboarding_alert_normal),
-            subtitle = stringResource(R.string.onboarding_alert_normal_note),
-            hours = timing.alertHours,
-            onHoursChange = { onTimingChange(timing.copy(alertHours = it)) },
-            accent = accent
-        )
-        AlertTimingRow(
-            title = stringResource(R.string.onboarding_alert_high),
-            subtitle = stringResource(R.string.onboarding_alert_high_note),
-            hours = timing.highAlertHours,
-            onHoursChange = { onTimingChange(timing.copy(highAlertHours = it)) },
+            title = stringResource(R.string.onboarding_alert_duration),
+            subtitle = stringResource(R.string.onboarding_alert_duration_note),
+            hours = timing.durationHours,
+            onHoursChange = { onTimingChange(InactivityTiming(durationHours = it)) },
             accent = accent
         )
     }
@@ -568,7 +694,9 @@ private fun ColumnScope.AddContactsPage(
 private fun ColumnScope.VerifyPrimaryPage(
     primary: ContactRoster,
     type: ProtectionType,
-    onShareApp: (phoneE164: String?) -> Unit
+    onShareApp: (phoneE164: String?) -> Unit,
+    onVerify: (OnboardingContact, String) -> Unit,
+    onResend: (OnboardingContact) -> Unit
 ) {
     FlowTitle(
         title = stringResource(R.string.onboarding_verify_primary),
@@ -579,8 +707,8 @@ private fun ColumnScope.VerifyPrimaryPage(
         ContactStatusCard(
             contact = contact,
             accent = type.accent,
-            onResend = { primary.resend(contact.id) },
-            onVerify = { primary.verify(contact.id); onShareApp(contact.phone) }
+            onResend = { onResend(contact) },
+            onVerify = { code -> onVerify(contact, code) }
         )
     }
 
@@ -597,7 +725,9 @@ private fun ColumnScope.VerifySecondaryPage(
     secondary: ContactRoster,
     type: ProtectionType,
     takenPhones: List<String>,
-    onShareApp: (phoneE164: String?) -> Unit
+    onShareApp: (phoneE164: String?) -> Unit,
+    onVerify: (OnboardingContact, String) -> Unit,
+    onResend: (OnboardingContact) -> Unit
 ) {
     val accent = type.accent
 
@@ -625,8 +755,8 @@ private fun ColumnScope.VerifySecondaryPage(
         ContactStatusCard(
             contact = contact,
             accent = accent,
-            onResend = { secondary.resend(contact.id) },
-            onVerify = { secondary.verify(contact.id); onShareApp(contact.phone) },
+            onResend = { onResend(contact) },
+            onVerify = { code -> onVerify(contact, code) },
             onDelete = { secondary.remove(contact.id) }
         )
     }
@@ -765,16 +895,8 @@ private fun ColumnScope.CompletePage(
             .padding(14.dp)
     ) {
         SummaryLine(
-            label = stringResource(R.string.onboarding_alert_soft),
-            value = stringResource(R.string.onboarding_hours_value, timing.softCheckHours)
-        )
-        SummaryLine(
-            label = stringResource(R.string.onboarding_alert_normal),
-            value = stringResource(R.string.onboarding_hours_value, timing.alertHours)
-        )
-        SummaryLine(
-            label = stringResource(R.string.onboarding_alert_high),
-            value = stringResource(R.string.onboarding_hours_value, timing.highAlertHours)
+            label = stringResource(R.string.onboarding_alert_duration),
+            value = stringResource(R.string.onboarding_hours_value, timing.durationHours)
         )
         Spacer(modifier = Modifier.height(8.dp))
         SummaryLine(

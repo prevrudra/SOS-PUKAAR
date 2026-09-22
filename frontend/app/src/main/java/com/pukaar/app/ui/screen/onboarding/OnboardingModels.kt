@@ -38,15 +38,13 @@ data class HelpNumber(
     val relation: ContactRelation? = null
 )
 
-/** How long a quiet phone stays quiet before each of the three alerts fires. */
+/** How long a quiet phone stays quiet before an inactivity alert fires. */
 data class InactivityTiming(
-    val softCheckHours: Int = 6,
-    val alertHours: Int = 12,
-    val highAlertHours: Int = 18
+    val durationHours: Int = 12
 )
 
 /** The hour choices offered in the timing dropdowns. */
-val InactivityHourOptions = listOf(2, 4, 6, 8, 10, 12, 18, 24)
+val InactivityHourOptions = listOf(12, 18, 24, 30, 36)
 
 /** Stable-ish colours for the initial avatars, picked from the name. */
 private val AvatarPalette = listOf(

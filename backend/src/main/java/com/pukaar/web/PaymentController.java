@@ -1,7 +1,9 @@
 package com.pukaar.web;
 
+import com.pukaar.common.PlanRegion;
 import com.pukaar.common.SubscriptionPlan;
 import com.pukaar.domain.payment.PaymentService;
+import com.pukaar.domain.subscription.PlanRegionService;
 import com.pukaar.security.SecurityUtils;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -23,7 +25,8 @@ public class PaymentController {
     @PostMapping("/orders")
     public Map<String, Object> createOrder(@RequestBody CreateOrderRequest req) {
         SubscriptionPlan plan = req.getPlan() == null ? SubscriptionPlan.INDIVIDUAL : req.getPlan();
-        return paymentService.createOrder(SecurityUtils.currentUserId(), plan);
+        PlanRegion region = PlanRegionService.parseRegion(req.getRegion());
+        return paymentService.createOrder(SecurityUtils.currentUserId(), plan, region);
     }
 
     @PostMapping("/verify")
@@ -39,6 +42,7 @@ public class PaymentController {
     @Data
     public static class CreateOrderRequest {
         private SubscriptionPlan plan;
+        private String region;
     }
 
     @Data

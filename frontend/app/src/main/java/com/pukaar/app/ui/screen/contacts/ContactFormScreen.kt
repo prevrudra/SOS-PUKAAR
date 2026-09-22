@@ -54,6 +54,7 @@ fun ContactFormScreen(
     onSave: (ContactDraft) -> Unit,
     onDelete: (() -> Unit)? = null,
     onResendVerification: (() -> Unit)? = null,
+    onVerifyCode: ((String) -> Unit)? = null,
     initial: ContactDraft? = null,
     modifier: Modifier = Modifier
 ) {
@@ -67,6 +68,21 @@ fun ContactFormScreen(
     var type by remember { mutableStateOf(initial?.type ?: ContactType.SOS) }
     var priority by remember { mutableIntStateOf(initial?.priorityOrder ?: 1) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var indiaOnlyPhones by remember { mutableStateOf(true) }
+    var verifyCode by remember { mutableStateOf("") }
+
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        val store = com.pukaar.app.PukaarApp.instance.sessionStore
+        indiaOnlyPhones = store.indiaOnlyPhones()
+        if (indiaOnlyPhones) dialCode = "+91"
+        runCatching {
+            val me = com.pukaar.app.PukaarApp.instance.repository.me()
+            store.syncFromUser(me)
+            indiaOnlyPhones = me.indiaOnlyPhones
+                ?: (me.region ?: "INDIA").equals("INDIA", ignoreCase = true)
+            if (indiaOnlyPhones) dialCode = "+91"
+        }
+    }
 
     fun trySave() {
         val trimmedName = name.trim()
@@ -144,8 +160,23 @@ fun ContactFormScreen(
                 nationalNumber = mobile,
                 onDialCodeChange = { dialCode = it },
                 onNationalChange = { mobile = it },
-                placeholder = stringResource(R.string.add_contact_mobile_hint)
+                placeholder = stringResource(R.string.add_contact_mobile_hint),
+                indiaOnlyPhones = indiaOnlyPhones
             )
+            if (onVerifyCode != null) {
+                Spacer(modifier = Modifier.height(14.dp))
+                LabeledTextField(
+                    label = stringResource(R.string.onboarding_enter_code),
+                    value = verifyCode,
+                    onValueChange = { verifyCode = it.filter { ch -> ch.isDigit() }.take(6) },
+                    placeholder = "000000"
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                SecondaryButton(
+                    text = stringResource(R.string.onboarding_verify_now),
+                    onClick = { onVerifyCode(verifyCode) }
+                )
+            }
             Spacer(modifier = Modifier.height(16.dp))
 
             FieldLabel(text = stringResource(R.string.add_contact_category))

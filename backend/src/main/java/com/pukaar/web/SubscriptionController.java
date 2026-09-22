@@ -1,12 +1,14 @@
 package com.pukaar.web;
 
 import com.pukaar.common.ApiException;
+import com.pukaar.common.PlanRegion;
 import com.pukaar.common.SubscriptionPlan;
 import com.pukaar.common.SubscriptionStatus;
 import com.pukaar.config.PukaarProperties;
 import com.pukaar.domain.payment.RazorpayService;
 import com.pukaar.domain.referral.ReferralEntity;
 import com.pukaar.domain.referral.ReferralRepository;
+import com.pukaar.domain.subscription.PlanRegionService;
 import com.pukaar.domain.subscription.SubscriptionEntity;
 import com.pukaar.domain.subscription.SubscriptionRepository;
 import com.pukaar.domain.subscription.SubscriptionService;
@@ -59,9 +61,10 @@ public class SubscriptionController {
         }
         UUID userId = SecurityUtils.currentUserId();
         SubscriptionPlan plan = req.getPlan() == null ? SubscriptionPlan.INDIVIDUAL : req.getPlan();
+        PlanRegion region = PlanRegionService.parseRegion(req.getRegion());
         String token = req.getPurchaseToken() == null ? "dev-token" : req.getPurchaseToken();
         String platform = req.getStorePlatform() == null ? "DEV" : req.getStorePlatform();
-        SubscriptionEntity sub = subscriptionService.activateFromPayment(userId, plan, token, platform);
+        SubscriptionEntity sub = subscriptionService.activateFromPayment(userId, plan, region, token, platform);
         Map<String, Object> dto = subscriptionService.toDto(sub);
         dto.put("alreadyActive", false);
         return dto;
@@ -86,6 +89,8 @@ public class SubscriptionController {
     @Data
     public static class ActivateRequest {
         private SubscriptionPlan plan;
+        /** INDIA or GLOBAL — drives contact dial codes and location services. */
+        private String region;
         private String purchaseToken;
         private String storePlatform;
     }

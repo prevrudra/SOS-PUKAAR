@@ -170,7 +170,7 @@ object InMemoryPukaarActions : PukaarActions {
         medicationReminder: Boolean
     ) = Unit
     override suspend fun loadElderlyHelp() =
-        com.pukaar.app.ui.screen.elderlyhelp.InactivityWindow.SIX to false
+        com.pukaar.app.ui.screen.elderlyhelp.InactivityWindow.TWELVE to false
     override fun saveEmergencyInfo(form: com.pukaar.app.ui.screen.emergencyinfo.EmergencyInfoForm) = Unit
     override suspend fun loadEmergencyInfo() =
         com.pukaar.app.ui.screen.emergencyinfo.EmergencyInfoForm()

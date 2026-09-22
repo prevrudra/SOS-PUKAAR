@@ -26,24 +26,34 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.widget.Toast
+import com.pukaar.app.PukaarApp
 import com.pukaar.app.R
+import com.pukaar.app.integration.ContactRepositoryBridge
+import com.pukaar.app.ui.screen.contacts.ContactDraft
+import com.pukaar.app.ui.screen.contacts.ContactType
+import com.pukaar.app.ui.screen.contacts.ContactUiModel
 import com.pukaar.app.ui.screen.protection.ProtectionType
+import com.pukaar.app.util.PhoneNumbers
 import com.pukaar.app.ui.theme.Outline
 import com.pukaar.app.ui.theme.PukaarTheme
 import com.pukaar.app.ui.theme.SurfaceCard
 import com.pukaar.app.ui.theme.TextPrimary
 import com.pukaar.app.ui.theme.TextSecondary
 import com.pukaar.app.ui.theme.TextTertiary
+import kotlinx.coroutines.launch
 
 private const val SosMinContacts = 2
 private const val SosMaxContacts = 3
@@ -97,6 +107,8 @@ fun SosOnboardingScreen(
 ) {
     val type = ProtectionType.SOS
     val accent = type.accent
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     var page by remember { mutableStateOf(SosPage.ADD_CONTACTS) }
     val slots = rememberContactSlots(SosMaxContacts)
@@ -109,6 +121,35 @@ fun SosOnboardingScreen(
 
     val filled = slots.filled
     val allVerified = filled.isNotEmpty() && filled.all { it.verified }
+
+    suspend fun persistSosContact(contact: OnboardingContact): OnboardingContact {
+        val e164 = runCatching { PhoneNumbers.toE164(contact.phone) }.getOrElse {
+            val digits = contact.phone.filter { it.isDigit() }
+            PhoneNumbers.fromParts("+91", digits.takeLast(10))
+        }
+        val (dial, national) = PhoneNumbers.splitE164(e164)
+        val existing = ContactRepositoryBridge.loadContacts()
+        val existingId = existing.firstOrNull {
+            it.type == ContactType.SOS &&
+                ContactRepositoryBridge.phonesMatch(it.phoneNumber, e164)
+        }?.id ?: existing.firstOrNull { it.id == contact.id }?.id
+        val draft = ContactDraft(
+            id = existingId,
+            name = contact.name.trim(),
+            mobile = national,
+            dialCode = dial,
+            relationship = contact.relation?.name
+                ?.lowercase()
+                ?.replaceFirstChar { it.titlecase() }
+                .orEmpty(),
+            type = ContactType.SOS,
+            priorityOrder = 1
+        )
+        val savedId = ContactRepositoryBridge.saveQuiet(draft).getOrThrow()
+        val updated = contact.copy(id = savedId)
+        slots.replace(contact.id, updated)
+        return updated
+    }
 
     fun goBack() {
         page = when (page) {
@@ -132,9 +173,18 @@ fun SosOnboardingScreen(
                         AccentButton(
                             text = stringResource(R.string.action_continue),
                             onClick = {
-                                // Local verify is enough for the UI; server marks verified on save.
-                                filled.forEach { slots.verify(it.id) }
-                                page = SosPage.ADD_NUMBERS
+                                scope.launch {
+                                    try {
+                                        filled.toList().forEach { persistSosContact(it) }
+                                        page = SosPage.VERIFY
+                                    } catch (e: Exception) {
+                                        Toast.makeText(
+                                            context,
+                                            e.message ?: "Could not save contacts",
+                                            Toast.LENGTH_LONG
+                                        ).show()
+                                    }
+                                }
                             },
                             accent = accent,
                             enabled = filled.size >= SosMinContacts
@@ -205,8 +255,47 @@ fun SosOnboardingScreen(
             SosPage.VERIFY -> SosVerifyStep(
                 contacts = filled,
                 type = type,
-                onResend = { id -> slots.resend(id) },
-                onVerify = { id -> slots.verify(id) },
+                onResend = { contact ->
+                    scope.launch {
+                        val ui = ContactUiModel(
+                            id = contact.id,
+                            name = contact.name,
+                            phoneNumber = contact.phone,
+                            type = ContactType.SOS,
+                            relation = contact.relation,
+                            relationship = contact.relation?.name.orEmpty(),
+                            verified = false
+                        )
+                        val name = runCatching {
+                            PukaarApp.instance.repository.me().fullName
+                        }.getOrNull()
+                        ContactRepositoryBridge.resendVerification(context, ui, name)
+                            .onSuccess { slots.resend(contact.id) }
+                            .onFailure {
+                                Toast.makeText(
+                                    context,
+                                    it.message ?: "Could not resend code",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                    }
+                },
+                onVerify = { contact, code ->
+                    scope.launch {
+                        ContactRepositoryBridge.verifyContact(contact.id, code)
+                            .onSuccess {
+                                slots.verify(contact.id)
+                                onShareApp(contact.phone)
+                            }
+                            .onFailure {
+                                Toast.makeText(
+                                    context,
+                                    it.message ?: "Verification failed",
+                                    Toast.LENGTH_LONG
+                                ).show()
+                            }
+                    }
+                },
                 onShareApp = onShareApp
             )
 
@@ -292,8 +381,8 @@ private fun ColumnScope.SosAddContactsStep(
 private fun ColumnScope.SosVerifyStep(
     contacts: List<OnboardingContact>,
     type: ProtectionType,
-    onResend: (String) -> Unit,
-    onVerify: (String) -> Unit,
+    onResend: (OnboardingContact) -> Unit,
+    onVerify: (OnboardingContact, String) -> Unit,
     onShareApp: (phoneE164: String?) -> Unit
 ) {
     val accent = type.accent
@@ -320,8 +409,8 @@ private fun ColumnScope.SosVerifyStep(
         ContactStatusCard(
             contact = contact,
             accent = accent,
-            onResend = { onResend(contact.id) },
-            onVerify = { onVerify(contact.id); onShareApp(contact.phone) }
+            onResend = { onResend(contact) },
+            onVerify = { code -> onVerify(contact, code) }
         )
     }
 
