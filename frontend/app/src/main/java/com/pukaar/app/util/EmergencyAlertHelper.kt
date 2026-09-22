@@ -92,7 +92,7 @@ object EmergencyAlertHelper {
         }
 
         var enriched = runCatching {
-            NearbyServicesHelper.enrich(event, context)
+            NearbyServicesHelper.enrich(event, context, pushLocation = true)
         }.getOrDefault(NearbyServicesHelper.withNationalFallbacks(event))
 
 

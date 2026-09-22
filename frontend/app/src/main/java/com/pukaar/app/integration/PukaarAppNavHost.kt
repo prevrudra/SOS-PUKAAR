@@ -330,14 +330,22 @@ private fun EmergencyActiveRoute(
     LaunchedEffect(eventId) {
         while (true) {
             if (finishing) break
-            var e = runCatching { PukaarApp.instance.repository.getEmergency(eventId) }.getOrNull()
-            if (e != null && e.active != false) {
-                e = runCatching {
-                    com.pukaar.app.util.NearbyServicesHelper.enrich(e!!, context)
-                }.getOrDefault(e)
+            val fetched = runCatching { PukaarApp.instance.repository.getEmergency(eventId) }.getOrNull()
+            if (fetched != null && fetched.active != false) {
+                // Enrich nearby without re-pushing GPS every poll (FGS already does that).
+                val enriched = runCatching {
+                    com.pukaar.app.util.NearbyServicesHelper.enrich(
+                        fetched,
+                        context = context,
+                        pushLocation = false
+                    )
+                }.getOrDefault(fetched)
+                // Never let a later poll wipe real hospital/ambulance names with placeholders.
+                event = com.pukaar.app.util.NearbyServicesHelper.mergeNearbyPreferReal(event, enriched)
+            } else if (fetched != null) {
+                event = fetched
             }
-            event = e
-            if (e?.active == false) {
+            if (fetched?.active == false) {
                 EmergencyForegroundService.stop(context)
                 onClosed()
                 break
