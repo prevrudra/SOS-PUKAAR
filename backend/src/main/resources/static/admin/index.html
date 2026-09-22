@@ -255,8 +255,8 @@ function showInaResult(data, ok) {
     'User: ' + (data.fullName || '—') + '  ' + (data.phone || ''),
     'User ID: ' + (data.userId || ''),
     'Monitoring: ' + data.inactivityMonitoringEnabled,
-    'Duration hours (stored): ' + data.durationHours,
-    'Minutes requested: ' + (data.durationMinutesRequested ?? '—'),
+    'Exact minutes: ' + (data.durationMinutes ?? data.thresholdMinutes ?? '—'),
+    'Hours (display only): ' + data.durationHours,
     'Last activity: ' + (data.lastActivityAt || '—'),
     'Alert threshold: ' + (data.alertThreshold || '—'),
     'Will alert in: ' + (data.willAlertIn || '—')
@@ -272,7 +272,11 @@ async function loadInactivityStatus() {
     const data = await api('/api/v1/admin/inactivity?phone=' + encodeURIComponent(phone));
     showInaResult(data, true);
     document.getElementById('inaErr').textContent = 'Status loaded';
-    if (data.durationHours != null) document.getElementById('inaHours').value = data.durationHours;
+    const total = Number(data.durationMinutes || data.thresholdMinutes || 0);
+    if (total > 0) {
+      document.getElementById('inaHours').value = Math.floor(total / 60);
+      document.getElementById('inaMinutes').value = total % 60;
+    }
   } catch (e) {
     document.getElementById('inaErr').textContent = e.message;
     document.getElementById('inaStatus').textContent = '';

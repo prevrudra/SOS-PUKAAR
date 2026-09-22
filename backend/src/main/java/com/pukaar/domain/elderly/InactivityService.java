@@ -58,12 +58,9 @@ public class InactivityService {
 
     @Transactional
     public void processUser(UserEntity user, ElderlySettingsEntity settings, Instant now) {
-        // Allow any positive hours (admin test can set 1h); normalize only blanks/legacy zero.
-        int durationHours = settings.getDurationHours() > 0
-                ? settings.getDurationHours()
-                : normalizeDuration(settings.getUrgentHours());
+        int thresholdMinutes = effectiveThresholdMinutes(settings);
+        int durationHoursForMessage = Math.max(1, (thresholdMinutes + 59) / 60);
         long minutesQuiet = Duration.between(user.getLastActivityAt(), now).toMinutes();
-        long thresholdMinutes = (long) durationHours * 60L;
 
         Optional<InactivityEpisodeEntity> active =
                 episodeRepo.findFirstByUserIdAndResolvedAtIsNullOrderByCreatedAtDesc(user.getId());
@@ -93,7 +90,7 @@ public class InactivityService {
                 // Already alerted this cycle — wait for user activity before a new cycle
                 return;
             }
-            fireAlert(user, settings, episode, durationHours, now);
+            fireAlert(user, settings, episode, durationHoursForMessage, thresholdMinutes, now);
             return;
         }
 
@@ -105,7 +102,18 @@ public class InactivityService {
                 .alerted(false)
                 .build();
         episode = episodeRepo.save(episode);
-        fireAlert(user, settings, episode, durationHours, now);
+        fireAlert(user, settings, episode, durationHoursForMessage, thresholdMinutes, now);
+    }
+
+    /** Minutes threshold: admin test override, else duration_hours × 60. */
+    public static int effectiveThresholdMinutes(ElderlySettingsEntity settings) {
+        if (settings.getDurationMinutes() > 0) {
+            return settings.getDurationMinutes();
+        }
+        int hours = settings.getDurationHours() > 0
+                ? settings.getDurationHours()
+                : normalizeDuration(settings.getUrgentHours());
+        return Math.max(1, hours) * 60;
     }
 
     private void fireAlert(
@@ -113,6 +121,7 @@ public class InactivityService {
             ElderlySettingsEntity settings,
             InactivityEpisodeEntity episode,
             int durationHours,
+            int thresholdMinutes,
             Instant now
     ) {
         UUID eventId = orchestrator.deliverInactivityAlertToTrusted(
@@ -125,14 +134,17 @@ public class InactivityService {
             episode.setViewToken(newViewToken());
         }
         episodeRepo.save(episode);
+        String quietLabel = thresholdMinutes < 60
+                ? thresholdMinutes + " minutes"
+                : durationHours + " hours";
         alertRepo.save(InactivityAlertEntity.builder()
                 .userId(user.getId())
                 .episodeId(episode.getId())
                 .level(InactivityLevel.MEDIUM)
-                .message("Inactivity alert: no qualifying activity for " + durationHours + " hours")
+                .message("Inactivity alert: no qualifying activity for " + quietLabel)
                 .build());
-        log.info("Inactivity alert fired for user {} after {}h (token={})",
-                user.getId(), durationHours, episode.getViewToken());
+        log.info("Inactivity alert fired for user {} after {} (token={})",
+                user.getId(), quietLabel, episode.getViewToken());
     }
 
     private void resolveActiveEpisode(UUID userId, String reason) {

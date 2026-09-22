@@ -40,6 +40,7 @@ public class ElderlyController {
                 throw new ApiException("INVALID_DURATION", "Duration must be one of 12, 18, 24, 30, 36 hours");
             }
             s.setDurationHours(d);
+            s.setDurationMinutes(0); // clear admin/test minute override
             // Keep legacy columns aligned for older clients
             s.setSoftHours(d);
             s.setMediumHours(d);
@@ -47,6 +48,7 @@ public class ElderlyController {
         } else if (req.getUrgentHours() != null) {
             int d = InactivityService.normalizeDuration(req.getUrgentHours());
             s.setDurationHours(d);
+            s.setDurationMinutes(0);
             s.setSoftHours(d);
             s.setMediumHours(d);
             s.setUrgentHours(d);

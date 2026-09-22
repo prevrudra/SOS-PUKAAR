@@ -27,6 +27,13 @@ public class ElderlySettingsEntity {
     @Column(name = "duration_hours", nullable = false)
     @Builder.Default
     private int durationHours = 12;
+    /**
+     * Exact threshold in minutes. When &gt; 0 (admin/test), this overrides duration_hours.
+     * App onboarding keeps this at 0 and uses duration_hours only.
+     */
+    @Column(name = "duration_minutes", nullable = false)
+    @Builder.Default
+    private int durationMinutes = 0;
     @Column(name = "escalation_minutes", nullable = false)
     @Builder.Default
     private int escalationMinutes = 5;

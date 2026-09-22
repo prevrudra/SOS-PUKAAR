@@ -287,8 +287,8 @@ public class AdminService {
     // ────────────────────────────────────────────────────────────────────────────
 
     /**
-     * Admin: set inactivity duration to ANY value for testing (bypasses 12/18/24/30/36).
-     * Always schedules the alert to fire after {@code minutes} from now by adjusting lastActivityAt.
+     * Admin: set inactivity duration to ANY minutes/hours (exact — does not round up to 1 hour).
+     * Schedules alert to fire after {@code minutes} from now.
      */
     public Map<String, Object> setInactivityDuration(UUID userId, int minutes, boolean enable) {
         if (minutes < 1) throw new ApiException("INVALID_DURATION", "Duration must be at least 1 minute");
@@ -298,33 +298,35 @@ public class AdminService {
         ElderlySettingsEntity settings = elderlySettingsRepo.findById(userId)
                 .orElseGet(() -> elderlySettingsRepo.save(ElderlySettingsEntity.builder().userId(userId).build()));
 
-        // Store hours (ceil) so production logic still works; backdate activity so alert is due in N minutes.
-        int hours = Math.max(1, (int) Math.ceil(minutes / 60.0));
-        settings.setDurationHours(hours);
-        settings.setSoftHours(hours);
-        settings.setMediumHours(hours);
-        settings.setUrgentHours(hours);
+        // Exact minutes override — do NOT ceil to 1 hour.
+        int hoursDisplay = Math.max(1, (minutes + 59) / 60);
+        settings.setDurationMinutes(minutes);
+        settings.setDurationHours(hoursDisplay);
+        settings.setSoftHours(hoursDisplay);
+        settings.setMediumHours(hoursDisplay);
+        settings.setUrgentHours(hoursDisplay);
         settings.setInactivityMonitoringEnabled(enable);
         elderlySettingsRepo.save(settings);
 
         Instant now = Instant.now();
-        long backdateSeconds = (long) hours * 3600L - (long) minutes * 60L;
-        Instant lastActivity = now.minusSeconds(Math.max(0, backdateSeconds));
-        user.setLastActivityAt(lastActivity);
+        // Start quiet clock now — alert when minutesQuiet >= minutes
+        user.setLastActivityAt(now);
         userRepo.save(user);
 
-        Instant alertAt = lastActivity.plusSeconds((long) hours * 3600L);
+        Instant alertAt = now.plusSeconds((long) minutes * 60L);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("userId", userId);
         result.put("phone", user.getPhoneE164());
         result.put("fullName", user.getFullName());
-        result.put("durationHours", hours);
+        result.put("durationHours", hoursDisplay);
+        result.put("durationMinutes", minutes);
         result.put("durationMinutesRequested", minutes);
         result.put("inactivityMonitoringEnabled", enable);
         result.put("lastActivityAt", formatIst(user.getLastActivityAt()));
         result.put("alertThreshold", formatIst(alertAt));
-        result.put("willAlertIn", Math.max(0, java.time.Duration.between(now, alertAt).toMinutes()) + " minutes");
-        result.put("note", "Test mode: alert scheduled ~" + minutes + " minute(s) from now");
+        result.put("willAlertIn", minutes + " minutes");
+        result.put("willAlertInMinutes", minutes);
+        result.put("note", "Saved exactly " + minutes + " minute(s). Alert ~" + minutes + " min from now.");
         return result;
     }
 
@@ -373,11 +375,14 @@ public class AdminService {
         result.put("lastActivityAt", formatIst(user.getLastActivityAt()));
 
         if (settings != null) {
+            int minutes = InactivityService.effectiveThresholdMinutes(settings);
             int hours = settings.getDurationHours();
             result.put("durationHours", hours);
+            result.put("durationMinutes", settings.getDurationMinutes());
+            result.put("thresholdMinutes", minutes);
             result.put("inactivityMonitoringEnabled", settings.isInactivityMonitoringEnabled());
-            if (user.getLastActivityAt() != null && hours > 0) {
-                Instant threshold = user.getLastActivityAt().plusSeconds((long) hours * 3600);
+            if (user.getLastActivityAt() != null && minutes > 0) {
+                Instant threshold = user.getLastActivityAt().plusSeconds((long) minutes * 60L);
                 result.put("alertThreshold", formatIst(threshold));
                 long mins = java.time.Duration.between(Instant.now(), threshold).toMinutes();
                 result.put("willAlertIn", mins + " minutes");
@@ -385,6 +390,7 @@ public class AdminService {
             }
         } else {
             result.put("durationHours", null);
+            result.put("durationMinutes", 0);
             result.put("inactivityMonitoringEnabled", false);
         }
         return result;
