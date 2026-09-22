@@ -55,6 +55,7 @@ fun ContactFormScreen(
     onDelete: (() -> Unit)? = null,
     onResendVerification: (() -> Unit)? = null,
     onVerifyCode: ((String) -> Unit)? = null,
+    onUpgradeToGlobal: (() -> Unit)? = null,
     initial: ContactDraft? = null,
     modifier: Modifier = Modifier
 ) {
@@ -161,7 +162,8 @@ fun ContactFormScreen(
                 onDialCodeChange = { dialCode = it },
                 onNationalChange = { mobile = it },
                 placeholder = stringResource(R.string.add_contact_mobile_hint),
-                indiaOnlyPhones = indiaOnlyPhones
+                indiaOnlyPhones = indiaOnlyPhones,
+                onIndiaLockedClick = onUpgradeToGlobal
             )
             if (onVerifyCode != null) {
                 Spacer(modifier = Modifier.height(14.dp))

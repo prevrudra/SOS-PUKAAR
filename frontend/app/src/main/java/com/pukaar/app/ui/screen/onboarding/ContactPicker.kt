@@ -19,6 +19,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -26,17 +27,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.pukaar.app.PukaarApp
 import com.pukaar.app.R
+import com.pukaar.app.ui.component.InternationalPhoneField
 import com.pukaar.app.ui.screen.contacts.ContactRelation
 import com.pukaar.app.ui.theme.Outline
 import com.pukaar.app.ui.theme.PukaarRed
 import com.pukaar.app.ui.theme.SurfaceInput
 import com.pukaar.app.ui.theme.TextPrimary
 import com.pukaar.app.ui.theme.TextTertiary
+import com.pukaar.app.util.PhoneNumbers
 import java.util.UUID
 
 /** The shortest string accepted as a phone number. */
@@ -45,35 +50,34 @@ private const val MinPhoneDigits = 6
 /** Compares numbers by digits alone, so spacing and a +91 never hide a duplicate. */
 private fun String.phoneDigits() = filter { it.isDigit() }.takeLast(10)
 
-/**
- * The one way a person is named anywhere in onboarding: their name and number,
- * typed in.
- *
- * The picker owns only its own draft state — it hands a finished
- * [OnboardingContact] to [onPicked] and forgets it, so the page above decides
- * where that person belongs. [takenPhones] are the numbers already spoken for
- * elsewhere in the flow; entering one again is refused rather than silently
- * creating a duplicate.
- *
- * A [ContactRelation] is required alongside the name and number, everywhere and
- * for every kind of contact. The tag is shown back on every later screen, and
- * whoever reads it — a trusted contact deciding who to ring, a responder holding
- * an emergency card — needs to know how the person on it is connected to the
- * user. "Priya" and "Priya (Daughter)" are not the same piece of information.
- */
 @Composable
 fun ContactPicker(
     accent: Color,
     takenPhones: List<String>,
     confirmLabel: String,
     onPicked: (OnboardingContact) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    indiaOnlyPhones: Boolean = true,
+    onUpgradeToGlobal: (() -> Unit)? = null
 ) {
     var name by remember { mutableStateOf("") }
-    var phone by remember { mutableStateOf("") }
+    var dialCode by remember { mutableStateOf("+91") }
+    var national by remember { mutableStateOf("") }
     var relation by remember { mutableStateOf<ContactRelation?>(null) }
+    val context = LocalContext.current
 
-    val digits = phone.phoneDigits()
+    LaunchedEffect(Unit) {
+        val store = PukaarApp.instance.sessionStore
+        val indiaOnly = store.indiaOnlyPhones()
+        if (indiaOnly) dialCode = "+91"
+    }
+
+    val locked = indiaOnlyPhones
+    val e164 = remember(dialCode, national, locked) {
+        val dial = if (locked) "+91" else dialCode
+        runCatching { PhoneNumbers.fromParts(dial, national) }.getOrDefault("")
+    }
+    val digits = e164.phoneDigits().ifBlank { national.phoneDigits() }
     val duplicate = digits.isNotEmpty() && takenPhones.any { it.phoneDigits() == digits }
     val ready = name.isNotBlank() &&
         digits.length >= MinPhoneDigits &&
@@ -81,16 +85,20 @@ fun ContactPicker(
         relation != null
 
     fun commit() {
+        val phone = e164.ifBlank {
+            PhoneNumbers.fromParts(if (locked) "+91" else dialCode, national)
+        }
         onPicked(
             OnboardingContact(
                 id = UUID.randomUUID().toString(),
                 name = name.trim(),
-                phone = phone.trim(),
+                phone = phone,
                 relation = relation
             )
         )
         name = ""
-        phone = ""
+        dialCode = if (locked) "+91" else dialCode
+        national = ""
         relation = null
     }
 
@@ -104,12 +112,15 @@ fun ContactPicker(
             placeholder = stringResource(R.string.add_contact_name_hint),
             accent = accent
         )
-        OnboardingTextField(
-            value = phone,
-            onValueChange = { phone = it },
+        InternationalPhoneField(
+            label = "",
+            dialCode = if (locked) "+91" else dialCode,
+            nationalNumber = national,
+            onDialCodeChange = { if (!locked) dialCode = it },
+            onNationalChange = { national = it },
             placeholder = stringResource(R.string.add_contact_mobile_hint),
-            accent = accent,
-            keyboardType = KeyboardType.Phone
+            indiaOnlyPhones = locked,
+            onIndiaLockedClick = onUpgradeToGlobal
         )
         RelationDropdown(
             relation = relation,
@@ -135,12 +146,6 @@ fun ContactPicker(
     }
 }
 
-/**
- * The relation field: reads like the text fields above it, opens a menu.
- *
- * Empty it shows its prompt in the placeholder grey the text fields use, so an
- * unanswered relation looks unanswered rather than like a chosen value.
- */
 @Composable
 fun RelationDropdown(
     relation: ContactRelation?,
@@ -192,13 +197,6 @@ fun RelationDropdown(
     }
 }
 
-/**
- * A collapsed "+ Add …" control that opens a [ContactPicker] in place.
- *
- * Used wherever a page holds a growing list rather than fixed slots: the button
- * is what the user sees until they want it, and it closes again once something
- * has been added.
- */
 @Composable
 fun ContactAdder(
     label: String,
@@ -207,7 +205,9 @@ fun ContactAdder(
     takenPhones: List<String>,
     onAdded: (OnboardingContact) -> Unit,
     modifier: Modifier = Modifier,
-    startExpanded: Boolean = false
+    startExpanded: Boolean = false,
+    indiaOnlyPhones: Boolean = true,
+    onUpgradeToGlobal: (() -> Unit)? = null
 ) {
     var expanded by remember { mutableStateOf(startExpanded) }
 
@@ -223,7 +223,9 @@ fun ContactAdder(
                 onPicked = {
                     onAdded(it)
                     expanded = false
-                }
+                },
+                indiaOnlyPhones = indiaOnlyPhones,
+                onUpgradeToGlobal = onUpgradeToGlobal
             )
             TextAction(
                 text = stringResource(R.string.action_cancel),

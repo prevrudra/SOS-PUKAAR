@@ -78,7 +78,9 @@ fun ColumnScope.SelectHelpNumberPage(
     slot: Int,
     accent: Color,
     takenPhones: List<String>,
-    onSaved: (OnboardingContact) -> Unit
+    onSaved: (OnboardingContact) -> Unit,
+    indiaOnlyPhones: Boolean = true,
+    onUpgradeToGlobal: (() -> Unit)? = null
 ) {
     FlowTitle(title = stringResource(R.string.onboarding_add_number_n, slot + 1))
     Spacer(modifier = Modifier.height(4.dp))
@@ -86,6 +88,8 @@ fun ColumnScope.SelectHelpNumberPage(
         accent = accent,
         takenPhones = takenPhones,
         confirmLabel = stringResource(R.string.action_save),
-        onPicked = onSaved
+        onPicked = onSaved,
+        indiaOnlyPhones = indiaOnlyPhones,
+        onUpgradeToGlobal = onUpgradeToGlobal
     )
 }

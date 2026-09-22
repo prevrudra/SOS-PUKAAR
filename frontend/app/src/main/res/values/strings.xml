@@ -514,6 +514,19 @@
     <string name="plans_personal_description">For students, solo travellers, professionals and families.</string>
     <string name="plans_personal_price">₹1,999</string>
     <string name="plans_personal_monthly">≈ ₹167/month</string>
+    <!-- India / Global plan phone UX -->
+    <string name="plan_badge_india">India Plan</string>
+    <string name="plan_badge_india_sub">Works within India only</string>
+    <string name="plan_badge_global">Global Plan</string>
+    <string name="plan_badge_global_sub">India + International</string>
+    <string name="plan_country_code_locked">Country code locked for India plan.</string>
+    <string name="india_intl_dialog_title">International Numbers Not Available</string>
+    <string name="india_intl_dialog_body">You are currently on the India Plan, which allows only Indian phone numbers (+91). You cannot add international numbers with this plan.</string>
+    <string name="india_intl_dialog_upgrade_title">Upgrade to Global Plan</string>
+    <string name="india_intl_dialog_upgrade_body">Add international numbers and get safety coverage in India and worldwide.</string>
+    <string name="india_intl_dialog_later">Maybe Later</string>
+    <string name="india_intl_dialog_upgrade_now">Upgrade Now</string>
+
     <string name="plans_global">PUKAAR Global</string>
     <string name="plans_global_description">For Indians studying, working or travelling abroad.</string>
     <string name="plans_global_price">₹2,999</string>

@@ -108,6 +108,7 @@ fun OnboardingScaffold(
     modifier: Modifier = Modifier,
     progressSteps: Int = 0,
     progressCurrent: Int = 0,
+    headerTrailing: (@Composable () -> Unit)? = null,
     footer: @Composable (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
@@ -134,9 +135,12 @@ fun OnboardingScaffold(
                     accent = accent,
                     modifier = Modifier.weight(1f)
                 )
-                // Balances the back button so the bar stays centred.
-                Spacer(modifier = Modifier.width(48.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+            } else {
+                Spacer(modifier = Modifier.weight(1f))
             }
+            headerTrailing?.invoke()
+                ?: Spacer(modifier = Modifier.width(if (progressSteps > 0) 40.dp else 48.dp))
         }
 
         Column(

@@ -22,6 +22,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -103,7 +104,8 @@ fun SosOnboardingScreen(
     onBack: () -> Unit,
     onFinished: (OnboardingResult) -> Unit,
     onShareApp: (phoneE164: String?) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onUpgradeToGlobal: (() -> Unit)? = null
 ) {
     val type = ProtectionType.SOS
     val accent = type.accent
@@ -113,6 +115,20 @@ fun SosOnboardingScreen(
     var page by remember { mutableStateOf(SosPage.ADD_CONTACTS) }
     val slots = rememberContactSlots(SosMaxContacts)
     val numbers = rememberHelpNumbers(max = SosMaxNumbers)
+    var indiaOnlyPhones by remember { mutableStateOf(true) }
+
+    LaunchedEffect(Unit) {
+        indiaOnlyPhones = PukaarApp.instance.sessionStore.indiaOnlyPhones()
+        runCatching {
+            val me = PukaarApp.instance.repository.me()
+            indiaOnlyPhones = me.indiaOnlyPhones
+                ?: me.region.equals("INDIA", ignoreCase = true)
+            PukaarApp.instance.sessionStore.saveRegion(
+                me.region ?: if (indiaOnlyPhones) "INDIA" else "GLOBAL",
+                indiaOnlyPhones
+            )
+        }
+    }
 
     // Which of the number slots [SosPage.SELECT_NUMBER] is filling, and the entry
     // it is replacing when that slot already held one.
@@ -166,6 +182,9 @@ fun SosOnboardingScreen(
         onBack = ::goBack,
         accent = accent,
         modifier = modifier,
+        headerTrailing = {
+            com.pukaar.app.ui.component.PlanRegionBadge(indiaOnly = indiaOnlyPhones)
+        },
         footer = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 when (page) {
@@ -250,7 +269,12 @@ fun SosOnboardingScreen(
         Spacer(modifier = Modifier.height(6.dp))
 
         when (page) {
-            SosPage.ADD_CONTACTS -> SosAddContactsStep(slots = slots, accent = accent)
+            SosPage.ADD_CONTACTS -> SosAddContactsStep(
+                slots = slots,
+                accent = accent,
+                indiaOnlyPhones = indiaOnlyPhones,
+                onUpgradeToGlobal = onUpgradeToGlobal
+            )
 
             SosPage.VERIFY -> SosVerifyStep(
                 contacts = filled,
@@ -320,7 +344,9 @@ fun SosOnboardingScreen(
                     val replacing = editingId
                     if (replacing == null) numbers.add(entry) else numbers.replace(replacing, entry)
                     page = SosPage.ADD_NUMBERS
-                }
+                },
+                indiaOnlyPhones = indiaOnlyPhones,
+                onUpgradeToGlobal = onUpgradeToGlobal
             )
 
             SosPage.COMPLETE -> SosCompleteStep(
@@ -337,7 +363,9 @@ fun SosOnboardingScreen(
 @Composable
 private fun ColumnScope.SosAddContactsStep(
     slots: ContactSlots,
-    accent: Color
+    accent: Color,
+    indiaOnlyPhones: Boolean,
+    onUpgradeToGlobal: (() -> Unit)?
 ) {
     FlowTitle(
         title = stringResource(R.string.onboarding_add_trusted_contacts),
@@ -366,7 +394,9 @@ private fun ColumnScope.SosAddContactsStep(
             accent = accent,
             takenPhones = slots.filled.map { it.phone },
             onPicked = { slots.set(index, it) },
-            onCleared = { slots.set(index, null) }
+            onCleared = { slots.set(index, null) },
+            indiaOnlyPhones = indiaOnlyPhones,
+            onUpgradeToGlobal = onUpgradeToGlobal
         )
     }
 
@@ -520,7 +550,9 @@ fun ContactSlotCard(
     takenPhones: List<String>,
     onPicked: (OnboardingContact) -> Unit,
     onCleared: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    indiaOnlyPhones: Boolean = true,
+    onUpgradeToGlobal: (() -> Unit)? = null
 ) {
     val shape = RoundedCornerShape(12.dp)
 
@@ -567,7 +599,9 @@ fun ContactSlotCard(
                 accent = accent,
                 takenPhones = takenPhones,
                 confirmLabel = stringResource(R.string.onboarding_add_contact),
-                onPicked = onPicked
+                onPicked = onPicked,
+                indiaOnlyPhones = indiaOnlyPhones,
+                onUpgradeToGlobal = onUpgradeToGlobal
             )
             if (optional) {
                 Text(

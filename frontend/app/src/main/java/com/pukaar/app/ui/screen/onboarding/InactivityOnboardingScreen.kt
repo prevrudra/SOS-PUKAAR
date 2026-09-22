@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -101,7 +102,8 @@ fun InactivityOnboardingScreen(
     onBack: () -> Unit,
     onFinished: (OnboardingResult) -> Unit,
     onShareApp: (phoneE164: String?) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onUpgradeToGlobal: (() -> Unit)? = null
 ) {
     val type = ProtectionType.INACTIVITY
     val accent = type.accent
@@ -113,6 +115,16 @@ fun InactivityOnboardingScreen(
     val primary = rememberContactRoster(max = 1)
     val secondary = rememberContactRoster(max = InactivitySecondaryMax)
     val numbers = rememberHelpNumbers(max = InactivityMaxNumbers)
+    var indiaOnlyPhones by remember { mutableStateOf(true) }
+
+    LaunchedEffect(Unit) {
+        indiaOnlyPhones = PukaarApp.instance.sessionStore.indiaOnlyPhones()
+        runCatching {
+            val me = PukaarApp.instance.repository.me()
+            indiaOnlyPhones = me.indiaOnlyPhones
+                ?: me.region.equals("INDIA", ignoreCase = true)
+        }
+    }
 
     // Which of the three number slots [InactivityPage.SELECT_NUMBER] is filling.
     var editingSlot by remember { mutableIntStateOf(0) }
@@ -204,6 +216,9 @@ fun InactivityOnboardingScreen(
         modifier = modifier,
         progressSteps = if (page == InactivityPage.INTRO) 0 else InactivityStages,
         progressCurrent = page.stage,
+        headerTrailing = {
+            com.pukaar.app.ui.component.PlanRegionBadge(indiaOnly = indiaOnlyPhones)
+        },
         footer = {
             InactivityFooter(
                 page = page,
@@ -240,7 +255,9 @@ fun InactivityOnboardingScreen(
                 primary = primary,
                 secondary = secondary,
                 accent = accent,
-                takenPhones = takenPhones
+                takenPhones = takenPhones,
+                indiaOnlyPhones = indiaOnlyPhones,
+                onUpgradeToGlobal = onUpgradeToGlobal
             )
 
             InactivityPage.VERIFY_PRIMARY -> VerifyPrimaryPage(
@@ -295,6 +312,8 @@ fun InactivityOnboardingScreen(
                 type = type,
                 takenPhones = takenPhones,
                 onShareApp = onShareApp,
+                indiaOnlyPhones = indiaOnlyPhones,
+                onUpgradeToGlobal = onUpgradeToGlobal,
                 onVerify = { contact, code ->
                     scope.launch {
                         var current = contact
@@ -372,7 +391,9 @@ fun InactivityOnboardingScreen(
                     val replacing = editingId
                     if (replacing == null) numbers.add(entry) else numbers.replace(replacing, entry)
                     page = InactivityPage.ADD_NUMBERS
-                }
+                },
+                indiaOnlyPhones = indiaOnlyPhones,
+                onUpgradeToGlobal = onUpgradeToGlobal
             )
 
             InactivityPage.NUMBERS_SUMMARY -> NumbersSummaryPage(
@@ -624,7 +645,9 @@ private fun ColumnScope.AddContactsPage(
     primary: ContactRoster,
     secondary: ContactRoster,
     accent: Color,
-    takenPhones: List<String>
+    takenPhones: List<String>,
+    indiaOnlyPhones: Boolean = true,
+    onUpgradeToGlobal: (() -> Unit)? = null
 ) {
     FlowTitle(
         title = stringResource(R.string.onboarding_add_trusted_contacts),
@@ -657,7 +680,9 @@ private fun ColumnScope.AddContactsPage(
             confirmLabel = stringResource(R.string.onboarding_add_contact),
             accent = accent,
             takenPhones = takenPhones,
-            onAdded = primary::add
+            onAdded = primary::add,
+            indiaOnlyPhones = indiaOnlyPhones,
+            onUpgradeToGlobal = onUpgradeToGlobal
         )
     }
 
@@ -685,7 +710,9 @@ private fun ColumnScope.AddContactsPage(
             confirmLabel = stringResource(R.string.onboarding_add_contact),
             accent = accent,
             takenPhones = takenPhones,
-            onAdded = secondary::add
+            onAdded = secondary::add,
+            indiaOnlyPhones = indiaOnlyPhones,
+            onUpgradeToGlobal = onUpgradeToGlobal
         )
     }
 }
@@ -727,7 +754,9 @@ private fun ColumnScope.VerifySecondaryPage(
     takenPhones: List<String>,
     onShareApp: (phoneE164: String?) -> Unit,
     onVerify: (OnboardingContact, String) -> Unit,
-    onResend: (OnboardingContact) -> Unit
+    onResend: (OnboardingContact) -> Unit,
+    indiaOnlyPhones: Boolean = true,
+    onUpgradeToGlobal: (() -> Unit)? = null
 ) {
     val accent = type.accent
 
@@ -768,7 +797,9 @@ private fun ColumnScope.VerifySecondaryPage(
             confirmLabel = stringResource(R.string.onboarding_add_contact),
             accent = accent,
             takenPhones = takenPhones,
-            onAdded = secondary::add
+            onAdded = secondary::add,
+            indiaOnlyPhones = indiaOnlyPhones,
+            onUpgradeToGlobal = onUpgradeToGlobal
         )
     }
 

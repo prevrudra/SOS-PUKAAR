@@ -307,7 +307,8 @@ fun PukaarNavHost(
             SosOnboardingScreen(
                 onBack = { navController.popBackStack() },
                 onFinished = ::finishOnboarding,
-                onShareApp = actions::shareApp
+                onShareApp = actions::shareApp,
+                onUpgradeToGlobal = { navController.navigate(Route.PaymentReferral.path) }
             )
         }
 
@@ -315,7 +316,8 @@ fun PukaarNavHost(
             InactivityOnboardingScreen(
                 onBack = { navController.popBackStack() },
                 onFinished = ::finishOnboarding,
-                onShareApp = actions::shareApp
+                onShareApp = actions::shareApp,
+                onUpgradeToGlobal = { navController.navigate(Route.PaymentReferral.path) }
             )
         }
 
@@ -391,6 +393,7 @@ fun PukaarNavHost(
                     type = initialType
                 ),
                 onBack = { navController.popBackStack() },
+                onUpgradeToGlobal = { navController.navigate(Route.PaymentReferral.path) },
                 onSave = { draft ->
                     if (onSaveContact != null) {
                         onSaveContact(draft) {
@@ -419,6 +422,7 @@ fun PukaarNavHost(
                 ContactFormScreen(
                     initial = contact.toDraft(),
                     onBack = { navController.popBackStack() },
+                    onUpgradeToGlobal = { navController.navigate(Route.PaymentReferral.path) },
                     onSave = { draft ->
                         if (onSaveContact != null) {
                             onSaveContact(draft) { showSuccess(SuccessType.CONTACT_ADDED) }
