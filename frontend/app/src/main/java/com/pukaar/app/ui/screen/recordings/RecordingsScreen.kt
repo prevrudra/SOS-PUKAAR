@@ -58,6 +58,9 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
@@ -237,7 +240,7 @@ fun RecordingsScreen(
                                 fontSize = 15.sp
                             )
                             Text(
-                                text = (event.startedAt ?: "").take(19).replace('T', ' '),
+                                text = formatToIst(event.startedAt),
                                 color = TextTertiary,
                                 fontSize = 12.sp,
                                 modifier = Modifier.padding(top = 2.dp, bottom = 10.dp)
@@ -333,5 +336,20 @@ private fun readDurationMs(file: File): Int {
         0
     } finally {
         runCatching { retriever.release() }
+    }
+}
+
+private val IST = ZoneId.of("Asia/Kolkata")
+private val IST_FORMAT = DateTimeFormatter.ofPattern("dd MMM yyyy, hh:mm a", Locale.ENGLISH)
+
+/** Convert ISO UTC timestamp to IST display format. */
+private fun formatToIst(isoTimestamp: String?): String {
+    if (isoTimestamp.isNullOrBlank()) return "-"
+    return try {
+        val instant = Instant.parse(isoTimestamp)
+        IST_FORMAT.format(instant.atZone(IST)) + " IST"
+    } catch (_: Exception) {
+        // Fallback: just show raw with T replaced
+        isoTimestamp.take(19).replace('T', ' ')
     }
 }
