@@ -37,16 +37,18 @@ object AlertUiMapper {
         }
         val headline = when {
             mockDrill -> "$headlineLabel — practice alert"
-            type == AlertType.HELP -> "$headlineLabel needs help"
+            type == AlertType.HELP -> "$headlineLabel is in danger!"
             type == AlertType.INACTIVE -> "$headlineLabel may need a check-in"
             else -> "$headlineLabel is in danger!"
         }
         val message = when {
             mockDrill -> "$headlineLabel activated a PUKAAR practice alert. Please confirm they are safe."
-            type == AlertType.HELP -> "$headlineLabel has activated HELP in PUKAAR. Please check on them."
+            type == AlertType.HELP ->
+                "Please call $headlineLabel immediately. Follow the emergency information."
             type == AlertType.INACTIVE ->
                 "$headlineLabel has not used their phone for a while. PUKAAR inactivity alert — please check on them."
-            else -> "$headlineLabel has pressed SOS in PUKAAR. Please check on them immediately."
+            else ->
+                "User cannot take a call right now. Follow the emergency information."
         }
         val locationText = when {
             !alert.locationLabel.isNullOrBlank() -> alert.locationLabel!!

@@ -27,7 +27,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.PhoneDisabled
+import androidx.compose.material.icons.filled.RingVolume
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -65,6 +68,7 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.pukaar.highalert.data.AlertLocation
 import com.pukaar.highalert.data.AlertRepository
+import com.pukaar.highalert.data.AlertType
 import com.pukaar.highalert.data.DeliveryStatus
 import com.pukaar.highalert.data.DeviceStatus
 import com.pukaar.highalert.data.EmergencyService
@@ -107,6 +111,8 @@ import com.pukaar.highalert.ui.theme.AlertSubtitleGrey
 import com.pukaar.highalert.ui.theme.AlertTitleRed
 import com.pukaar.highalert.ui.theme.AlertTrustedBlue
 import com.pukaar.highalert.ui.theme.AlertTrustedSurface
+import com.pukaar.highalert.ui.theme.LevelTwo
+import com.pukaar.highalert.ui.theme.LevelTwoSoft
 import com.pukaar.highalert.ui.theme.PukaarAlertTheme
 import com.pukaar.highalert.ui.theme.PukaarRed
 import com.pukaar.highalert.ui.theme.PukaarRedSoft
@@ -160,14 +166,9 @@ fun SampleAlertScreen(
             modifier = Modifier.padding(horizontal = 11.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
+            ModePriorityHeader(alert = alert, onCall = { dial(alert.senderPhone) })
             AlertBanner(alert)
             SenderCard(alert, onCall = { dial(alert.senderPhone) })
-            if (alert.trustedContacts.isNotEmpty()) {
-                TrustedContactsCard(alert.trustedContacts, onCall = dial)
-            }
-            if (alert.helpContacts.isNotEmpty()) {
-                HelpNumbersCard(alert.senderName, alert.helpContacts, onCall = dial)
-            }
             LocationCard(
                 senderName = alert.senderName,
                 location = alert.location,
@@ -182,6 +183,12 @@ fun SampleAlertScreen(
                 }
             )
             DeviceStatusRow(alert.deviceStatus)
+            if (alert.trustedContacts.isNotEmpty()) {
+                TrustedContactsCard(alert.trustedContacts, onCall = dial)
+            }
+            if (alert.helpContacts.isNotEmpty()) {
+                HelpNumbersCard(alert.senderName, alert.helpContacts, onCall = dial)
+            }
             EmergencyServicesCard(
                 senderName = alert.senderName,
                 services = alert.emergencyServices,
@@ -189,6 +196,7 @@ fun SampleAlertScreen(
             )
             Spacer(Modifier.height(4.dp))
             EmergencyCallButton(onClick = { dial(AlertRepository.EMERGENCY_NUMBER) })
+            RecordingStartedBar()
         }
     }
 }
@@ -276,6 +284,113 @@ private fun SosBadge(label: String, modifier: Modifier = Modifier) {
         contentAlignment = Alignment.Center
     ) {
         Text(text = label, style = SosLabel, maxLines = 1)
+    }
+}
+
+/**
+ * Top severity strip — matches design:
+ * SOS → red "X cannot take a call"
+ * HELP → orange "Call X. It's urgent." + Call button
+ */
+@Composable
+private fun ModePriorityHeader(alert: SosAlert, onCall: () -> Unit) {
+    val isCallUrgent = alert.type == AlertType.HELP
+    val accent = if (isCallUrgent) LevelTwo else AlertEmergencyRed
+    val surface = if (isCallUrgent) LevelTwoSoft else PukaarRedSoft
+    val title = if (isCallUrgent) {
+        "Call ${alert.senderName}. It's urgent."
+    } else {
+        "${alert.senderName} cannot take a call."
+    }
+    val icon = if (isCallUrgent) Icons.Filled.RingVolume else Icons.Filled.PhoneDisabled
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(CardShape)
+            .background(surface)
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(42.dp)
+                .clip(CircleShape)
+                .background(accent.copy(alpha = 0.15f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = accent,
+                modifier = Modifier.size(24.dp)
+            )
+        }
+        Spacer(Modifier.width(10.dp))
+        Text(
+            text = title,
+            color = accent,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
+            lineHeight = 20.sp,
+            modifier = Modifier.weight(1f),
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+        if (isCallUrgent && alert.senderPhone.isNotBlank()) {
+            Spacer(Modifier.width(8.dp))
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(AlertCallGreen)
+                    .clickable(role = Role.Button, onClick = onCall)
+                    .padding(horizontal = 12.dp, vertical = 8.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Filled.Phone,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        text = "Call ${alert.senderName}",
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecordingStartedBar() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(CardShape)
+            .background(LevelTwoSoft)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Mic,
+            contentDescription = null,
+            tint = LevelTwo,
+            modifier = Modifier.size(20.dp)
+        )
+        Spacer(Modifier.width(10.dp))
+        Text(
+            text = "Background recording has been started.",
+            color = LevelTwo,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.weight(1f)
+        )
     }
 }
 
@@ -587,11 +702,7 @@ private fun LocationCard(senderName: String, location: AlertLocation, onOpenMap:
             LocationPin(modifier = Modifier.size(32.dp), color = AlertServiceRed)
             Spacer(Modifier.width(9.dp))
             BoxWithConstraints(modifier = Modifier.weight(1f)) {
-                val title = if (looksLikePhoneUi(senderName)) {
-                    "Location"
-                } else {
-                    "$senderName's Location"
-                }
+                val title = "Live Location"
                 val scale = rememberFitScale(
                     listOf(FitLine(title, LocationTitle)) +
                         location.addressLines.map { FitLine(it, LocationAddress) },
