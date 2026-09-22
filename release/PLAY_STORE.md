@@ -4,6 +4,7 @@
 
 | File | App | Version |
 |------|-----|---------|
+| `pukaar-1.19.4-51.aab` | PUKAAR (`pukaar.com`) | 1.19.4 (51) |
 | `pukaar-1.19.3-50.aab` | PUKAAR (`pukaar.com`) | 1.19.3 (50) |
 | `pukaar-1.19.2-49.aab` | PUKAAR (`pukaar.com`) | 1.19.2 (49) |
 | `pukaar-1.19.1-48.aab` | PUKAAR (`pukaar.com`) | 1.19.1 (48) |
@@ -13,6 +14,7 @@
 | `pukaar-1.18.5-42.aab` | PUKAAR (`pukaar.com`) | 1.18.5 (42) |
 | `pukaar-1.18.4-41.aab` | PUKAAR (`pukaar.com`) | 1.18.4 (41) |
 | `pukaar-1.18.3-40.aab` | PUKAAR (`pukaar.com`) | 1.18.3 (40) |
+| `highalert-1.13.20-50.aab` | High Alert (`com.pukaar.highalert`) | 1.13.20 (50) |
 | `highalert-1.13.19-49.aab` | High Alert (`com.pukaar.highalert`) | 1.13.19 (49) |
 | `highalert-1.13.16-46.aab` | High Alert (`com.pukaar.highalert`) | 1.13.16 (46) |
 | `highalert-1.13.12-42.aab` | High Alert (`com.pukaar.highalert`) | 1.13.12 (42) |

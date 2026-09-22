@@ -1,44 +1,44 @@
 package com.pukaar.highalert
 
 import android.content.Context
-import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.runBlocking
 
-/** Persists the active SOS so alarm-clock repeats can re-ring until dismissed. */
+/**
+ * Persists the active SOS so alarm-clock repeats can re-ring until dismissed.
+ * Uses SharedPreferences for fast synchronous access (no ANR risk).
+ */
 object AlertRingState {
-    private val Context.ringStore: DataStore<Preferences> by preferencesDataStore("alert_ring")
-    private val keyJson = stringPreferencesKey("active_alert_json")
+    private const val PREFS_NAME = "alert_ring_prefs"
+    private const val KEY_JSON = "active_alert_json"
     private val moshi = Moshi.Builder().add(KotlinJsonAdapterFactory()).build()
     private val adapter = moshi.adapter(PendingAlertResponse::class.java)
 
+    @Volatile
+    private var cachedAlert: PendingAlertResponse? = null
+
     fun setActive(context: Context, alert: PendingAlertResponse) {
-        runBlocking {
-            context.ringStore.edit { prefs ->
-                prefs[keyJson] = adapter.toJson(alert)
-            }
-        }
+        cachedAlert = alert
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_JSON, adapter.toJson(alert))
+            .apply()
     }
 
     fun getActive(context: Context): PendingAlertResponse? {
-        return runBlocking {
-            context.ringStore.data.map { prefs ->
-                prefs[keyJson]?.let { adapter.fromJson(it) }
-            }.first()
-        }
+        cachedAlert?.let { return it }
+        val json = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getString(KEY_JSON, null)
+        return json?.let { runCatching { adapter.fromJson(it) }.getOrNull() }
+            .also { cachedAlert = it }
     }
 
     fun clear(context: Context) {
-        runBlocking {
-            context.ringStore.edit { it.remove(keyJson) }
-        }
+        cachedAlert = null
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .remove(KEY_JSON)
+            .apply()
     }
 
     fun isRinging(context: Context): Boolean = getActive(context)?.eventId != null

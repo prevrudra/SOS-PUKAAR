@@ -251,16 +251,18 @@ fun PukaarNavHost(
             )
 
             if (!readTheNotice) {
+                var loadedName by remember { mutableStateOf("") }
+                LaunchedEffect(Unit) {
+                    loadedName = runCatching {
+                        PukaarApp.instance.repository.me().fullName.orEmpty()
+                    }.getOrDefault("")
+                }
                 BeforeYouStartDialog(
                     onContinue = { name ->
                         actions.saveUserDisplayName(name)
                         readTheNotice = true
                     },
-                    initialName = runCatching {
-                        kotlinx.coroutines.runBlocking {
-                            PukaarApp.instance.repository.me().fullName.orEmpty()
-                        }
-                    }.getOrDefault(""),
+                    initialName = loadedName,
                     onDismiss = {
                         // First-run starts here — dismissing must still leave a usable app.
                         if (!navController.popBackStack()) {
