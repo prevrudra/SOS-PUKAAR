@@ -82,12 +82,9 @@ object EmergencyAlertHelper {
         isMockDrill: Boolean
     ): SmsHelper.SendResult {
         val contacts = runCatching { ContactRepositoryBridge.loadContacts() }.getOrNull().orEmpty()
-        // SMS restrictions: only verified contacts for the matching alert type
+        // Always SMS SOS trusted contacts — help numbers are display-only, never notified.
         val relevant = contacts.filter { it.verified }.filter {
-            when {
-                isSos || isMockDrill -> it.type == ContactType.SOS
-                else -> it.type == ContactType.HELP || it.type == ContactType.INACTIVITY
-            }
+            it.type == ContactType.SOS
         }
         if (relevant.isEmpty()) {
             Log.w(TAG, "No verified contacts for this alert type — SMS skipped")

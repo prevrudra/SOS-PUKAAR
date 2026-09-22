@@ -529,13 +529,11 @@ public class EmergencyOrchestrator {
     }
 
     private void notifyContacts(UserEntity user, EmergencyEventEntity event) {
-        // SOS → SOS_TRUSTED only. HELP_MONITOR / help numbers are listed on the
-        // alert for coordination; they do not receive the High Alert tone.
-        // HELP trigger → HELP_MONITOR + HELP_BACKUP.
+        // Both SOS ("can't take a call") and HELP ("call me urgent") alert SOS_TRUSTED only.
+        // HELP_MONITOR / DOCTOR / NEIGHBOUR / HELP_BACKUP are pre-saved help numbers —
+        // shown on the alert for coordination, never notified themselves.
         // INACTIVITY uses deliverInactivityContactAlert() instead of this path.
-        List<ContactRole> roles = event.getTriggerType() == TriggerType.HELP
-                ? List.of(ContactRole.HELP_MONITOR, ContactRole.HELP_BACKUP)
-                : List.of(ContactRole.SOS_TRUSTED);
+        List<ContactRole> roles = List.of(ContactRole.SOS_TRUSTED);
         List<TrustedContactEntity> contacts = contactRepo
                 .findByOwnerUserIdAndContactRoleInAndActiveTrue(user.getId(), roles)
                 .stream()
