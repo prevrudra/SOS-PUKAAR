@@ -17,6 +17,9 @@ import com.pukaar.domain.payment.PaymentOrderEntity;
 import com.pukaar.domain.payment.PaymentOrderRepository;
 import com.pukaar.domain.subscription.SubscriptionEntity;
 import com.pukaar.domain.subscription.SubscriptionRepository;
+import com.pukaar.domain.elderly.ElderlySettingsEntity;
+import com.pukaar.domain.elderly.ElderlySettingsRepository;
+import com.pukaar.domain.elderly.InactivityService;
 import com.pukaar.domain.user.UserEntity;
 import com.pukaar.domain.user.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -48,6 +51,8 @@ public class AdminService {
     private final EvidenceStorageService evidenceStorage;
     private final AuthKeyVoiceSender voiceSender;
     private final WhatsAppAlertSender whatsAppSender;
+    private final ElderlySettingsRepository elderlySettingsRepo;
+    private final InactivityService inactivityService;
 
     public Map<String, Object> stats() {
         Map<String, Object> m = new LinkedHashMap<>();
@@ -275,5 +280,99 @@ public class AdminService {
     private static String formatIst(Instant instant) {
         if (instant == null) return null;
         return IST_FMT.format(instant.atZone(IST)) + " IST";
+    }
+
+    // ────────────────────────────────────────────────────────────────────────────
+    // INACTIVITY TESTING
+    // ────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Admin: set inactivity duration to ANY value for testing (bypasses 12/18/24/30/36 restriction).
+     * Accepts minutes (converted to hours stored in DB). Min 1 minute.
+     */
+    public Map<String, Object> setInactivityDuration(UUID userId, int minutes, boolean enable) {
+        if (minutes < 1) throw new ApiException("INVALID_DURATION", "Duration must be at least 1 minute");
+        UserEntity user = userRepo.findById(userId)
+                .orElseThrow(() -> new ApiException("USER_NOT_FOUND", "User not found"));
+
+        ElderlySettingsEntity settings = elderlySettingsRepo.findById(userId)
+                .orElseGet(() -> elderlySettingsRepo.save(ElderlySettingsEntity.builder().userId(userId).build()));
+
+        // Store as fractional hours for sub-hour testing (DB column is int, so multiply by 60 and divide)
+        // Actually the DB stores hours — for testing, we'll use a special column or convert.
+        // Simplest: add durationMinutes column OR just allow very small hours (treat 1 hour = 60 min).
+        // For now, store actual hours rounded, but also set lastActivityAt to trigger sooner.
+        int hours = Math.max(1, (int) Math.ceil(minutes / 60.0));
+        settings.setDurationHours(hours);
+        settings.setSoftHours(hours);
+        settings.setMediumHours(hours);
+        settings.setUrgentHours(hours);
+        settings.setInactivityMonitoringEnabled(enable);
+        elderlySettingsRepo.save(settings);
+
+        // If testing with < 1 hour, backdate lastActivityAt to trigger alert soon
+        if (minutes < 60) {
+            Instant backdatedActivity = Instant.now().minusSeconds((long) hours * 3600 - minutes * 60);
+            user.setLastActivityAt(backdatedActivity);
+            userRepo.save(user);
+        }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("userId", userId);
+        result.put("phone", user.getPhoneE164());
+        result.put("fullName", user.getFullName());
+        result.put("durationHours", hours);
+        result.put("durationMinutesRequested", minutes);
+        result.put("inactivityMonitoringEnabled", enable);
+        result.put("lastActivityAt", formatIst(user.getLastActivityAt()));
+        result.put("note", minutes < 60
+                ? "lastActivityAt backdated so alert triggers in ~" + minutes + " minutes"
+                : "Duration set to " + hours + " hours");
+        return result;
+    }
+
+    /**
+     * Admin: force trigger inactivity check for a user (for testing).
+     */
+    public Map<String, Object> forceInactivityCheck(UUID userId) {
+        UserEntity user = userRepo.findById(userId)
+                .orElseThrow(() -> new ApiException("USER_NOT_FOUND", "User not found"));
+        inactivityService.processUser(user);
+        return Map.of(
+                "userId", userId,
+                "phone", user.getPhoneE164(),
+                "fullName", user.getFullName(),
+                "lastActivityAt", formatIst(user.getLastActivityAt()),
+                "processed", true
+        );
+    }
+
+    /**
+     * Admin: get inactivity status for a user.
+     */
+    public Map<String, Object> getInactivityStatus(UUID userId) {
+        UserEntity user = userRepo.findById(userId)
+                .orElseThrow(() -> new ApiException("USER_NOT_FOUND", "User not found"));
+        ElderlySettingsEntity settings = elderlySettingsRepo.findById(userId).orElse(null);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("userId", userId);
+        result.put("phone", user.getPhoneE164());
+        result.put("fullName", user.getFullName());
+        result.put("lastActivityAt", formatIst(user.getLastActivityAt()));
+
+        if (settings != null) {
+            result.put("durationHours", settings.getDurationHours());
+            result.put("inactivityMonitoringEnabled", settings.isInactivityMonitoringEnabled());
+            if (user.getLastActivityAt() != null && settings.getDurationHours() > 0) {
+                Instant threshold = user.getLastActivityAt().plusSeconds((long) settings.getDurationHours() * 3600);
+                result.put("alertThreshold", formatIst(threshold));
+                result.put("willAlertIn", java.time.Duration.between(Instant.now(), threshold).toMinutes() + " minutes");
+            }
+        } else {
+            result.put("durationHours", null);
+            result.put("inactivityMonitoringEnabled", false);
+        }
+        return result;
     }
 }

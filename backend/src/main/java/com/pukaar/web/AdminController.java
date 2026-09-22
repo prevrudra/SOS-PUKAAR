@@ -108,4 +108,49 @@ public class AdminController {
         private String userName;
         private String types; // "all" or comma-separated: "alert,safe,location,text"
     }
+
+    // ────────────────────────────────────────────────────────────────────────────
+    // INACTIVITY TESTING (Admin only)
+    // ────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Set inactivity duration for a user to ANY value (bypasses 12/18/24/30/36 restriction).
+     * For testing: set minutes < 60 to trigger alerts quickly.
+     */
+    @PostMapping("/inactivity/{userId}/duration")
+    public Map<String, Object> setInactivityDuration(
+            @PathVariable UUID userId,
+            @RequestBody InactivityDurationRequest req
+    ) {
+        int minutes = req.getMinutes() != null ? req.getMinutes()
+                : (req.getHours() != null ? req.getHours() * 60 : 60);
+        boolean enable = req.getEnable() != null ? req.getEnable() : true;
+        return adminService.setInactivityDuration(userId, minutes, enable);
+    }
+
+    /**
+     * Force run inactivity check for a user (for testing — triggers alert if past threshold).
+     */
+    @PostMapping("/inactivity/{userId}/check")
+    public Map<String, Object> forceInactivityCheck(@PathVariable UUID userId) {
+        return adminService.forceInactivityCheck(userId);
+    }
+
+    /**
+     * Get inactivity status for a user (current settings, last activity, alert threshold).
+     */
+    @GetMapping("/inactivity/{userId}")
+    public Map<String, Object> getInactivityStatus(@PathVariable UUID userId) {
+        return adminService.getInactivityStatus(userId);
+    }
+
+    @Data
+    public static class InactivityDurationRequest {
+        /** Duration in minutes (takes precedence over hours). */
+        private Integer minutes;
+        /** Duration in hours (converted to minutes if minutes not provided). */
+        private Integer hours;
+        /** Enable/disable monitoring (default true). */
+        private Boolean enable;
+    }
 }
