@@ -8,8 +8,10 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 public class WebConfig implements WebMvcConfigurer {
     @Override
     public void addViewControllers(ViewControllerRegistry registry) {
-        // Trailing slash hits Spring's static resolver as a missing "admin" resource (500).
-        registry.addRedirectViewController("/admin", "/admin/index.html");
-        registry.addRedirectViewController("/admin/", "/admin/index.html");
+        // Forward (not redirect): behind nginx /pukaar, a redirect to /admin/index.html
+        // loses the prefix and lands on https://pukaaralert.com/admin → 404.
+        // Nginx also strips .html (…/index.html → …/index), so keep the URL at /admin.
+        registry.addViewController("/admin").setViewName("forward:/admin/index.html");
+        registry.addViewController("/admin/").setViewName("forward:/admin/index.html");
     }
 }
