@@ -233,8 +233,8 @@ public class WhatsAppAlertSender {
     private static String sanitize(String raw) {
         String s = raw == null ? "-" : raw.trim().replace('\n', ' ').replace('\r', ' ');
         if (s.isBlank()) s = "-";
-        // Keep individual vars short — Meta body total must stay ≤ 1024 (#132005).
-        if (s.length() > 80) s = s.substring(0, 79) + "…";
+        // Allow longer address lines; Meta still caps total rendered body at 1024 (#132005).
+        if (s.length() > 200) s = s.substring(0, 199) + "…";
         return s;
     }
 }

@@ -181,12 +181,14 @@ public class AlertDeliveryService {
 
         List<String> params = buildEmergencyTemplateParams(user, event);
         if (whatsApp.sendEmergencyTemplate(phone, params)) {
+            sendFullAddressFollowUp(phone, user, event);
             return true;
         }
         String template = props.getAlerts().getWhatsapp().getTemplateName();
         if (template != null && (template.equalsIgnoreCase("pukaar_sos") || template.equalsIgnoreCase("alert"))) {
             log.warn("{} failed for {} — trying compact legacy emergency template", template, phone);
             if (whatsApp.sendLegacyEmergencyTemplate(phone, buildCompactLegacyParams(user, event))) {
+                sendFullAddressFollowUp(phone, user, event);
                 return true;
             }
         }
@@ -353,6 +355,15 @@ public class AlertDeliveryService {
             sb.append("Please check on ").append(who).append(" immediately.\n\n");
         }
 
+        sb.append("📍 LOCATION\n");
+        if (event.getLatitude() != null && event.getLongitude() != null) {
+            sb.append(String.format(java.util.Locale.US, "%.6f, %.6f\n",
+                    event.getLatitude(), event.getLongitude()));
+            sb.append(mapsLink(event)).append("\n\n");
+        } else {
+            sb.append("Location pending\n\n");
+        }
+
         sb.append("HELP / DOCTOR / NEIGHBOUR NUMBERS\n");
         if (helpContacts.isEmpty()) {
             sb.append("- (none added)\n");
@@ -489,14 +500,31 @@ public class AlertDeliveryService {
         addContactTriple(params, emergency, 0);  // 17-19
         addContactTriple(params, emergency, 1);  // 20-22
         addContactTriple(params, emergency, 2);  // 23-25
-        params.add(clip(blankToDash(nearby.policeName()), 28));   // 26
+        // Include street address in name slots; keep clipped so total body stays ≤1024.
+        // Full uncut addresses go in the free-form follow-up after the template.
+        params.add(clip(serviceNameWithAddress(nearby.policeName(), nearby.policeAddress()), 80)); // 26
         params.add(clip(blankToDash(nearby.policePhone()), 16));  // 27
-        params.add(clip(blankToDash(nearby.ambName()), 28));      // 28
+        params.add(clip(serviceNameWithAddress(nearby.ambName(), nearby.ambAddress()), 80));       // 28
         params.add(clip(blankToDash(nearby.ambPhone()), 16));     // 29
-        params.add(clip(blankToDash(nearby.hospitalName()), 28)); // 30
+        params.add(clip(serviceNameWithAddress(nearby.hospitalName(), nearby.hospitalAddress()), 80)); // 30
         params.add(clip(blankToDash(nearby.hospitalPhone()), 16));// 31
         params.add(who);       // 32
         return params;
+    }
+
+    /** After template opens the 24h window, send full street addresses as free-form text. */
+    private void sendFullAddressFollowUp(String phone, UserEntity user, EmergencyEventEntity event) {
+        try {
+            String body = buildAlertFollowUpMessage(user, event);
+            if (body == null || body.isBlank()) return;
+            if (whatsApp.sendText(phone, body)) {
+                log.info("WhatsApp full-address follow-up sent to {}", phone);
+            } else {
+                log.warn("WhatsApp full-address follow-up failed for {}", phone);
+            }
+        } catch (Exception e) {
+            log.warn("WhatsApp full-address follow-up error for {}: {}", phone, e.getMessage());
+        }
     }
 
     private static void addContactTriple(List<String> params, List<TrustedContactEntity> list, int index) {
