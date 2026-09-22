@@ -18,7 +18,14 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class WhatsAppAlertSender {
     private final PukaarProperties props;
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate = createClient();
+
+    private static RestTemplate createClient() {
+        var factory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(8_000);
+        factory.setReadTimeout(15_000);
+        return new RestTemplate(factory);
+    }
 
     public boolean isConfigured() {
         var wa = props.getAlerts().getWhatsapp();

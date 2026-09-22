@@ -12,7 +12,14 @@ import org.springframework.web.util.UriComponentsBuilder;
 @RequiredArgsConstructor
 public class YourBulkSmsSender {
     private final PukaarProperties props;
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate = createClient();
+
+    private static RestTemplate createClient() {
+        var factory = new org.springframework.http.client.SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(8_000);
+        factory.setReadTimeout(15_000);
+        return new RestTemplate(factory);
+    }
 
     public boolean isConfigured() {
         var sms = props.getAlerts().getSms();
