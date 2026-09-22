@@ -337,12 +337,14 @@ public class AdminService {
     public Map<String, Object> forceInactivityCheck(UUID userId) {
         UserEntity user = userRepo.findById(userId)
                 .orElseThrow(() -> new ApiException("USER_NOT_FOUND", "User not found"));
-        inactivityService.processUser(user);
+        ElderlySettingsEntity settings = elderlySettingsRepo.findById(userId)
+                .orElseThrow(() -> new ApiException("NO_SETTINGS", "Inactivity settings not found for user"));
+        inactivityService.processUser(user, settings, Instant.now());
         return Map.of(
                 "userId", userId,
                 "phone", user.getPhoneE164(),
-                "fullName", user.getFullName(),
-                "lastActivityAt", formatIst(user.getLastActivityAt()),
+                "fullName", user.getFullName() != null ? user.getFullName() : "",
+                "lastActivityAt", formatIst(user.getLastActivityAt()) != null ? formatIst(user.getLastActivityAt()) : "",
                 "processed", true
         );
     }
