@@ -665,9 +665,16 @@
     <string name="countdown_sos_title">Sending SOS Alert</string>
     <string name="countdown_help_title">Sending Help Alert</string>
     <string name="countdown_message">Alert will be sent in a few seconds.\nTap Cancel to stop.</string>
+    <string name="countdown_go">SENDING</string>
     <string name="emergency_sending_alert">Sending alert…</string>
     <string name="emergency_sending_alert_hint">Opening SOS / Help active screen</string>
     <string name="countdown_cancel">Cancel Alert</string>
+    <string name="sos_select_title">Choose alert type</string>
+    <string name="sos_select_subtitle">Pick one — countdown starts after you select.</string>
+    <string name="sos_select_sos_title">SOS Emergency</string>
+    <string name="sos_select_sos_desc">Life-threatening danger. Alert trusted contacts and emergency services now.</string>
+    <string name="sos_select_help_title">HELP</string>
+    <string name="sos_select_help_desc">Need assistance from family or trusted contacts — not a full emergency.</string>
     <string name="emergency_sos_active">SOS Active</string>
     <string name="emergency_help_active">Help Active</string>
     <string name="emergency_mock_drill_active">Mock Drill Active</string>

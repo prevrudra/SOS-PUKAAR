@@ -185,11 +185,21 @@ public class AlertDeliveryService {
         }
         String template = props.getAlerts().getWhatsapp().getTemplateName();
         if (template != null && (template.equalsIgnoreCase("pukaar_sos") || template.equalsIgnoreCase("alert"))) {
-            log.warn("{} failed for {} — trying legacy emergency template", template, phone);
-            if (whatsApp.sendLegacyEmergencyTemplate(phone, buildLegacyEmergencyParams(user, event))) {
+            log.warn("{} failed for {} — trying compact legacy emergency template", template, phone);
+            if (whatsApp.sendLegacyEmergencyTemplate(phone, buildCompactLegacyParams(user, event))) {
                 return true;
             }
         }
+        // Last resort: short free-form text so the 24h session opens for location pings.
+        String who = displayName(user);
+        String maps = compactMapsLink(event);
+        String fallback = "PUKAAR SOS: " + who + " needs help now. Call "
+                + formatPhoneParam(user.getPhoneE164()) + ". Map: " + maps;
+        if (whatsApp.sendText(phone, fallback)) {
+            log.warn("WhatsApp templates failed for {} — sent short SOS text fallback", phone);
+            return true;
+        }
+        waDedup.releaseClaim(event.getId(), phone);
         log.warn("WhatsApp template failed for {}", phone);
         return false;
     }
@@ -438,19 +448,20 @@ public class AlertDeliveryService {
 
     /**
      * Meta template "alert" (32 body variables) — Sourabh layout Sep 2026.
-     * name — relation — phone for trusted + pre-saved; services as name — phone.
+     * Meta caps rendered body at 1024 chars (#132005), so every var is clipped.
      */
     private List<String> buildAlertTemplateParams(UserEntity user, EmergencyEventEntity event) {
-        String who = displayName(user);
-        String userPhone = formatPhoneParam(user.getPhoneE164());
+        String who = clip(displayName(user), 24);
+        String userPhone = clip(formatPhoneParam(user.getPhoneE164()), 16);
         String when = event.getStartedAt() != null
                 ? SOS_TIME.format(event.getStartedAt().atZone(IST))
                 : SOS_TIME.format(java.time.Instant.now().atZone(IST));
-        String maps = mapsLink(event);
+        when = clip(when, 22);
+        String maps = compactMapsLink(event);
         String battery = event.getBatteryPct() != null
                 ? String.valueOf(event.getBatteryPct()) : "-";
         String network = event.getNetworkType() != null && !event.getNetworkType().isBlank()
-                ? event.getNetworkType() : "-";
+                ? clip(event.getNetworkType(), 12) : "-";
 
         List<TrustedContactEntity> all = contactRepo
                 .findByOwnerUserIdAndActiveTrueOrderByPriorityOrderAsc(user.getId());
@@ -478,12 +489,12 @@ public class AlertDeliveryService {
         addContactTriple(params, emergency, 0);  // 17-19
         addContactTriple(params, emergency, 1);  // 20-22
         addContactTriple(params, emergency, 2);  // 23-25
-        params.add(blankToDash(nearby.policeName()));   // 26
-        params.add(blankToDash(nearby.policePhone()));  // 27
-        params.add(blankToDash(nearby.ambName()));      // 28
-        params.add(blankToDash(nearby.ambPhone()));     // 29
-        params.add(blankToDash(nearby.hospitalName())); // 30
-        params.add(blankToDash(nearby.hospitalPhone()));// 31
+        params.add(clip(blankToDash(nearby.policeName()), 28));   // 26
+        params.add(clip(blankToDash(nearby.policePhone()), 16));  // 27
+        params.add(clip(blankToDash(nearby.ambName()), 28));      // 28
+        params.add(clip(blankToDash(nearby.ambPhone()), 16));     // 29
+        params.add(clip(blankToDash(nearby.hospitalName()), 28)); // 30
+        params.add(clip(blankToDash(nearby.hospitalPhone()), 16));// 31
         params.add(who);       // 32
         return params;
     }
@@ -498,9 +509,36 @@ public class AlertDeliveryService {
         TrustedContactEntity c = list.get(index);
         String rel = c.getRelationship() != null && !c.getRelationship().isBlank()
                 ? c.getRelationship() : roleLabel(c.getContactRole());
-        params.add(c.getName() != null && !c.getName().isBlank() ? c.getName().trim() : "-");
-        params.add(rel);
-        params.add(formatPhoneParam(c.getPhoneE164()));
+        params.add(clip(c.getName() != null && !c.getName().isBlank() ? c.getName().trim() : "-", 18));
+        params.add(clip(rel, 12));
+        params.add(clip(formatPhoneParam(c.getPhoneE164()), 16));
+    }
+
+    /** Legacy emergency with short fields — avoids #132005 on address-heavy Places names. */
+    private List<String> buildCompactLegacyParams(UserEntity user, EmergencyEventEntity event) {
+        List<String> full = buildLegacyEmergencyParams(user, event);
+        List<String> out = new ArrayList<>(full.size());
+        for (int i = 0; i < full.size(); i++) {
+            // Location / address-ish slots get a tighter cap.
+            int max = (i == 3 || i >= 12) ? 40 : 28;
+            out.add(clip(full.get(i), max));
+        }
+        return out;
+    }
+
+    private static String compactMapsLink(EmergencyEventEntity event) {
+        if (event.getLatitude() != null && event.getLongitude() != null) {
+            return String.format(java.util.Locale.US, "https://maps.google.com/?q=%.4f,%.4f",
+                    event.getLatitude(), event.getLongitude());
+        }
+        return "pending";
+    }
+
+    private static String clip(String raw, int max) {
+        if (raw == null || raw.isBlank()) return "-";
+        String s = raw.trim();
+        if (s.length() <= max) return s;
+        return s.substring(0, Math.max(1, max - 1)) + "…";
     }
 
     /** New Meta template "pukaar_sos" (18 body variables). */

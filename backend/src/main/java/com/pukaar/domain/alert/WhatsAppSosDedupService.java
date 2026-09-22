@@ -41,4 +41,16 @@ public class WhatsAppSosDedupService {
                 .getSingleResult();
         return count != null && count.longValue() > 0;
     }
+
+    /** Free the claim when Meta rejects the send so a retry / fallback can try again. */
+    @Transactional
+    public void releaseClaim(UUID eventId, String phoneE164) {
+        if (eventId == null || phoneE164 == null || phoneE164.isBlank()) return;
+        String phone = PhoneNumbers.toE164(phoneE164);
+        em.createNativeQuery(
+                        "DELETE FROM whatsapp_sos_sent WHERE event_id = :eventId AND phone_e164 = :phone")
+                .setParameter("eventId", eventId)
+                .setParameter("phone", phone)
+                .executeUpdate();
+    }
 }

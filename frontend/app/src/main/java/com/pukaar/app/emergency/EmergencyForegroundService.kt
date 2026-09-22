@@ -201,28 +201,30 @@ class EmergencyForegroundService : Service() {
             listOfNotNull(result.lastLocation)
         }
         return candidates
-            .filter { isUsableGps(it) }
+            .filter { isUsableGps(it, strict = false) }
             .minByOrNull { it.accuracy }
     }
 
-    /** Prefer a live GPS fix from this device — reject old/coarse cell/Wi‑Fi pins. */
+    /** Prefer a live GPS fix from this device — reject ancient/coarse cell pins. */
     private fun fetchFreshGps(): android.location.Location? {
         val client = fused ?: return null
         val token = CancellationTokenSource()
         val current = runCatching {
             Tasks.await(client.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, token.token))
         }.getOrNull()
-        if (current != null && isUsableGps(current)) return current
+        if (current != null && isUsableGps(current, strict = true)) return current
         val last = runCatching { Tasks.await(client.lastLocation) }.getOrNull()
-        return if (last != null && isUsableGps(last)) last else current ?: last
+        if (last != null && isUsableGps(last, strict = false)) return last
+        return current ?: last
     }
 
-    private fun isUsableGps(loc: android.location.Location): Boolean {
+    private fun isUsableGps(loc: android.location.Location, strict: Boolean): Boolean {
         if (!loc.hasAccuracy()) return loc.provider == android.location.LocationManager.GPS_PROVIDER
-        // Reject very coarse cell-tower style fixes when possible.
-        if (loc.accuracy > 200f) return false
+        val maxAccuracy = if (strict) 200f else 500f
+        if (loc.accuracy > maxAccuracy) return false
         val ageMs = System.currentTimeMillis() - loc.time
-        return ageMs in 0..90_000L
+        val maxAge = if (strict) 90_000L else 5 * 60_000L
+        return ageMs in 0..maxAge
     }
 
     private fun startTelemetryLoop() {

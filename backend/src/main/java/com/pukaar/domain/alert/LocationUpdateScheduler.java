@@ -18,7 +18,7 @@ import java.time.Instant;
 @RequiredArgsConstructor
 public class LocationUpdateScheduler {
     /** Ignore events whose last app GPS fix is older than this. */
-    private static final long FRESH_GPS_MAX_AGE_SEC = 180;
+    private static final long FRESH_GPS_MAX_AGE_SEC = 420;
 
     private final EmergencyEventRepository eventRepo;
     private final LocationUpdateNotifier locationUpdateNotifier;

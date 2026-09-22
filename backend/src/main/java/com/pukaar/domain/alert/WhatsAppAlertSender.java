@@ -231,9 +231,10 @@ public class WhatsAppAlertSender {
 
     /** WhatsApp template vars cannot be empty and have length limits. */
     private static String sanitize(String raw) {
-        String s = raw == null ? "-" : raw.trim();
+        String s = raw == null ? "-" : raw.trim().replace('\n', ' ').replace('\r', ' ');
         if (s.isBlank()) s = "-";
-        if (s.length() > 1024) s = s.substring(0, 1024);
+        // Keep individual vars short — Meta body total must stay ≤ 1024 (#132005).
+        if (s.length() > 80) s = s.substring(0, 79) + "…";
         return s;
     }
 }

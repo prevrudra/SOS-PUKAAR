@@ -28,6 +28,7 @@ import com.pukaar.app.ui.screen.contacts.ContactUiModel
 import com.pukaar.app.ui.screen.emergency.EmergencyActiveScreen
 import com.pukaar.app.ui.screen.home.HomeMode
 import com.pukaar.app.ui.screen.home.SosCountdownOverlay
+import com.pukaar.app.ui.screen.home.SosModeSelectOverlay
 import com.pukaar.app.ui.screen.home.EmergencySendingOverlay
 import com.pukaar.app.ui.screen.splash.SplashScreen
 import com.pukaar.app.ui.theme.PukaarTheme
@@ -46,6 +47,8 @@ fun PukaarAppNavHost() {
     var onboardingDone by remember { mutableStateOf<Boolean?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var countdownMode by remember { mutableStateOf<HomeMode?>(null) }
+    /** SOS button → pick SOS/HELP, then countdown. */
+    var showModeSelect by remember { mutableStateOf(false) }
     /** Keeps home covered after countdown until SOS/HELP active screen opens. */
     var sendingMode by remember { mutableStateOf<HomeMode?>(null) }
     val emergencyNav = rememberNavController()
@@ -162,10 +165,10 @@ fun PukaarAppNavHost() {
 
             LaunchedEffect(Unit) {
                 if (PukaarApp.instance.consumePendingHardwareSos()) {
-                    countdownMode = HomeMode.SOS
+                    showModeSelect = true
                 }
                 PukaarApp.instance.hardwareSos.collect {
-                    countdownMode = HomeMode.SOS
+                    showModeSelect = true
                 }
             }
 
@@ -254,7 +257,7 @@ fun PukaarAppNavHost() {
                             onContactsRefresh = {
                                 scope.launch { contacts = ContactRepositoryBridge.loadContacts() }
                             },
-                            onRequestEmergency = { mode -> countdownMode = mode },
+                            onRequestEmergency = { _ -> showModeSelect = true },
                             onRequestMockDrill = { mode ->
                                 actions.startMockDrill(mode == HomeMode.SOS)
                             }
@@ -279,6 +282,15 @@ fun PukaarAppNavHost() {
                     }
                 }
 
+                if (showModeSelect) {
+                    SosModeSelectOverlay(
+                        onSelect = { mode ->
+                            showModeSelect = false
+                            countdownMode = mode
+                        },
+                        onCancel = { showModeSelect = false }
+                    )
+                }
                 countdownMode?.let { mode ->
                     SosCountdownOverlay(
                         mode = mode,
@@ -294,7 +306,7 @@ fun PukaarAppNavHost() {
                         onCancel = { countdownMode = null }
                     )
                 }
-                if (countdownMode == null) {
+                if (countdownMode == null && !showModeSelect) {
                     sendingMode?.let { mode ->
                         EmergencySendingOverlay(mode = mode)
                     }

@@ -63,8 +63,10 @@ public class LocationUpdateNotifier {
         String coordKey = String.format(Locale.US, "%.5f,%.5f", event.getLatitude(), event.getLongitude());
         boolean moved = !coordKey.equals(lastSentCoords.get(eventId));
         if (prev != null && now.isBefore(prev.plusSeconds(interval))) return;
-        // After the interval, do not rebroadcast the same frozen pin (old SIM/home location bug).
-        if (prev != null && !moved) {
+        // After 2 intervals, allow a heartbeat even if pin is unchanged (Motorola stall UX).
+        boolean heartbeat = prev != null && !moved
+                && now.isAfter(prev.plusSeconds(interval * 2L));
+        if (prev != null && !moved && !heartbeat) {
             log.debug("Skip location event {} — coordinates unchanged", eventId);
             return;
         }
@@ -98,7 +100,16 @@ public class LocationUpdateNotifier {
             String key = PhoneNumbers.digitsOnly(phone);
             if (!phonesSeen.add(key)) continue; // one message per number
 
-            boolean waOk = whatsApp.sendText(phone, body);
+            boolean waOk = whatsApp.sendLocation(
+                    phone,
+                    event.getLatitude(),
+                    event.getLongitude(),
+                    who + " live location",
+                    maps
+            );
+            if (!waOk) {
+                waOk = whatsApp.sendText(phone, body);
+            }
             boolean smsOk = smsSender.isConfigured() && smsSender.send(phone, smsBody);
             if (waOk || smsOk) {
                 sent++;

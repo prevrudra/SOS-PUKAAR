@@ -4,6 +4,7 @@
 
 | File | App | Version |
 |------|-----|---------|
+| `pukaar-1.19.2-49.aab` | PUKAAR (`pukaar.com`) | 1.19.2 (49) |
 | `pukaar-1.19.1-48.aab` | PUKAAR (`pukaar.com`) | 1.19.1 (48) |
 | `pukaar-1.19.0-47.aab` | PUKAAR (`pukaar.com`) | 1.19.0 (47) |
 | `pukaar-1.18.7-44.aab` | PUKAAR (`pukaar.com`) | 1.18.7 (44) |

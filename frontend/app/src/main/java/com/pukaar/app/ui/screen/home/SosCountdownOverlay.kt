@@ -62,7 +62,11 @@ fun SosCountdownOverlay(
             delay(1000)
             if (!cancelled) secondsLeft--
         }
-        if (!cancelled) onComplete()
+        if (!cancelled) {
+            // Brief "SENDING" beat after 1 → then fire.
+            delay(350)
+            onComplete()
+        }
     }
 
     val scale by animateFloatAsState(
@@ -108,10 +112,15 @@ fun SosCountdownOverlay(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = secondsLeft.coerceAtLeast(0).toString(),
+                        text = if (secondsLeft > 0) {
+                            secondsLeft.toString()
+                        } else {
+                            stringResource(R.string.countdown_go)
+                        },
                         color = TextPrimary,
-                        fontSize = 96.sp,
-                        fontWeight = FontWeight.Black
+                        fontSize = if (secondsLeft > 0) 96.sp else 36.sp,
+                        fontWeight = FontWeight.Black,
+                        textAlign = TextAlign.Center
                     )
                 }
             }
