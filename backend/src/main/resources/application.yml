@@ -133,6 +133,7 @@ pukaar:
       webhook-verify-token: ${WHATSAPP_WEBHOOK_VERIFY_TOKEN:}
       location-updates-enabled: ${WHATSAPP_LOCATION_UPDATES_ENABLED:true}
       location-update-interval-seconds: ${WHATSAPP_LOCATION_UPDATE_INTERVAL_SECONDS:120}
+      location-update-max-hours: ${WHATSAPP_LOCATION_UPDATE_MAX_HOURS:3}
     sms:
       endpoint: ${YOURBULKSMS_ENDPOINT:https://control.yourbulksms.net/api/sendhttp.php}
       auth-key: ${YOURBULKSMS_AUTH_KEY:}

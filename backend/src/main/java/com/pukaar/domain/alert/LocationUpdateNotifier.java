@@ -21,7 +21,10 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-/** Throttled WhatsApp/SMS live-location pings to contacts during an active SOS. */
+/**
+ * Live location to every alerted contact every ~2 minutes until I'm Safe or max hours.
+ * Sends text+map (works on all phones) plus location pin when possible, with SMS fallback.
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -37,7 +40,6 @@ public class LocationUpdateNotifier {
     private final UserRepository userRepo;
 
     private final Map<UUID, Instant> lastSent = new ConcurrentHashMap<>();
-    private final Map<UUID, String> lastSentCoords = new ConcurrentHashMap<>();
     /** Prevents double-send when GPS callback + scheduler race. */
     private final Set<UUID> inFlight = ConcurrentHashMap.newKeySet();
 
@@ -45,6 +47,14 @@ public class LocationUpdateNotifier {
         var wa = props.getAlerts().getWhatsapp();
         if (!wa.isLocationUpdatesEnabled() || !whatsApp.isConfigured()) return;
         if (event.getLatitude() == null || event.getLongitude() == null) return;
+
+        int maxHours = Math.max(1, wa.getLocationUpdateMaxHours());
+        Instant started = event.getStartedAt() != null ? event.getStartedAt() : event.getUpdatedAt();
+        if (started != null && Instant.now().isAfter(started.plusSeconds(maxHours * 3600L))) {
+            clear(eventId);
+            return;
+        }
+
         if (!inFlight.add(eventId)) {
             log.debug("Skip location — already sending for event {}", eventId);
             return;
@@ -57,22 +67,13 @@ public class LocationUpdateNotifier {
     }
 
     private void notifyLocked(UUID eventId, EmergencyEventEntity event, int intervalSeconds) {
+        // Strict 2-minute cadence (default 120) — always send, even if pin unchanged.
         int interval = Math.max(60, intervalSeconds);
         Instant now = Instant.now();
         Instant prev = lastSent.get(eventId);
-        String coordKey = String.format(Locale.US, "%.5f,%.5f", event.getLatitude(), event.getLongitude());
-        boolean moved = !coordKey.equals(lastSentCoords.get(eventId));
         if (prev != null && now.isBefore(prev.plusSeconds(interval))) return;
-        // After 2 intervals, allow a heartbeat even if pin is unchanged (Motorola stall UX).
-        boolean heartbeat = prev != null && !moved
-                && now.isAfter(prev.plusSeconds(interval * 2L));
-        if (prev != null && !moved && !heartbeat) {
-            log.debug("Skip location event {} — coordinates unchanged", eventId);
-            return;
-        }
 
         lastSent.put(eventId, now);
-        lastSentCoords.put(eventId, coordKey);
 
         UserEntity user = userRepo.findById(event.getUserId()).orElse(null);
         if (user == null) {
@@ -84,49 +85,70 @@ public class LocationUpdateNotifier {
         String when = TIME_FMT.format(now.atZone(IST));
         String maps = String.format(Locale.US, "https://maps.google.com/?q=%.6f,%.6f",
                 event.getLatitude(), event.getLongitude());
+        String coords = String.format(Locale.US, "%.6f, %.6f",
+                event.getLatitude(), event.getLongitude());
+        // Text+link works on every WhatsApp client; location pin is extra when session allows.
         String body = "*PUKAAR LIVE LOCATION*\n"
                 + who + " — updated " + when + " IST\n"
+                + "Coords: " + coords + "\n"
                 + "Open map: " + maps;
         String smsBody = "PUKAAR LIVE LOCATION: " + who + " @ " + when + " IST " + maps;
 
         Set<String> phonesSeen = new LinkedHashSet<>();
         int sent = 0;
+        int failed = 0;
         for (ContactDeliveryEntity d : deliveryRepo.findByEventId(eventId)) {
-            String phone = d.getContactPhone();
-            if (!PhoneNumbers.isDeliverable(phone)) {
-                log.warn("Skip location — invalid phone {}", phone);
+            String phone = normalizePhone(d.getContactPhone());
+            if (phone == null) {
+                log.warn("Skip location — invalid phone {}", d.getContactPhone());
+                failed++;
                 continue;
             }
             String key = PhoneNumbers.digitsOnly(phone);
             if (!phonesSeen.add(key)) continue; // one message per number
 
-            boolean waOk = whatsApp.sendLocation(
-                    phone,
-                    event.getLatitude(),
-                    event.getLongitude(),
-                    who + " live location",
-                    maps
-            );
-            if (!waOk) {
-                waOk = whatsApp.sendText(phone, body);
+            boolean textOk = whatsApp.sendText(phone, body);
+            boolean pinOk = false;
+            if (!textOk) {
+                // Free-form text failed (no session) — try native location pin as alternate.
+                pinOk = whatsApp.sendLocation(
+                        phone,
+                        event.getLatitude(),
+                        event.getLongitude(),
+                        who + " live location",
+                        maps
+                );
             }
             boolean smsOk = smsSender.isConfigured() && smsSender.send(phone, smsBody);
-            if (waOk || smsOk) {
+            if (textOk || pinOk || smsOk) {
                 sent++;
-                log.info("Location update to {} wa={} sms={}", phone, waOk, smsOk);
+                log.info("Location update to {} text={} pin={} sms={}", phone, textOk, pinOk, smsOk);
+            } else {
+                failed++;
+                log.warn("Location update FAILED for {} — WA+SMS all failed", phone);
             }
         }
         if (sent > 0) {
-            log.info("Live location sent for event {} to {} contact(s)", eventId, sent);
+            log.info("Live location sent for event {} to {} contact(s) ({} failed)", eventId, sent, failed);
         } else {
             lastSent.remove(eventId); // allow retry soon if nothing delivered
             log.warn("Live location skipped for event {} — no deliverable contacts", eventId);
         }
     }
 
+    /** Normalize to E.164; return null if undeliverable. */
+    private static String normalizePhone(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        try {
+            String e164 = PhoneNumbers.toE164(raw.trim());
+            return PhoneNumbers.isDeliverable(e164) ? e164 : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     public void clear(UUID eventId) {
         lastSent.remove(eventId);
-        lastSentCoords.remove(eventId);
         inFlight.remove(eventId);
     }
 

@@ -126,6 +126,8 @@ public class PukaarProperties {
             private boolean locationUpdatesEnabled = true;
             /** Minimum seconds between location WhatsApp updates per event (testing default: 120). */
             private int locationUpdateIntervalSeconds = 120;
+            /** Stop live location pings this many hours after SOS start (even if still open). */
+            private int locationUpdateMaxHours = 3;
         }
 
         @Data
