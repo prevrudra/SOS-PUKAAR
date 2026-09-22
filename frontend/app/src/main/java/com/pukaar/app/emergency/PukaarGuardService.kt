@@ -3,13 +3,10 @@ package com.pukaar.app.emergency
 import android.app.Notification
 import android.app.PendingIntent
 import android.app.Service
-import android.Manifest
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.Build
-import androidx.core.content.ContextCompat
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
@@ -25,42 +22,61 @@ import kotlinx.coroutines.launch
 /**
  * Keeps PUKAAR alive after boot so hardware SOS + phone-usage tracking survive OEM kills.
  * Must only enter foreground while the app is visible — Android 12+ kills background FGS starts.
+ *
+ * CRITICAL: After startForegroundService, startForeground MUST run within ~5s.
+ * Never skip it (including for POST_NOTIFICATIONS) — that causes "keeps stopping" on Motorola.
  */
 class PukaarGuardService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         return try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-                != PackageManager.PERMISSION_GRANTED
-            ) {
-                Log.w("PUKAAR", "Guard FGS skipped — POST_NOTIFICATIONS not granted")
-                HardwareReceiverRegistry.register(this)
-                stopSelf()
-                return START_NOT_STICKY
-            }
-            val notification = buildNotification()
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
-                } else {
-                    0
-                }
-                ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, type)
-            } else {
-                startForeground(NOTIFICATION_ID, notification)
-            }
+            promoteForeground()
             HardwareReceiverRegistry.register(this)
             if (PhoneUsageTracker.isEnabled(this)) {
                 PhoneUsageTracker.arm(this)
             }
-            START_STICKY
+            // NOT_STICKY: avoid OEM crash-loops if promote somehow fails later.
+            START_NOT_STICKY
         } catch (e: Exception) {
             Log.e("PUKAAR", "Guard service failed — stopping to avoid crash loop", e)
+            runCatching { promoteForegroundBare() }
             stopSelf()
             START_NOT_STICKY
         }
+    }
+
+    private fun promoteForeground() {
+        val notification = buildNotification()
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                try {
+                    ServiceCompat.startForeground(
+                        this,
+                        NOTIFICATION_ID,
+                        notification,
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                    )
+                } catch (e: Exception) {
+                    Log.e("PUKAAR", "typed startForeground failed, bare fallback", e)
+                    @Suppress("DEPRECATION")
+                    startForeground(NOTIFICATION_ID, notification)
+                }
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, 0)
+            } else {
+                @Suppress("DEPRECATION")
+                startForeground(NOTIFICATION_ID, notification)
+            }
+        } catch (e: Exception) {
+            Log.e("PUKAAR", "startForeground failed, last-resort bare", e)
+            promoteForegroundBare()
+        }
+    }
+
+    private fun promoteForegroundBare() {
+        @Suppress("DEPRECATION")
+        startForeground(NOTIFICATION_ID, buildNotification())
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {

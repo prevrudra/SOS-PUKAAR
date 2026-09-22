@@ -260,8 +260,12 @@ class AlertSoundService : Service() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
+        // Never restart FGS from background — causes "keeps stopping" on Motorola.
         if (AlertRingState.isRinging(this)) {
-            start(this, "PUKAAR user", false, false, AlertRingState.getActive(this))
+            MonitorWatchdogReceiver.schedule(applicationContext)
+            AlertRingState.getActive(this)?.let { alert ->
+                runCatching { AlertFireHelper.fire(applicationContext, alert) }
+            }
         }
     }
 

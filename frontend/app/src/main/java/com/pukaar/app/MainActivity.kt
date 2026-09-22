@@ -1,12 +1,8 @@
 package com.pukaar.app
 
-import android.Manifest
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
 import android.view.KeyEvent
-import androidx.core.content.ContextCompat
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -49,21 +45,10 @@ class MainActivity : ComponentActivity(), PaymentResultWithDataListener {
         InactivityMonitor.recordActivity(this)
         runCatching {
             com.pukaar.app.emergency.HardwareReceiverRegistry.register(this)
-            if (canStartGuardService()) {
-                com.pukaar.app.emergency.PukaarGuardService.start(this)
-            }
+            // FGS notifications are exempt from POST_NOTIFICATIONS — always promote when visible.
+            com.pukaar.app.emergency.PukaarGuardService.start(this)
             com.pukaar.app.emergency.EmergencyForegroundService.resumeIfNeeded(this)
         }
-    }
-
-    private fun canStartGuardService(): Boolean {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
-            return false
-        }
-        return true
     }
 
     override fun onNewIntent(intent: Intent) {

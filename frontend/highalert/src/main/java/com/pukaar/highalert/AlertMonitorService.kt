@@ -112,13 +112,21 @@ class AlertMonitorService : Service() {
      */
     private fun enterForeground(notifId: Int, notification: Notification): Boolean {
         return try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
-                } else {
-                    0
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                try {
+                    ServiceCompat.startForeground(
+                        this,
+                        notifId,
+                        notification,
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+                    )
+                } catch (e: Exception) {
+                    Log.e(TAG, "DATA_SYNC promote failed, bare fallback", e)
+                    @Suppress("DEPRECATION")
+                    startForeground(notifId, notification)
                 }
-                ServiceCompat.startForeground(this, notifId, notification, type)
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                ServiceCompat.startForeground(this, notifId, notification, 0)
             } else {
                 @Suppress("DEPRECATION")
                 startForeground(notifId, notification)
@@ -126,11 +134,16 @@ class AlertMonitorService : Service() {
             true
         } catch (e: Exception) {
             Log.e(TAG, "startForeground failed: ${e.message}", e)
-            false
+            runCatching {
+                @Suppress("DEPRECATION")
+                startForeground(notifId, notification)
+            }.isSuccess
         }
     }
 
     private fun abortFgsStart() {
+        // Satisfy the 5s contract even when aborting — then tear down cleanly.
+        runCatching { startForeground(NOTIF_ID, buildQuietNotification()) }
         runCatching { stopForeground(STOP_FOREGROUND_REMOVE) }
         MonitorWatchdogReceiver.schedule(applicationContext)
         MonitorKeepAliveWorker.enqueue(applicationContext)

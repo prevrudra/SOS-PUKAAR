@@ -14,8 +14,8 @@ android {
         applicationId = "pukaar.com"
         minSdk = 26
         targetSdk = 36
-        versionCode = 49
-        versionName = "1.19.2"
+        versionCode = 50
+        versionName = "1.19.3"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // Emulator default; debug override points at LAN Mac IP for physical devices
         buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8080/\"")

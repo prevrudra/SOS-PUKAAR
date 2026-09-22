@@ -43,6 +43,18 @@ class EmergencyForegroundService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val isSosHint = intent?.getBooleanExtra(EXTRA_IS_SOS, true) ?: true
+        val recordHint = intent?.getBooleanExtra(EXTRA_RECORD_AUDIO, isSosHint) ?: isSosHint
+        // Promote FIRST — Android kills the process if startForeground is skipped (~5s).
+        runCatching { startAsForeground(isSosHint, recordHint) }
+            .onFailure { e ->
+                android.util.Log.e("PUKAAR", "Emergency promote failed, bare fallback", e)
+                runCatching {
+                    @Suppress("DEPRECATION")
+                    startForeground(NOTIF_ID, buildEmergencyNotification(isSosHint, recordHint))
+                }
+            }
+
         if (intent?.action == ACTION_STOP) {
             stopSelfSafe()
             return START_NOT_STICKY
@@ -72,13 +84,12 @@ class EmergencyForegroundService : Service() {
             recordAudio = recordAudio
         )
         return try {
-            startAsForeground(isSos, recordAudio)
             acquireWakeLock()
             startLocationUpdates()
             startPeriodicLocationSync()
             startTelemetryLoop()
             if (recordAudio && hasRecordAudioPermission()) startAudioLoop()
-            START_STICKY
+            START_NOT_STICKY
         } catch (e: Exception) {
             android.util.Log.e("PUKAAR", "EmergencyForegroundService failed to start", e)
             stopSelfSafe()
@@ -96,12 +107,12 @@ class EmergencyForegroundService : Service() {
             this, android.Manifest.permission.ACCESS_FINE_LOCATION
         ) == android.content.pm.PackageManager.PERMISSION_GRANTED
 
-    private fun startAsForeground(isSos: Boolean, recordAudio: Boolean) {
+    private fun buildEmergencyNotification(isSos: Boolean, recordAudio: Boolean): Notification {
         val open = PendingIntent.getActivity(
             this, 0, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val notification: Notification = NotificationCompat.Builder(this, PukaarApp.CHANNEL_EMERGENCY)
+        return NotificationCompat.Builder(this, PukaarApp.CHANNEL_EMERGENCY)
             .setContentTitle(if (isSos) "SOS ACTIVE" else "HELP ACTIVE")
             .setContentText(
                 if (recordAudio) getString(R.string.emergency_recording_notification)
@@ -114,22 +125,26 @@ class EmergencyForegroundService : Service() {
             .setContentIntent(open)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .build()
+    }
 
+    private fun startAsForeground(isSos: Boolean, recordAudio: Boolean) {
+        val notification = buildEmergencyNotification(isSos, recordAudio)
         var types = if (Build.VERSION.SDK_INT >= 34) {
-            ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE or ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC
+            ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
         } else 0
-        if (hasLocationPermission()) {
-            types = types or if (Build.VERSION.SDK_INT >= 29) {
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
-            } else 0
+        if (hasLocationPermission() && Build.VERSION.SDK_INT >= 29) {
+            types = types or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
         }
-        if (recordAudio && hasRecordAudioPermission()) {
-            types = types or if (Build.VERSION.SDK_INT >= 29) {
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
-            } else 0
+        if (recordAudio && hasRecordAudioPermission() && Build.VERSION.SDK_INT >= 29) {
+            types = types or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
         }
-
-        ServiceCompat.startForeground(this, NOTIF_ID, notification, types)
+        try {
+            ServiceCompat.startForeground(this, NOTIF_ID, notification, types)
+        } catch (e: Exception) {
+            android.util.Log.e("PUKAAR", "typed emergency startForeground failed, bare", e)
+            @Suppress("DEPRECATION")
+            startForeground(NOTIF_ID, notification)
+        }
     }
 
     private fun acquireWakeLock() {

@@ -31,7 +31,8 @@ class ScreenWakeReceiver : BroadcastReceiver() {
                     Log.i(TAG, "Screen wake — checking pending alert")
                     val appCtx = context.applicationContext
                     PendingAlertChecker.checkAndFire(appCtx)
-                    AlertMonitorService.startGuard(appCtx)
+                    // Do not start FGS from a receiver — only poll + schedule.
+                    MonitorWatchdogReceiver.schedule(appCtx)
                 }
             } finally {
                 runCatching { pending.finish() }

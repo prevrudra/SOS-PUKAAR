@@ -20,7 +20,7 @@ class MonitorBoostWorker(
             val token = AlertSession(applicationContext).token()
             if (!token.isNullOrBlank()) {
                 PendingAlertChecker.checkAndFire(applicationContext)
-                AlertMonitorService.startGuard(applicationContext)
+                // Never start FGS from a Worker — Motorola kill loop. Alarms poll instead.
                 MonitorWatchdogReceiver.schedule(applicationContext)
                 FcmRegistrar.refreshAndRegister(applicationContext)
             }
