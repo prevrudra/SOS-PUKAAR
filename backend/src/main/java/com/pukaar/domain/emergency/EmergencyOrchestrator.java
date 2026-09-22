@@ -71,13 +71,66 @@ public class EmergencyOrchestrator {
                         "mockDrill", mockDrill
                 ));
             } else {
-                // Resume existing emergency — re-fire any undelivered alerts
+                // Resume existing emergency — apply newly selected mode (SOS vs HELP)
+                // so a prior HELP session is not shown as HELP when the user picks SOS.
+                TriggerType previous = active.getTriggerType();
+                boolean modeChanged = triggerType != null && previous != triggerType;
+                if (modeChanged) {
+                    active.setTriggerType(triggerType);
+                    active.setMockDrill(mockDrill);
+                    if (!mockDrill && triggerType != TriggerType.HELP && triggerType != TriggerType.INACTIVITY) {
+                        active.setCall112Status(Call112Status.INITIATED);
+                    }
+                    active.setStatus(EmergencyStatus.WAITING_SAFE);
+                    eventRepo.save(active);
+                    audit(active.getId(), userId, "MODE_UPDATED_ON_RETRIGGER", Map.of(
+                            "from", previous == null ? "" : previous.name(),
+                            "to", triggerType.name()
+                    ));
+                }
                 if (lat != null && lng != null) {
                     applyLocation(active, lat, lng, accuracy);
                 }
-                reNotifyFailedDeliveries(active);
+                if (batteryPct != null) active.setBatteryPct(batteryPct);
+                if (networkType != null) active.setNetworkType(networkType);
+                eventRepo.save(active);
+                if (modeChanged) {
+                    // Re-send alerts with the updated SOS/HELP template (no duplicate delivery rows).
+                    List<ContactDeliveryEntity> deliveries = deliveryRepo.findByEventId(active.getId());
+                    if (deliveries.isEmpty()) {
+                        UserEntity user = userRepo.findById(userId)
+                                .orElseThrow(() -> new ApiException("USER_NOT_FOUND", "User not found"));
+                        notifyContacts(user, active);
+                    } else {
+                        for (ContactDeliveryEntity d : deliveries) {
+                            d.setStatus(DeliveryStatus.PENDING);
+                            d.setLastError(null);
+                            deliveryRepo.save(d);
+                            UUID eUserId = active.getUserId();
+                            UUID eId = active.getId();
+                            UUID dId = d.getId();
+                            if (TransactionSynchronizationManager.isSynchronizationActive()) {
+                                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                                    @Override
+                                    public void afterCommit() {
+                                        notificationService.enqueueEmergencyAlert(eUserId, eId, dId);
+                                    }
+                                });
+                            } else {
+                                notificationService.enqueueEmergencyAlert(eUserId, eId, dId);
+                            }
+                        }
+                        audit(active.getId(), userId, "MODE_CHANGE_RENNOTIFY", Map.of(
+                                "count", deliveries.size(),
+                                "to", triggerType.name()
+                        ));
+                    }
+                } else {
+                    reNotifyFailedDeliveries(active);
+                }
                 Map<String, Object> dto = toEventDto(active, true);
                 dto.put("resumed", true);
+                dto.put("modeUpdated", modeChanged);
                 return dto;
             }
         }

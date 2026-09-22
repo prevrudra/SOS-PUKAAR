@@ -60,13 +60,15 @@ fun EmergencyActiveScreen(
             .navigationBarsPadding()
             .padding(20.dp)
     ) {
+        val isHelp = !isMockDrill &&
+            event?.triggerType?.equals("HELP", ignoreCase = true) == true
         Text(
             text = when {
                 isMockDrill -> stringResource(R.string.emergency_mock_drill_active)
-                event?.triggerType == "HELP" -> stringResource(R.string.emergency_help_active)
+                isHelp -> stringResource(R.string.emergency_help_active)
                 else -> stringResource(R.string.emergency_sos_active)
             }.uppercase(),
-            color = if (isMockDrill) PukaarOrange else PukaarRed,
+            color = if (isMockDrill || isHelp) PukaarOrange else PukaarRed,
             fontSize = 24.sp,
             fontWeight = FontWeight.Black
         )
@@ -193,16 +195,19 @@ fun EmergencyActiveScreen(
                 )
             }
 
-            event?.audioSegments?.let { segments ->
-                val uploaded = segments.count { it.cloudSafe == true }
-                InfoCard(
-                    title = stringResource(R.string.emergency_audio),
-                    body = if (segments.isEmpty()) {
-                        stringResource(R.string.emergency_audio_starting)
-                    } else {
-                        stringResource(R.string.emergency_audio_segments_detail, segments.size, uploaded)
-                    }
-                )
+            // Audio is SOS/mock only — never show "recording" on HELP.
+            if (isMockDrill || !isHelp) {
+                event?.audioSegments?.let { segments ->
+                    val uploaded = segments.count { it.cloudSafe == true }
+                    InfoCard(
+                        title = stringResource(R.string.emergency_audio),
+                        body = if (segments.isEmpty()) {
+                            stringResource(R.string.emergency_audio_starting)
+                        } else {
+                            stringResource(R.string.emergency_audio_segments_detail, segments.size, uploaded)
+                        }
+                    )
+                }
             }
         }
 

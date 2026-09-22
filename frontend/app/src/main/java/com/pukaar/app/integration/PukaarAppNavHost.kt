@@ -363,6 +363,7 @@ private fun EmergencyActiveRoute(
             // Stop background recording immediately — do not wait for the API
             EmergencyForegroundService.stop(context)
             scope.launch {
+                var closedOk = false
                 try {
                     if (isMockDrill) {
                         val result = runCatching {
@@ -370,7 +371,9 @@ private fun EmergencyActiveRoute(
                         }
                         if (result.isFailure) {
                             // Soft-close the drill event so UI never hangs if contacts aren't verified yet
-                            runCatching { PukaarApp.instance.repository.markSafe(eventId) }
+                            closedOk = runCatching {
+                                PukaarApp.instance.repository.markSafe(eventId)
+                            }.isSuccess
                             android.widget.Toast.makeText(
                                 context,
                                 result.exceptionOrNull()?.message
@@ -378,25 +381,54 @@ private fun EmergencyActiveRoute(
                                 android.widget.Toast.LENGTH_LONG
                             ).show()
                         } else {
+                            closedOk = true
                             PukaarApp.instance.sessionStore.setMockDrillPassed(true)
                             PukaarApp.instance.sessionStore.setProtectionReady(true)
                         }
                     } else {
-                        val safeResult = runCatching { PukaarApp.instance.repository.markSafe(eventId) }
+                        var safeResult: Result<Any?> = Result.failure(IllegalStateException("not tried"))
+                        repeat(3) { attempt ->
+                            safeResult = runCatching {
+                                PukaarApp.instance.repository.markSafe(eventId)
+                            }
+                            if (safeResult.isSuccess) return@repeat
+                            kotlinx.coroutines.delay(600L * (attempt + 1))
+                        }
+                        closedOk = safeResult.isSuccess
+                        if (!closedOk) {
+                            val who = event?.userName
+                                ?: runCatching { PukaarApp.instance.repository.me().fullName }.getOrNull()
+                                ?: "PUKAAR user"
+                            runCatching {
+                                com.pukaar.app.util.EmergencyAlertHelper.sendSafeSmsToContacts(context, who)
+                            }
+                        }
                         android.widget.Toast.makeText(
                             context,
-                            if (safeResult.isSuccess) {
+                            if (closedOk) {
                                 "Contacts notified that you are safe"
                             } else {
-                                safeResult.exceptionOrNull()?.message
-                                    ?: "Could not notify contacts — check network and try again"
+                                "Could not reach server — safe SMS sent. Tap I'm Safe again if alert stays open."
                             },
                             android.widget.Toast.LENGTH_LONG
                         ).show()
                     }
                 } finally {
-                    runCatching { EmergencyForegroundService.stop(context) }
-                    onClosed()
+                    if (closedOk || isMockDrill) {
+                        runCatching { EmergencyForegroundService.stop(context) }
+                        com.pukaar.app.emergency.EmergencySessionStore.clear(context)
+                        onClosed()
+                    } else {
+                        // Keep screen open and resume location until server confirms close
+                        val isSos = event?.triggerType?.equals("HELP", ignoreCase = true) != true
+                        EmergencyForegroundService.start(
+                            context,
+                            eventId,
+                            isSos = isSos,
+                            recordAudio = false
+                        )
+                        finishing = false
+                    }
                 }
             }
         }
