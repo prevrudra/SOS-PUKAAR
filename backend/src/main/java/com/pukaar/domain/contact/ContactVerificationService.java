@@ -1,6 +1,7 @@
 package com.pukaar.domain.contact;
 
 import com.pukaar.common.ApiException;
+import com.pukaar.common.ContactRole;
 import com.pukaar.common.PhoneNumbers;
 import com.pukaar.common.PlanRegion;
 import com.pukaar.domain.alert.YourBulkSmsSender;
@@ -26,6 +27,7 @@ import java.util.UUID;
 public class ContactVerificationService {
     private static final SecureRandom RANDOM = new SecureRandom();
     private static final int OTP_TTL_MINUTES = 15;
+    private static final int RESEND_COOLDOWN_SECONDS = 30;
 
     private final TrustedContactRepository contactRepo;
     private final UserRepository userRepo;
@@ -39,8 +41,33 @@ public class ContactVerificationService {
         PhoneNumbers.requireAllowedForRegion(phoneE164, region);
     }
 
+    /** Reject adding the owner's own phone as a trusted / inactivity contact. */
+    public void enforceNotSelf(UUID ownerUserId, String phoneE164) {
+        userRepo.findById(ownerUserId).ifPresent(owner -> {
+            if (PhoneNumbers.sameNumber(owner.getPhoneE164(), phoneE164)) {
+                throw new ApiException("SELF_CONTACT",
+                        "You cannot add your own phone number as a trusted contact");
+            }
+        });
+    }
+
+    /** SOS + inactivity trusted contacts need OTP; pre-saved help numbers do not. */
+    public static boolean requiresOtp(ContactRole role) {
+        return role == ContactRole.SOS_TRUSTED || role == ContactRole.HELP_BACKUP;
+    }
+
+    public record OtpIssueResult(TrustedContactEntity contact, boolean delivered, String channel, String message) {}
+
     @Transactional
-    public TrustedContactEntity issueAndSendOtp(TrustedContactEntity contact, String ownerDisplayName) {
+    public OtpIssueResult issueAndSendOtp(TrustedContactEntity contact, String ownerDisplayName) {
+        if (contact.getVerifySentAt() != null) {
+            long since = ChronoUnit.SECONDS.between(contact.getVerifySentAt(), Instant.now());
+            if (since >= 0 && since < RESEND_COOLDOWN_SECONDS) {
+                throw new ApiException("OTP_COOLDOWN",
+                        "Please wait " + (RESEND_COOLDOWN_SECONDS - since) + " seconds before resending");
+            }
+        }
+
         String code = String.format("%06d", RANDOM.nextInt(1_000_000));
         contact.setVerified(false);
         contact.setVerifyCodeHash(passwordEncoder.encode(code));
@@ -48,9 +75,11 @@ public class ContactVerificationService {
         contact.setVerifySentAt(Instant.now());
         contact = contactRepo.save(contact);
 
-        String who = ownerDisplayName == null || ownerDisplayName.isBlank() ? "a PUKAAR user" : ownerDisplayName.trim();
+        String who = ownerDisplayName == null || ownerDisplayName.isBlank()
+                ? "a PUKAAR user" : ownerDisplayName.trim();
         String phone = contact.getPhoneE164();
         boolean sent = false;
+        String channel = null;
 
         // Prefer WhatsApp — no DLT template restrictions.
         if (whatsApp.isConfigured()) {
@@ -60,23 +89,27 @@ public class ContactVerificationService {
                     + "Install PUKAAR High Alert to receive their safety alerts.";
             sent = whatsApp.sendText(phone, waBody);
             if (sent) {
+                channel = "WHATSAPP";
                 log.info("Contact verification OTP sent via WhatsApp to {}", phone);
             }
         }
 
         // Fallback to SMS using DLT OTP template format.
         if (!sent && smsSender.isConfigured()) {
-            // Use sendOtp which applies the DLT-approved OTP template.
             sent = smsSender.sendOtp(phone, code);
             if (sent) {
+                channel = "SMS";
                 log.info("Contact verification OTP sent via SMS to {}", phone);
             }
         }
 
         if (!sent) {
             log.warn("Could not deliver contact OTP to {} — code generated for verify API", phone);
+            return new OtpIssueResult(contact, false, null,
+                    "Could not deliver verification code. Ask them to check WhatsApp, or tap Resend.");
         }
-        return contact;
+        return new OtpIssueResult(contact, true, channel,
+                "Verification code sent via " + channel + " to " + phone);
     }
 
     @Transactional

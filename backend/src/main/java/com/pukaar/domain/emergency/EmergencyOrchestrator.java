@@ -500,7 +500,7 @@ public class EmergencyOrchestrator {
                 .findByOwnerUserIdAndContactRoleInAndActiveTrue(userId, roles)
                 .stream()
                 .filter(TrustedContactEntity::isVerified)
-                .filter(c -> ownerPhone == null || !ownerPhone.equals(c.getPhoneE164()))
+                .filter(c -> ownerPhone == null || !PhoneNumbers.sameNumber(ownerPhone, c.getPhoneE164()))
                 .sorted(Comparator.comparingInt(TrustedContactEntity::getPriorityOrder))
                 .limit(2)
                 .toList();

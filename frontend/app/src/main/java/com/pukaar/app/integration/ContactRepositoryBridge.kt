@@ -92,6 +92,13 @@ object ContactRepositoryBridge {
         senderName: String?,
         shareHighAlert: Boolean = true
     ): Result<String> {
+        if (draft.type == ContactType.SOS || draft.type == ContactType.INACTIVITY) {
+            val ownerPhone = runCatching { PukaarApp.instance.repository.me().phone }.getOrNull()
+            val contactPhone = normalizePhone(draft.mobile, draft.dialCode)
+            if (phonesMatch(ownerPhone, contactPhone)) {
+                return Result.failure(Exception("You cannot add your own phone number as a trusted contact"))
+            }
+        }
         val req = toRequest(draft)
         return try {
             val contact = if (!draft.id.isNullOrBlank()) {
@@ -100,8 +107,12 @@ object ContactRepositoryBridge {
                 PukaarApp.instance.repository.addContact(req)
             }
             val id = contact.id ?: return Result.failure(Exception("Contact not saved"))
-            // Optional High Alert install invite — not used as the OTP source.
-            if (shareHighAlert) {
+            if (contact.otpDelivered == false) {
+                // Contact exists; OTP failed — still return id so verify UI can offer Resend.
+                android.util.Log.w("PUKAAR", contact.otpMessage ?: "OTP not delivered for $id")
+            }
+            // High Alert share only after successful verify elsewhere — skip on create by default.
+            if (shareHighAlert && contact.verified == true) {
                 sendHighAlertInvite(context, draft.name, contact.phone ?: req.phone, senderName)
             }
             Result.success(id)
@@ -161,20 +172,28 @@ object ContactRepositoryBridge {
         Result.failure(e)
     }
 
-    /** Asks the server to re-issue and send the OTP. Optionally shares High Alert install SMS. */
+    /** Asks the server to re-issue and send the OTP. High Alert share is off by default. */
     suspend fun resendVerification(
         context: Context,
         contact: ContactUiModel,
         senderName: String?,
-        shareHighAlert: Boolean = true
-    ): Result<ContactDto> = try {
-        val updated = PukaarApp.instance.repository.resendVerification(contact.id)
-        if (shareHighAlert) {
-            sendHighAlertInvite(context, contact.name, contact.phoneNumber, senderName)
+        shareHighAlert: Boolean = false
+    ): Result<ContactDto> {
+        return try {
+            val updated = PukaarApp.instance.repository.resendVerification(contact.id)
+            if (updated.otpDelivered == false) {
+                Result.failure(
+                    Exception(updated.otpMessage ?: "Could not deliver verification code. Try again.")
+                )
+            } else {
+                if (shareHighAlert) {
+                    sendHighAlertInvite(context, contact.name, contact.phoneNumber, senderName)
+                }
+                Result.success(updated)
+            }
+        } catch (e: Exception) {
+            Result.failure(Exception(e.userMessage()))
         }
-        Result.success(updated)
-    } catch (e: Exception) {
-        Result.failure(e)
     }
 
     suspend fun verifyContact(id: String, code: String): Result<ContactDto> = try {

@@ -54,7 +54,7 @@ import com.pukaar.app.ui.theme.TextSecondary
 import com.pukaar.app.ui.theme.TextTertiary
 import kotlinx.coroutines.launch
 
-private const val InactivitySecondaryMax = 2
+private const val InactivitySecondaryMax = 1
 private const val InactivityMinNumbers = 1
 private const val InactivityMaxNumbers = 2
 

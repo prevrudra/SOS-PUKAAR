@@ -94,6 +94,7 @@ fun ViewContactsScreen(
     onDeletePreSavedNumber: (PreSavedNumberUiModel) -> Unit,
     onSaveInactivityTiming: (InactivityTiming) -> Unit,
     onAddContact: (ContactType) -> Unit = {},
+    onOpenContact: ((ContactUiModel) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     // What a dialog is currently open on; null means no dialog.
@@ -122,12 +123,19 @@ fun ViewContactsScreen(
                     type = type,
                     contacts = contacts.filterByType(type).orderedByPriority(),
                     preSavedNumbers = preSavedNumbers.filterByAlert(type),
-                    onEditContact = { editingContact = it },
+                    onEditContact = { contact ->
+                        if (!contact.verified && onOpenContact != null) {
+                            onOpenContact(contact)
+                        } else {
+                            editingContact = contact
+                        }
+                    },
                     onRemoveContact = { removingContact = it },
                     onEditNumber = { editingNumber = it },
                     onRemoveNumber = { removingNumber = it }
                 ) {
                     Spacer(modifier = Modifier.height(10.dp))
+                    val maxTrusted = maxTrustedFor(type)
                     val trustedCount = contacts.filterByType(type).size
                     AccentButton(
                         text = stringResource(
@@ -136,9 +144,9 @@ fun ViewContactsScreen(
                         ),
                         onClick = { onAddContact(type) },
                         accent = type.accent,
-                        enabled = trustedCount < MaxTrustedContactsPerCategory
+                        enabled = trustedCount < maxTrusted
                     )
-                    if (trustedCount >= MaxTrustedContactsPerCategory) {
+                    if (trustedCount >= maxTrusted) {
                         Text(
                             text = stringResource(R.string.onboarding_max_contacts),
                             color = TextTertiary,
@@ -279,7 +287,7 @@ private fun ServiceSection(
                 contacts.forEachIndexed { index, contact ->
                     EntryRow(
                         name = contact.name,
-                        phone = contact.phoneNumber,
+                        phone = contact.phoneNumber + if (contact.verified) " ✓" else " · verify",
                         accent = type.accent,
                         relation = contact.relation,
                         onEdit = { onEditContact(contact) },

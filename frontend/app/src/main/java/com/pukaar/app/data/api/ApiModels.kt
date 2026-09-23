@@ -43,7 +43,12 @@ data class ContactDto(
     val relationship: String?,
     val notes: String? = null,
     val priorityOrder: Int?,
-    val verified: Boolean? = false
+    val verified: Boolean? = false,
+    val verificationPending: Boolean? = null,
+    val requiresVerification: Boolean? = null,
+    val otpDelivered: Boolean? = null,
+    val otpChannel: String? = null,
+    val otpMessage: String? = null
 )
 data class ContactRequest(
     val name: String,
@@ -53,7 +58,7 @@ data class ContactRequest(
     val notes: String? = null,
     val priorityOrder: Int = 1
 )
-data class VerifyContactRequest(val code: String = "123456")
+data class VerifyContactRequest(val code: String)
 data class TriggerRequest(
     val triggerType: String,
     val latitude: Double? = null,

@@ -321,6 +321,43 @@ fun PukaarNavHost(
             )
         }
 
+        composable(Route.ElderlyHelp.path) {
+            var window by remember {
+                mutableStateOf(com.pukaar.app.ui.screen.elderlyhelp.InactivityWindow.TWELVE)
+            }
+            var medication by remember { mutableStateOf(true) }
+            var verifiedCount by remember { mutableStateOf(0) }
+            var pendingCount by remember { mutableStateOf(0) }
+            LaunchedEffect(Unit) {
+                runCatching {
+                    val loaded = actions.loadElderlyHelp()
+                    window = loaded.first
+                    medication = loaded.second
+                }
+                val inactivity = contacts.ifEmpty { actions.loadContacts() }
+                    .filter { it.type == ContactType.INACTIVITY }
+                verifiedCount = inactivity.count { it.verified }
+                pendingCount = inactivity.count { !it.verified }
+            }
+            com.pukaar.app.ui.screen.elderlyhelp.ElderlyHelpScreen(
+                onBack = { navController.popBackStack() },
+                initialWindow = window,
+                initialMedicationReminder = medication,
+                verifiedTrustedCount = verifiedCount,
+                pendingTrustedCount = pendingCount,
+                onSave = { w, med ->
+                    actions.saveElderlyHelp(w, med)
+                    showSuccess(SuccessType.INACTIVITY_TIMING_SAVED)
+                },
+                onSetupContacts = {
+                    navController.navigate(Route.InactivityOnboarding.path)
+                },
+                onManageContacts = {
+                    navController.navigate(Route.ViewContacts.path)
+                }
+            )
+        }
+
         composable(Route.ViewContacts.path) {
             LaunchedEffect(Unit) { onContactsRefresh?.invoke() }
             val listed = contacts.ifEmpty { actions.loadContacts() }
@@ -331,6 +368,9 @@ fun PukaarNavHost(
                 onBack = { navController.popBackStack() },
                 onAddContact = { type ->
                     navController.navigate(Route.AddContact.pathFor(type.name))
+                },
+                onOpenContact = { contact ->
+                    navController.navigate(Route.EditContact.pathFor(contact.id))
                 },
                 onSaveContact = { contact ->
                     val draft = contact.toDraft()
@@ -385,6 +425,7 @@ fun PukaarNavHost(
             val initialType = runCatching {
                 ContactType.valueOf(typeName ?: ContactType.SOS.name)
             }.getOrDefault(ContactType.SOS)
+            val addContext = androidx.compose.ui.platform.LocalContext.current
             ContactFormScreen(
                 initial = ContactDraft(
                     name = "",
@@ -397,8 +438,20 @@ fun PukaarNavHost(
                 onSave = { draft ->
                     if (onSaveContact != null) {
                         onSaveContact(draft) {
-                            showSuccess(SuccessType.CONTACT_ADDED)
-                            navController.popBackStack()
+                            onContactsRefresh?.invoke()
+                            if (initialType == ContactType.SOS || initialType == ContactType.INACTIVITY) {
+                                android.widget.Toast.makeText(
+                                    addContext,
+                                    "Code sent — open the contact to enter verification OTP",
+                                    android.widget.Toast.LENGTH_LONG
+                                ).show()
+                                navController.navigate(Route.ViewContacts.path) {
+                                    popUpTo(Route.AddContact.pathFor(initialType.name)) { inclusive = true }
+                                }
+                            } else {
+                                showSuccess(SuccessType.CONTACT_ADDED)
+                                navController.popBackStack()
+                            }
                         }
                     } else {
                         actions.saveContact(draft)

@@ -4,6 +4,7 @@ import com.pukaar.common.ApiException;
 import com.pukaar.common.ContactRole;
 import com.pukaar.common.PhoneNumbers;
 import com.pukaar.domain.contact.ContactVerificationService;
+import com.pukaar.domain.contact.ContactVerificationService.OtpIssueResult;
 import com.pukaar.domain.contact.TrustedContactEntity;
 import com.pukaar.domain.contact.TrustedContactRepository;
 import com.pukaar.security.SecurityUtils;
@@ -19,7 +20,6 @@ import java.util.*;
 @RequestMapping("/api/v1/contacts")
 @RequiredArgsConstructor
 public class ContactController {
-    /** SOS / HELP_MONITOR etc. — product caps applied per role group below. */
     private static final int MAX_SOS = 3;
     private static final int MAX_INACTIVITY_TRUSTED = 2;
     private static final int MAX_HELP_NUMBERS = 2;
@@ -30,7 +30,7 @@ public class ContactController {
     @GetMapping
     public List<Map<String, Object>> list() {
         return contactRepo.findByOwnerUserIdAndActiveTrueOrderByPriorityOrderAsc(SecurityUtils.currentUserId())
-                .stream().map(this::toDto).toList();
+                .stream().map(c -> toDto(c, null)).toList();
     }
 
     @PostMapping
@@ -39,6 +39,9 @@ public class ContactController {
         String phone = normalize(req.getPhone());
         verificationService.enforcePhoneRegion(ownerId, phone);
         ContactRole role = req.getRole() == null ? ContactRole.SOS_TRUSTED : req.getRole();
+        if (ContactVerificationService.requiresOtp(role)) {
+            verificationService.enforceNotSelf(ownerId, phone);
+        }
 
         Optional<TrustedContactEntity> match = findMatching(ownerId, phone, role);
         if (match.isPresent()) {
@@ -46,10 +49,7 @@ public class ContactController {
             applyRequest(c, req, phone, role);
             c.setActive(true);
             c = contactRepo.save(c);
-            if (!c.isVerified()) {
-                c = verificationService.issueAndSendOtp(c, verificationService.ownerDisplayName(ownerId));
-            }
-            return toDto(c);
+            return maybeSendOtp(ownerId, c);
         }
 
         enforceRoleLimit(ownerId, role);
@@ -61,7 +61,7 @@ public class ContactController {
                 .relationship(req.getRelationship())
                 .notes(req.getNotes())
                 .priorityOrder(req.getPriorityOrder() == null ? 1 : req.getPriorityOrder())
-                .verified(false)
+                .verified(!ContactVerificationService.requiresOtp(role))
                 .active(true)
                 .build();
         try {
@@ -73,24 +73,29 @@ public class ContactController {
             existing.setActive(true);
             c = contactRepo.save(existing);
         }
-        c = verificationService.issueAndSendOtp(c, verificationService.ownerDisplayName(ownerId));
-        return toDto(c);
+        return maybeSendOtp(ownerId, c);
     }
 
     @PostMapping("/{id}/verify")
     public Map<String, Object> verify(@PathVariable UUID id, @RequestBody(required = false) VerifyRequest req) {
         String code = req == null ? null : req.getCode();
-        return toDto(verificationService.verify(SecurityUtils.currentUserId(), id, code));
+        return toDto(verificationService.verify(SecurityUtils.currentUserId(), id, code), null);
     }
 
     @PostMapping("/{id}/resend-verification")
     public Map<String, Object> resend(@PathVariable UUID id) {
         TrustedContactEntity c = owned(id);
         if (c.isVerified()) {
-            return toDto(c);
+            return toDto(c, null);
         }
-        c = verificationService.issueAndSendOtp(c, verificationService.ownerDisplayName(SecurityUtils.currentUserId()));
-        return toDto(c);
+        if (!ContactVerificationService.requiresOtp(c.getContactRole())) {
+            c.setVerified(true);
+            return toDto(contactRepo.save(c), null);
+        }
+        verificationService.enforceNotSelf(SecurityUtils.currentUserId(), c.getPhoneE164());
+        OtpIssueResult result = verificationService.issueAndSendOtp(
+                c, verificationService.ownerDisplayName(SecurityUtils.currentUserId()));
+        return toDto(result.contact(), result);
     }
 
     @PutMapping("/{id}")
@@ -101,6 +106,9 @@ public class ContactController {
         String newPhone = req.getPhone() != null ? normalize(req.getPhone()) : c.getPhoneE164();
         verificationService.enforcePhoneRegion(ownerId, newPhone);
         ContactRole newRole = req.getRole() != null ? req.getRole() : c.getContactRole();
+        if (ContactVerificationService.requiresOtp(newRole)) {
+            verificationService.enforceNotSelf(ownerId, newPhone);
+        }
         boolean phoneChanged = !PhoneNumbers.sameNumber(c.getPhoneE164(), newPhone);
 
         Optional<TrustedContactEntity> conflict = findMatching(ownerId, newPhone, newRole)
@@ -118,15 +126,18 @@ public class ContactController {
             contactRepo.save(c);
             other = contactRepo.save(other);
             if (phoneChanged || !other.isVerified()) {
-                other = verificationService.issueAndSendOtp(other, verificationService.ownerDisplayName(ownerId));
+                return maybeSendOtp(ownerId, other);
             }
-            return toDto(other);
+            return toDto(other, null);
         }
 
         applyRequest(c, req, newPhone, newRole);
         c.setActive(true);
-        if (phoneChanged) {
+        if (phoneChanged && ContactVerificationService.requiresOtp(newRole)) {
             c.setVerified(false);
+        }
+        if (!ContactVerificationService.requiresOtp(newRole)) {
+            c.setVerified(true);
         }
         try {
             c = contactRepo.save(c);
@@ -141,9 +152,9 @@ public class ContactController {
             c = contactRepo.save(existing);
         }
         if (phoneChanged || !c.isVerified()) {
-            c = verificationService.issueAndSendOtp(c, verificationService.ownerDisplayName(ownerId));
+            return maybeSendOtp(ownerId, c);
         }
-        return toDto(c);
+        return toDto(c, null);
     }
 
     @DeleteMapping("/{id}")
@@ -152,6 +163,22 @@ public class ContactController {
         c.setActive(false);
         contactRepo.save(c);
         return Map.of("deleted", true);
+    }
+
+    private Map<String, Object> maybeSendOtp(UUID ownerId, TrustedContactEntity c) {
+        if (!ContactVerificationService.requiresOtp(c.getContactRole())) {
+            if (!c.isVerified()) {
+                c.setVerified(true);
+                c = contactRepo.save(c);
+            }
+            return toDto(c, null);
+        }
+        if (c.isVerified()) {
+            return toDto(c, null);
+        }
+        OtpIssueResult result = verificationService.issueAndSendOtp(
+                c, verificationService.ownerDisplayName(ownerId));
+        return toDto(result.contact(), result);
     }
 
     private void applyRequest(TrustedContactEntity c, ContactRequest req, String phone, ContactRole role) {
@@ -168,18 +195,10 @@ public class ContactController {
                 contactRepo.findByOwnerUserIdAndPhoneE164AndContactRole(ownerId, phone, role);
         if (exact.isPresent()) return exact;
 
-        String digits = phone.startsWith("+") ? phone.substring(1) : phone;
-        String suffix = digits.length() >= 10 ? digits.substring(digits.length() - 10) : digits;
-        if (suffix.isBlank()) return Optional.empty();
-
         List<TrustedContactEntity> all = contactRepo.findByOwnerUserId(ownerId);
         return all.stream()
                 .filter(c -> c.getContactRole() == role)
-                .filter(c -> {
-                    String p = c.getPhoneE164() == null ? "" : c.getPhoneE164();
-                    String d = p.startsWith("+") ? p.substring(1) : p.replaceAll("\\D", "");
-                    return d.equals(digits) || (suffix.length() >= 10 && d.endsWith(suffix));
-                })
+                .filter(c -> PhoneNumbers.sameNumber(c.getPhoneE164(), phone))
                 .max(Comparator.comparing(TrustedContactEntity::isActive)
                         .thenComparing(TrustedContactEntity::getUpdatedAt,
                                 Comparator.nullsLast(Comparator.naturalOrder())));
@@ -193,7 +212,7 @@ public class ContactController {
         return c;
     }
 
-    private Map<String, Object> toDto(TrustedContactEntity c) {
+    private Map<String, Object> toDto(TrustedContactEntity c, OtpIssueResult otp) {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("id", c.getId());
         m.put("name", c.getName());
@@ -203,7 +222,13 @@ public class ContactController {
         m.put("notes", c.getNotes());
         m.put("priorityOrder", c.getPriorityOrder());
         m.put("verified", c.isVerified());
-        m.put("verificationPending", !c.isVerified());
+        m.put("verificationPending", ContactVerificationService.requiresOtp(c.getContactRole()) && !c.isVerified());
+        m.put("requiresVerification", ContactVerificationService.requiresOtp(c.getContactRole()));
+        if (otp != null) {
+            m.put("otpDelivered", otp.delivered());
+            m.put("otpChannel", otp.channel());
+            m.put("otpMessage", otp.message());
+        }
         return m;
     }
 
@@ -215,7 +240,6 @@ public class ContactController {
             case HELP_MONITOR, DOCTOR, NEIGHBOUR -> MAX_HELP_NUMBERS;
             default -> MAX_SOS;
         };
-        // Help numbers share a combined pool of 2 across HELP_MONITOR/DOCTOR/NEIGHBOUR
         if (role == ContactRole.HELP_MONITOR || role == ContactRole.DOCTOR || role == ContactRole.NEIGHBOUR) {
             long helpTotal = contactRepo.countByOwnerUserIdAndContactRoleAndActiveTrue(ownerId, ContactRole.HELP_MONITOR)
                     + contactRepo.countByOwnerUserIdAndContactRoleAndActiveTrue(ownerId, ContactRole.DOCTOR)

@@ -452,13 +452,25 @@ class PukaarActionsImpl(
     override fun deleteContact(contact: ContactUiModel) = Unit
     override fun savePreSavedNumber(number: com.pukaar.app.ui.screen.contacts.PreSavedNumberUiModel) = Unit
     override fun deletePreSavedNumber(number: com.pukaar.app.ui.screen.contacts.PreSavedNumberUiModel) = Unit
+    private var cachedInactivityTiming =
+        com.pukaar.app.ui.screen.onboarding.InactivityTiming()
+
     override fun loadInactivityTiming(): com.pukaar.app.ui.screen.onboarding.InactivityTiming {
-        // Return cached/default immediately — avoid ANR from blocking main thread.
-        // The actual value will be loaded and updated via saveInactivityTiming or sync.
-        return com.pukaar.app.ui.screen.onboarding.InactivityTiming()
+        // Non-blocking: return last known value; refresh in background.
+        scope.launch {
+            runCatching {
+                val s = PukaarApp.instance.repository.elderlySettings()
+                val hours = s.durationHours ?: s.urgentHours ?: 12
+                cachedInactivityTiming = com.pukaar.app.ui.screen.onboarding.InactivityTiming(
+                    durationHours = hours
+                )
+            }
+        }
+        return cachedInactivityTiming
     }
 
     override fun saveInactivityTiming(timing: com.pukaar.app.ui.screen.onboarding.InactivityTiming) {
+        cachedInactivityTiming = timing
         scope.launch {
             runCatching {
                 val hours = timing.durationHours
