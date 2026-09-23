@@ -14,6 +14,7 @@ import com.pukaar.domain.elderly.ElderlySettingsRepository;
 import com.pukaar.domain.elderly.InactivityEpisodeRepository;
 import com.pukaar.domain.elderly.InactivityService;
 import com.pukaar.domain.elderly.InactivityViewMoreService;
+import com.pukaar.domain.emergency.SosViewMoreService;
 import com.pukaar.domain.nearby.NearbyPlacesService;
 import com.pukaar.common.TriggerType;
 import com.pukaar.domain.user.UserEntity;
@@ -56,6 +57,7 @@ public class AlertDeliveryService {
     private final PukaarProperties props;
     private final InactivityEpisodeRepository inactivityEpisodeRepo;
     private final InactivityViewMoreService viewMoreService;
+    private final SosViewMoreService sosViewMoreService;
     private final ElderlySettingsRepository elderlySettingsRepo;
 
     @Transactional
@@ -454,6 +456,10 @@ public class AlertDeliveryService {
 
         sb.append("🆘 *EMERGENCY*\n");
         sb.append("112 — National Emergency\n");
+        if (event.getViewToken() != null && !event.getViewToken().isBlank()) {
+            sb.append("\n🔗 *View full PUKAAR alert:*\n");
+            sb.append(sosViewMoreService.publicViewUrl(event.getViewToken())).append("\n");
+        }
         sb.append("PUKAAR — Information that can help when you need it most.");
         return sb.toString();
     }

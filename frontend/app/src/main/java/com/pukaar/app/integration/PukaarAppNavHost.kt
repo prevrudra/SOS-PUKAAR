@@ -392,7 +392,21 @@ private fun EmergencyActiveRoute(
                                 PukaarApp.instance.repository.markSafe(eventId)
                             }
                             if (safeResult.isSuccess) return@repeat
+                            // Already closed on server after a slow first attempt — treat as success.
+                            if (isAlreadyClosed(safeResult.exceptionOrNull())) {
+                                safeResult = Result.success(Unit)
+                                return@repeat
+                            }
                             kotlinx.coroutines.delay(600L * (attempt + 1))
+                        }
+                        // If API still timed out, poll once — WA may already have been sent.
+                        if (safeResult.isFailure) {
+                            val stillOpen = runCatching {
+                                PukaarApp.instance.repository.activeEmergency()?.active == true
+                            }.getOrDefault(true)
+                            if (!stillOpen) {
+                                safeResult = Result.success(Unit)
+                            }
                         }
                         closedOk = safeResult.isSuccess
                         if (!closedOk) {
@@ -433,4 +447,19 @@ private fun EmergencyActiveRoute(
             }
         }
     )
+}
+
+private fun isAlreadyClosed(error: Throwable?): Boolean {
+    if (error == null) return false
+    val msg = error.message?.uppercase() ?: ""
+    if (msg.contains("EVENT_CLOSED") || msg.contains("ALREADY CLOSED")) return true
+    if (error is retrofit2.HttpException) {
+        val body = runCatching { error.response()?.errorBody()?.string() }.getOrNull()?.uppercase() ?: ""
+        if (body.contains("EVENT_CLOSED") || body.contains("ALREADY CLOSED")) return true
+        // Idempotent success from server after close can also be 200; 409/400 with code.
+        if (error.code() == 409 || error.code() == 400) {
+            return body.contains("CLOSED")
+        }
+    }
+    return false
 }

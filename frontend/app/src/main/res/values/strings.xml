@@ -717,9 +717,9 @@
     <string name="emergency_audio_segments">%1$d segment(s) recorded</string>
     <string name="emergency_audio_starting">Recording active — saving 60s segments</string>
     <string name="emergency_audio_segments_detail">Recording active — %1$d segment(s), %2$d uploaded to server</string>
-    <string name="emergency_recording_started">Background audio recording started</string>
+    <string name="emergency_recording_started">Background audio recording started on %1$s phone</string>
     <string name="emergency_recording_drill">Mock drill is recording — open Recordings after the drill to listen</string>
-    <string name="emergency_recording_notification">Background audio recording is on</string>
+    <string name="emergency_recording_notification">Background audio recording is on for %1$s</string>
     <string name="emergency_recording_auto_stopped">Audio recording stopped after 30 minutes</string>
     <string name="emergency_safe_sms_sent">Trusted contacts notified that you are safe</string>
     <string name="emergency_device_status">Device Status</string>

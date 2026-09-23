@@ -130,6 +130,8 @@ fun SampleAlertScreen(
     onBack: (() -> Unit)? = null,
     title: String = "PUKAAR SOS Alert",
     onBeforeAction: (() -> Unit)? = null,
+    /** Top-right × — closes the full-screen alert UI. */
+    onDismiss: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -146,20 +148,46 @@ fun SampleAlertScreen(
             .verticalScroll(rememberScrollState())
             .padding(bottom = 16.dp)
     ) {
-        if (onBack != null) {
-            ScreenHeader(title = title, onBack = onBack)
-        } else {
-            Text(
-                text = title,
-                style = TextStyle(
-                    color = Color(0xFF111827),
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.SemiBold
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
-            )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (onBack != null) {
+                Box(modifier = Modifier.weight(1f)) {
+                    ScreenHeader(title = title, onBack = onBack)
+                }
+            } else {
+                Text(
+                    text = title,
+                    style = TextStyle(
+                        color = Color(0xFF111827),
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold
+                    ),
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 8.dp, vertical = 12.dp)
+                )
+            }
+            if (onDismiss != null) {
+                Box(
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .clickable(role = Role.Button, onClick = onDismiss)
+                        .semantics { contentDescription = "Close screen" },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "×",
+                        color = Color(0xFF111827),
+                        fontSize = 28.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
         }
 
         Column(
@@ -194,9 +222,9 @@ fun SampleAlertScreen(
                 services = alert.emergencyServices,
                 onCall = dial
             )
-            Spacer(Modifier.height(4.dp))
+            Spacer(modifier.height(4.dp))
             EmergencyCallButton(onClick = { dial(AlertRepository.EMERGENCY_NUMBER) })
-            RecordingStartedBar()
+            RecordingStartedBar(userName = alert.senderName)
         }
     }
 }
@@ -368,7 +396,12 @@ private fun ModePriorityHeader(alert: SosAlert, onCall: () -> Unit) {
 }
 
 @Composable
-private fun RecordingStartedBar() {
+private fun RecordingStartedBar(userName: String? = null) {
+    val label = if (!userName.isNullOrBlank()) {
+        "Background recording has been started on ${userName.trim()}'s phone."
+    } else {
+        "Background recording has been started."
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -385,7 +418,7 @@ private fun RecordingStartedBar() {
         )
         Spacer(Modifier.width(10.dp))
         Text(
-            text = "Background recording has been started.",
+            text = label,
             color = LevelTwo,
             fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold,

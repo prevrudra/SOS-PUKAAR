@@ -59,12 +59,18 @@ class PukaarActionsImpl(
                 val settings = PukaarApp.instance.sessionStore.sosSettings()
                 if (settings.audio && (isSos || mockDrill)) {
                     withContext(Dispatchers.Main) {
+                        val who = runCatching {
+                            PukaarApp.instance.sessionStore.cachedFullName()
+                        }.getOrNull()?.takeIf { it.isNotBlank() }
                         android.widget.Toast.makeText(
                             context,
-                            context.getString(
-                                if (mockDrill) com.pukaar.app.R.string.emergency_recording_drill
-                                else com.pukaar.app.R.string.emergency_recording_started
-                            ),
+                            if (mockDrill) {
+                                context.getString(com.pukaar.app.R.string.emergency_recording_drill)
+                            } else if (who != null) {
+                                context.getString(com.pukaar.app.R.string.emergency_recording_started, who)
+                            } else {
+                                "Background audio recording started on your phone"
+                            },
                             android.widget.Toast.LENGTH_LONG
                         ).show()
                     }

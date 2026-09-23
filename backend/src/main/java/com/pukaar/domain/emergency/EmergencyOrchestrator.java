@@ -95,6 +95,7 @@ public class EmergencyOrchestrator {
                 }
                 if (batteryPct != null) active.setBatteryPct(batteryPct);
                 if (networkType != null) active.setNetworkType(networkType);
+                ensureViewToken(active);
                 eventRepo.save(active);
                 if (modeChanged) {
                     // Re-send alerts with the updated SOS/HELP template (no duplicate delivery rows).
@@ -145,6 +146,7 @@ public class EmergencyOrchestrator {
                 .status(EmergencyStatus.TRIGGERED)
                 .batteryPct(batteryPct)
                 .networkType(networkType)
+                .viewToken(newViewToken())
                 .build();
         event = eventRepo.save(event);
         audit(event.getId(), userId, "TRIGGERED", Map.of("trigger", triggerType.name(), "mock", mockDrill));
@@ -211,7 +213,15 @@ public class EmergencyOrchestrator {
 
     @Transactional
     public Map<String, Object> markSafe(UUID userId, UUID eventId, ClosureReason reason) {
-        EmergencyEventEntity event = requireOwnedActive(userId, eventId);
+        EmergencyEventEntity event = eventRepo.findById(eventId)
+                .orElseThrow(() -> new ApiException("EVENT_NOT_FOUND", "Emergency not found"));
+        if (!event.getUserId().equals(userId)) {
+            throw new ApiException("FORBIDDEN", "Not your event");
+        }
+        // Idempotent: client retries after timeout must not fail once the event is already closed.
+        if (event.getClosedAt() != null) {
+            return toEventDto(event, true);
+        }
         event.setClosureReason(reason == null ? ClosureReason.IM_SAFE : reason);
         event.setClosedAt(Instant.now());
         event.setStatus(EmergencyStatus.CLOSED);
@@ -219,11 +229,18 @@ public class EmergencyOrchestrator {
         locationUpdateNotifier.clear(eventId);
         audit(event.getId(), userId, "CLOSED", Map.of("reason", event.getClosureReason().name()));
         UUID closedId = event.getId();
-        // Notify contacts only after DB commit — synchronous so the API reflects real delivery.
+        // Return HTTP success as soon as the event is closed. WhatsApp/SMS runs async so
+        // long Meta round-trips cannot timeout the client into a false "server issues" toast.
         TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
             @Override
             public void afterCommit() {
-                deliveryStatusService.notifyContactsUserSafe(closedId);
+                java.util.concurrent.CompletableFuture.runAsync(() -> {
+                    try {
+                        deliveryStatusService.notifyContactsUserSafe(closedId);
+                    } catch (Exception e) {
+                        log.error("Safe notify failed for event {}", closedId, e);
+                    }
+                });
             }
         });
         return toEventDto(event, true);
@@ -614,18 +631,7 @@ public class EmergencyOrchestrator {
                 .stream()
                 .filter(TrustedContactEntity::isVerified)
                 .toList();
-        // Older contacts may never have been marked verified — still alert them
-        // rather than silently dropping the SOS.
-        if (contacts.isEmpty()) {
-            contacts = contactRepo
-                    .findByOwnerUserIdAndContactRoleInAndActiveTrue(user.getId(), roles);
-            if (!contacts.isEmpty()) {
-                audit(event.getId(), user.getId(), "ALERT_FALLBACK_UNVERIFIED_CONTACTS", Map.of(
-                        "count", contacts.size(),
-                        "trigger", event.getTriggerType().name()
-                ));
-            }
-        }
+        // Production: only verified SOS trusted contacts — never fall back to unverified.
         if (contacts.isEmpty()) {
             audit(event.getId(), user.getId(), "NO_VERIFIED_CONTACTS_FOR_ALERT", Map.of(
                     "trigger", event.getTriggerType().name()
@@ -672,6 +678,17 @@ public class EmergencyOrchestrator {
         return event;
     }
 
+    private void ensureViewToken(EmergencyEventEntity event) {
+        if (event.getViewToken() == null || event.getViewToken().isBlank()) {
+            event.setViewToken(newViewToken());
+        }
+    }
+
+    private static String newViewToken() {
+        return UUID.randomUUID().toString().replace("-", "")
+                + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
+    }
+
     private void audit(UUID eventId, UUID actor, String action, Map<String, Object> detail) {
         auditRepo.save(EmergencyAuditEntity.builder()
                 .eventId(eventId)
@@ -696,6 +713,13 @@ public class EmergencyOrchestrator {
         m.put("closureReason", event.getClosureReason());
         m.put("startedAt", event.getStartedAt());
         m.put("closedAt", event.getClosedAt());
+        if (event.getViewToken() != null && !event.getViewToken().isBlank()) {
+            m.put("viewToken", event.getViewToken());
+            String base = props.getPublicBaseUrl();
+            if (base == null || base.isBlank()) base = "https://pukaaralert.com/pukaar";
+            if (base.endsWith("/")) base = base.substring(0, base.length() - 1);
+            m.put("viewUrl", base + "/view/" + event.getViewToken());
+        }
         if (includeDetails) {
             userRepo.findById(event.getUserId()).ifPresent(u -> {
                 m.put("userName", u.getFullName());

@@ -40,6 +40,9 @@ class SessionStore(private val context: Context) {
     val region: Flow<String> = context.dataStore.data.map { it[regionKey] ?: "INDIA" }
     val indiaOnlyPhones: Flow<Boolean> = context.dataStore.data.map { it[indiaOnlyPhonesKey] ?: true }
 
+    suspend fun cachedFullName(): String? =
+        context.dataStore.data.first()[nameKey]
+
     suspend fun token(): String? = accessToken.first()
 
     suspend fun saveAuth(

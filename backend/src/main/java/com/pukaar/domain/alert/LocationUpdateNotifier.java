@@ -88,10 +88,10 @@ public class LocationUpdateNotifier {
         String coords = String.format(Locale.US, "%.6f, %.6f",
                 event.getLatitude(), event.getLongitude());
         // Text+link works on every WhatsApp client; location pin is extra when session allows.
-        String body = "*PUKAAR LIVE LOCATION*\n"
-                + who + " — updated " + when + " IST\n"
-                + "Coords: " + coords + "\n"
-                + "Open map: " + maps;
+        String body = "*PUKAAR — UPDATED LOCATION*\n"
+                + who + " — " + when + " IST\n"
+                + "📍 " + maps + "\n"
+                + "Coords: " + coords;
         String smsBody = "PUKAAR LIVE LOCATION: " + who + " @ " + when + " IST " + maps;
 
         Set<String> phonesSeen = new LinkedHashSet<>();

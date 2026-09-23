@@ -66,6 +66,12 @@ class MainActivity : ComponentActivity() {
         if (granted) ensureMonitoring()
     }
 
+    private val contactsPermission = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) {
+        PukaarCallerIdHelper.ensureSaved(this)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         runCatching {
@@ -251,11 +257,29 @@ class MainActivity : ComponentActivity() {
         ) {
             runCatching { notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS) }
         }
+        ensureCallerIdContact()
         runCatching {
             AlertReliabilityEngine.armAll(this, allowForegroundService = true)
         }.onFailure {
             android.util.Log.e("HighAlert", "ensureMonitoring failed: ${it.message}", it)
             runCatching { AlertReliabilityEngine.armAll(this, allowForegroundService = false) }
+        }
+    }
+
+    /** Save AuthKey voice number as "PUKAAR Alert" so the dialer shows that name. */
+    private fun ensureCallerIdContact() {
+        val needWrite = ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_CONTACTS) !=
+            PackageManager.PERMISSION_GRANTED
+        val needRead = ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CONTACTS) !=
+            PackageManager.PERMISSION_GRANTED
+        if (needWrite || needRead) {
+            runCatching {
+                contactsPermission.launch(
+                    arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.WRITE_CONTACTS)
+                )
+            }
+        } else {
+            PukaarCallerIdHelper.ensureSaved(this)
         }
     }
 

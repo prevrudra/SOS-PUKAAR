@@ -115,17 +115,16 @@ class AlertActivity : ComponentActivity() {
                         alert = ui,
                         onBack = null,
                         title = if (mock) "PUKAAR TEST ALERT" else "PUKAAR SOS Alert",
-                        onBeforeAction = {
-                            userStoppedAlert(eventId)
-                        },
+                        // Dialing / map: silence tone only — keep screen for info
+                        onBeforeAction = { silenceToneOnly(eventId) },
+                        // Top-right ×: close screen (also silences)
+                        onDismiss = { dismissScreen(eventId) },
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxWidth()
                     )
                     Button(
-                        onClick = {
-                            userStoppedAlert(eventId)
-                        },
+                        onClick = { silenceToneOnly(eventId) },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color(0xFF111827),
                             contentColor = Color.White
@@ -136,7 +135,7 @@ class AlertActivity : ComponentActivity() {
                             .align(Alignment.CenterHorizontally)
                     ) {
                         Text(
-                            "Stop alert",
+                            "Stop tone",
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp
                         )
@@ -144,26 +143,50 @@ class AlertActivity : ComponentActivity() {
                 }
             }
         }
+        PukaarCallerIdHelper.ensureSaved(this)
     }
 
-    private fun userStoppedAlert(eventId: String?) {
-        if (eventId.isNullOrBlank()) {
-            stopAllAlerts()
-            finish()
-            return
+    /** Stop ring/vibration only — keep full-screen info visible for hospital/ambulance/police. */
+    private fun silenceToneOnly(eventId: String?) {
+        if (!eventId.isNullOrBlank()) {
+            AlertSilence.silence(this, eventId)
+            MonitorWatchdogReceiver.cancel(this)
         }
-        AlertSilence.silence(this, eventId)
-        MonitorWatchdogReceiver.cancel(this)
+        stopLocalSoundAndVibrate()
+        getSystemService(NotificationManager::class.java)?.cancel(AlertMonitorService.ALERT_NOTIF_ID)
+        AlertFireHelper.dismissRinging(this)
         lifecycleScope.launch {
-            runCatching {
-                val session = AlertSession(this@AlertActivity)
-                val token = session.token()
-                val api = AlertNetwork.api { token }
-                api.acknowledge(AcknowledgeRequest(eventId, "READ"))
+            if (!eventId.isNullOrBlank()) {
+                runCatching {
+                    val session = AlertSession(this@AlertActivity)
+                    val token = session.token()
+                    AlertNetwork.api { token }.acknowledge(AcknowledgeRequest(eventId, "READ"))
+                }
             }
-            stopAllAlerts()
-            finish()
         }
+    }
+
+    /** Top-right × — close the screen after silencing. */
+    private fun dismissScreen(eventId: String?) {
+        silenceToneOnly(eventId)
+        finish()
+    }
+
+    private fun stopLocalSoundAndVibrate() {
+        runCatching {
+            player?.stop()
+            player?.release()
+        }
+        player = null
+        runCatching { vibrator?.cancel() }
+        vibrator = null
+        previousAlarmVolume?.let { vol ->
+            runCatching {
+                val am = getSystemService(AUDIO_SERVICE) as AudioManager
+                am.setStreamVolume(AudioManager.STREAM_ALARM, vol, 0)
+            }
+        }
+        previousAlarmVolume = null
     }
 
     private fun boostAlarmVolume() {

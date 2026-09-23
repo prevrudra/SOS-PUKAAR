@@ -147,7 +147,8 @@ pukaar:
       auth-key: ${AUTHKEY_AUTH_KEY:}
       country-code: ${AUTHKEY_COUNTRY_CODE:91}
       template-id: ${AUTHKEY_VOICE_TEMPLATE_ID:}
-      message-template: ${AUTHKEY_VOICE_MESSAGE:URGENT! URGENT! This is an emergency alert from PUKAAR. {userName} may be in danger and needs immediate assistance. Please check your WhatsApp immediately for further details, including emergency information and location. Please take action now.}
+      message-template: ${AUTHKEY_VOICE_MESSAGE:PUKAAR alert. {userName} needs help. Check WhatsApp now for location and details.}
+      display-number: ${AUTHKEY_VOICE_DISPLAY_NUMBER:+918037126014}
       enabled: ${AUTHKEY_VOICE_ENABLED:false}
     fcm:
       server-key: ${FCM_SERVER_KEY:}

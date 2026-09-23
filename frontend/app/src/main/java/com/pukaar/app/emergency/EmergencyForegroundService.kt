@@ -113,17 +113,29 @@ class EmergencyForegroundService : Service() {
             this, android.Manifest.permission.ACCESS_FINE_LOCATION
         ) == android.content.pm.PackageManager.PERMISSION_GRANTED
 
+    private fun userDisplayName(): String? {
+        return runCatching {
+            kotlinx.coroutines.runBlocking {
+                PukaarApp.instance.sessionStore.cachedFullName()
+            }
+        }.getOrNull()?.takeIf { it.isNotBlank() }
+    }
+
     private fun buildEmergencyNotification(isSos: Boolean, recordAudio: Boolean): Notification {
         val open = PendingIntent.getActivity(
             this, 0, Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+        val who = userDisplayName()
+        val body = when {
+            recordAudio && who != null -> getString(R.string.emergency_recording_notification, who)
+            recordAudio -> "Background audio recording is on"
+            isSos -> "SOS automation running — location and alerts active"
+            else -> "Help automation running — location and alerts active"
+        }
         return NotificationCompat.Builder(this, PukaarApp.CHANNEL_EMERGENCY)
             .setContentTitle(if (isSos) "SOS ACTIVE" else "HELP ACTIVE")
-            .setContentText(
-                if (recordAudio) getString(R.string.emergency_recording_notification)
-                else "PUKAAR is running emergency automation"
-            )
+            .setContentText(body)
             .setSmallIcon(R.drawable.ic_stat_pukaar)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_MAX)
@@ -270,9 +282,15 @@ class EmergencyForegroundService : Service() {
         val maxRecordingMs = MAX_RECORDING_MS
         scope.launch {
             android.os.Handler(mainLooper).post {
+                val who = userDisplayName()
+                val msg = if (who != null) {
+                    getString(R.string.emergency_recording_started, who)
+                } else {
+                    "Background audio recording started on your phone"
+                }
                 android.widget.Toast.makeText(
                     this@EmergencyForegroundService,
-                    getString(R.string.emergency_recording_started),
+                    msg,
                     android.widget.Toast.LENGTH_LONG
                 ).show()
             }

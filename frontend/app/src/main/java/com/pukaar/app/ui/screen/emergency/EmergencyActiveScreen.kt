@@ -73,12 +73,36 @@ fun EmergencyActiveScreen(
             fontWeight = FontWeight.Black
         )
 
+        event?.userName?.takeIf { it.isNotBlank() }?.let { name ->
+            Text(
+                text = name,
+                color = TextPrimary,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(top = 6.dp)
+            )
+        }
+
         Text(
             text = event?.status?.replace('_', ' ') ?: "ACTIVE",
             color = TextSecondary,
             fontSize = 13.sp,
             modifier = Modifier.padding(top = 4.dp)
         )
+
+        if (!isMockDrill && !isHelp) {
+            val who = event?.userName?.takeIf { it.isNotBlank() }
+            Text(
+                text = if (who != null) {
+                    stringResource(R.string.emergency_recording_started, who)
+                } else {
+                    "Background audio recording started on your phone"
+                },
+                color = TextSecondary,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+        }
 
         Gap(16)
 

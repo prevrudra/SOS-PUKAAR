@@ -48,6 +48,9 @@ public class EmergencyEventEntity {
     private ClosureReason closureReason;
     @Column(name = "closed_at")
     private Instant closedAt;
+    /** Public token for shareable SOS alert page (/view/{token}). */
+    @Column(name = "view_token", length = 64)
+    private String viewToken;
     @CreationTimestamp @Column(name = "started_at", updatable = false)
     private Instant startedAt;
     @UpdateTimestamp @Column(name = "updated_at")

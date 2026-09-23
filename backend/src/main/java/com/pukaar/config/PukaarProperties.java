@@ -154,9 +154,9 @@ public class PukaarProperties {
             /** Optional AuthKey template id (vid). When set, raw voice text is not sent. */
             private String templateId = "";
             private String messageTemplate =
-                    "URGENT! URGENT! This is an emergency alert from PUKAAR. {userName} may be in danger "
-                            + "and needs immediate assistance. Please check your WhatsApp immediately for "
-                            + "further details, including emergency information and location. Please take action now.";
+                    "PUKAAR alert. {userName} needs help. Check WhatsApp now for location and details.";
+            /** Outbound caller ID number shown on contact phones (for contact-book display name). */
+            private String displayNumber = "+918037126014";
             private boolean enabled = false;
         }
 

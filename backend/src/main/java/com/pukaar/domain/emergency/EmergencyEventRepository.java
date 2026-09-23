@@ -12,6 +12,7 @@ import java.util.UUID;
 public interface EmergencyEventRepository extends JpaRepository<EmergencyEventEntity, UUID> {
     Optional<EmergencyEventEntity> findFirstByUserIdAndClosedAtIsNullOrderByStartedAtDesc(UUID userId);
     List<EmergencyEventEntity> findByUserIdOrderByStartedAtDesc(UUID userId);
+    Optional<EmergencyEventEntity> findByViewToken(String viewToken);
 
     /** Open SOS for contact — excludes events they already dismissed (READ / acknowledged). */
     @Query(value = """
