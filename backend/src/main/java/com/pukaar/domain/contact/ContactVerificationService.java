@@ -56,6 +56,14 @@ public class ContactVerificationService {
         return role == ContactRole.SOS_TRUSTED || role == ContactRole.HELP_BACKUP;
     }
 
+    /** True when a non-expired OTP was already issued — safe to skip re-send on save. */
+    public boolean hasOutstandingOtp(TrustedContactEntity contact) {
+        return contact != null
+                && contact.getVerifyCodeHash() != null
+                && contact.getVerifyCodeExpiresAt() != null
+                && contact.getVerifyCodeExpiresAt().isAfter(Instant.now());
+    }
+
     public record OtpIssueResult(TrustedContactEntity contact, boolean delivered, String channel, String message) {}
 
     @Transactional
@@ -63,6 +71,7 @@ public class ContactVerificationService {
         if (contact.getVerifySentAt() != null) {
             long since = ChronoUnit.SECONDS.between(contact.getVerifySentAt(), Instant.now());
             if (since >= 0 && since < RESEND_COOLDOWN_SECONDS) {
+                // Do not wipe verified / rotate code on cooldown — just tell the client to wait.
                 throw new ApiException("OTP_COOLDOWN",
                         "Please wait " + (RESEND_COOLDOWN_SECONDS - since) + " seconds before resending");
             }

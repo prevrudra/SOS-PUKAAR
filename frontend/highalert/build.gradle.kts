@@ -16,8 +16,8 @@ android {
         applicationId = "com.pukaar.highalert"
         minSdk = 26
         targetSdk = 36
-        versionCode = 54
-        versionName = "1.13.24"
+        versionCode = 55
+        versionName = "1.13.25"
         buildConfigField("String", "API_BASE_URL", "\"https://pukaaralert.com/pukaar/\"")
         buildConfigField("boolean", "FCM_ENABLED", "true")
     }

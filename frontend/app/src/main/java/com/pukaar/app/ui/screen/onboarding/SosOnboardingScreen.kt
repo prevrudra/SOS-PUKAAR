@@ -162,9 +162,30 @@ fun SosOnboardingScreen(
             priorityOrder = 1
         )
         val savedId = ContactRepositoryBridge.saveQuiet(draft).getOrThrow()
-        val updated = contact.copy(id = savedId)
+        val server = existing.firstOrNull { it.id == savedId }
+            ?: ContactRepositoryBridge.loadContacts().firstOrNull { it.id == savedId }
+        val updated = contact.copy(
+            id = savedId,
+            verified = server?.verified == true || contact.verified
+        )
         slots.replace(contact.id, updated)
         return updated
+    }
+
+    suspend fun syncVerifiedFromServer() {
+        val server = ContactRepositoryBridge.loadContacts()
+            .filter { it.type == ContactType.SOS }
+        for (local in slots.filled.toList()) {
+            val match = server.firstOrNull {
+                it.id == local.id || ContactRepositoryBridge.phonesMatch(it.phoneNumber, local.phone)
+            } ?: continue
+            if (match.verified) {
+                slots.verify(local.id)
+                if (match.id != local.id) {
+                    slots.replace(local.id, local.copy(id = match.id, verified = true))
+                }
+            }
+        }
     }
 
     fun goBack() {
@@ -194,7 +215,20 @@ fun SosOnboardingScreen(
                             onClick = {
                                 scope.launch {
                                     try {
-                                        filled.toList().forEach { persistSosContact(it) }
+                                        // Persist each contact; OTP_COOLDOWN on re-save must not
+                                        // block advancing — code was already sent.
+                                        for (contact in filled.toList()) {
+                                            runCatching { persistSosContact(contact) }
+                                                .onFailure { err ->
+                                                    val msg = err.message.orEmpty()
+                                                    if (!msg.contains("OTP_COOLDOWN", ignoreCase = true)
+                                                        && !msg.contains("wait", ignoreCase = true)
+                                                    ) {
+                                                        throw err
+                                                    }
+                                                }
+                                        }
+                                        syncVerifiedFromServer()
                                         page = SosPage.VERIFY
                                     } catch (e: Exception) {
                                         Toast.makeText(
@@ -276,7 +310,9 @@ fun SosOnboardingScreen(
                 onUpgradeToGlobal = onUpgradeToGlobal
             )
 
-            SosPage.VERIFY -> SosVerifyStep(
+            SosPage.VERIFY -> {
+                LaunchedEffect(page) { syncVerifiedFromServer() }
+                SosVerifyStep(
                 contacts = filled,
                 type = type,
                 onResend = { contact ->
@@ -322,6 +358,7 @@ fun SosOnboardingScreen(
                 },
                 onShareApp = onShareApp
             )
+            }
 
             SosPage.ADD_NUMBERS -> SosAddNumbersStep(
                 numbers = numbers,

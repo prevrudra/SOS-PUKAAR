@@ -219,13 +219,34 @@ fun HomeScreen(
 
         if (onFixPermissions != null) {
             Spacer(Modifier.height(12.dp))
-            Button(
-                onClick = onFixPermissions,
-                modifier = Modifier.fillMaxWidth().height(48.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = PukaarRed)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(PukaarRedSofter)
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("Allow background alerts", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                Text(
+                    text = "Background activity restricted?",
+                    color = PukaarRed,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp
+                )
+                Text(
+                    text = "On Oppo / Android 15+, open Battery → Unrestricted (or Allow background activity) for PUKAAR High Alert, or SOS rings will be delayed.",
+                    color = TextSecondary,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp
+                )
+                Button(
+                    onClick = onFixPermissions,
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = PukaarRed)
+                ) {
+                    Text("Fix battery & alert permissions", color = SurfaceWhite, fontWeight = FontWeight.Bold)
+                }
             }
         }
         if (onSignOut != null) {

@@ -289,6 +289,7 @@ class MainActivity : ComponentActivity() {
      */
     private fun enableGrabbing() {
         ensureMonitoring()
+        // Always request unrestricted battery — Oppo/Android 15+ can re-restrict overnight.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             val pm = getSystemService(android.os.PowerManager::class.java)
             if (pm != null && !pm.isIgnoringBatteryOptimizations(packageName)) {
@@ -302,6 +303,29 @@ class MainActivity : ComponentActivity() {
                 }
                 return
             }
+        }
+        // OEM battery / auto-start screens (Oppo, Realme, OnePlus, Xiaomi, Vivo)
+        val oemIntents = listOf(
+            Intent().setClassName(
+                "com.coloros.safecenter",
+                "com.coloros.safecenter.permission.startup.StartupAppListActivity"
+            ),
+            Intent().setClassName(
+                "com.oplus.safecenter",
+                "com.oplus.safecenter.permission.startup.StartupAppListActivity"
+            ),
+            Intent().setClassName(
+                "com.oppo.safe",
+                "com.oppo.safe.permission.startup.StartupAppListActivity"
+            ),
+            Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS),
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.parse("package:$packageName")
+            }
+        )
+        for (intent in oemIntents) {
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            if (runCatching { startActivity(intent); true }.getOrDefault(false)) return
         }
         if (Build.VERSION.SDK_INT >= 34) {
             val nm = getSystemService(NotificationManager::class.java)
@@ -328,16 +352,7 @@ class MainActivity : ComponentActivity() {
                         }
                     )
                 }
-                return
             }
-        }
-        runCatching {
-            startActivity(
-                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                    data = Uri.parse("package:$packageName")
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-            )
         }
     }
 

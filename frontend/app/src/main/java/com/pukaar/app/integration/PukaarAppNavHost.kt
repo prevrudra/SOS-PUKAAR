@@ -24,6 +24,7 @@ import com.pukaar.app.emergency.EmergencyForegroundService
 import com.pukaar.app.ui.navigation.PukaarNavHost
 import com.pukaar.app.ui.navigation.Route
 import com.pukaar.app.ui.screen.contacts.ContactDraft
+import com.pukaar.app.ui.screen.contacts.ContactType
 import com.pukaar.app.ui.screen.contacts.ContactUiModel
 import com.pukaar.app.ui.screen.emergency.EmergencyActiveScreen
 import com.pukaar.app.ui.screen.home.HomeMode
@@ -231,8 +232,18 @@ fun PukaarAppNavHost() {
                                 scope.launch {
                                     val name = runCatching { PukaarApp.instance.repository.me().fullName }.getOrNull()
                                     ContactRepositoryBridge.saveContact(context, draft, name)
-                                        .onSuccess {
+                                        .onSuccess { id ->
                                             contacts = ContactRepositoryBridge.loadContacts()
+                                            val saved = contacts.firstOrNull { it.id == id }
+                                            if (saved != null && !saved.verified &&
+                                                (saved.type == ContactType.SOS || saved.type == ContactType.INACTIVITY)
+                                            ) {
+                                                android.widget.Toast.makeText(
+                                                    context,
+                                                    "Number changed — enter the OTP sent to ${saved.name} before they can receive alerts.",
+                                                    android.widget.Toast.LENGTH_LONG
+                                                ).show()
+                                            }
                                             onDone()
                                         }
                                         .onFailure { error = it.message }

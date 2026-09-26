@@ -174,7 +174,10 @@ public class ContactAlertDeviceService {
         for (TrustedContactEntity c : allContacts) {
             Map<String, Object> row = contactDto(c, deliveryByPhone.get(last10(c.getPhoneE164())));
             if (c.getContactRole() == ContactRole.SOS_TRUSTED) {
-                trusted.add(row);
+                // Show who can help — prefer verified (they actually get the alert).
+                if (c.isVerified()) {
+                    trusted.add(row);
+                }
             } else {
                 help.add(row);
             }

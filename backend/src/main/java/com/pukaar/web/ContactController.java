@@ -176,6 +176,11 @@ public class ContactController {
         if (c.isVerified()) {
             return toDto(c, null);
         }
+        // Onboarding Continue re-saves contacts — do not re-issue OTP when a code is
+        // already outstanding. Re-issuing caused OTP_COOLDOWN and blocked the next page.
+        if (verificationService.hasOutstandingOtp(c)) {
+            return toDto(c, null);
+        }
         OtpIssueResult result = verificationService.issueAndSendOtp(
                 c, verificationService.ownerDisplayName(ownerId));
         return toDto(result.contact(), result);

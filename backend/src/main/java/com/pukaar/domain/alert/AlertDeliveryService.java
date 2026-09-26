@@ -392,6 +392,7 @@ public class AlertDeliveryService {
                 .findByOwnerUserIdAndActiveTrueOrderByPriorityOrderAsc(user.getId());
         List<TrustedContactEntity> trusted = all.stream()
                 .filter(c -> c.getContactRole() == ContactRole.SOS_TRUSTED)
+                .filter(TrustedContactEntity::isVerified)
                 .limit(3)
                 .toList();
         List<TrustedContactEntity> helpContacts = all.stream()
@@ -550,8 +551,10 @@ public class AlertDeliveryService {
 
         List<TrustedContactEntity> all = contactRepo
                 .findByOwnerUserIdAndActiveTrueOrderByPriorityOrderAsc(user.getId());
+        // Only verified SOS contacts — matches who actually receives the alert.
         List<TrustedContactEntity> trusted = all.stream()
                 .filter(c -> c.getContactRole() == ContactRole.SOS_TRUSTED)
+                .filter(TrustedContactEntity::isVerified)
                 .toList();
         List<TrustedContactEntity> emergency = all.stream()
                 .filter(c -> c.getContactRole() == ContactRole.DOCTOR

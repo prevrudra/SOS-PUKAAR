@@ -106,9 +106,11 @@ fun EmergencyActiveScreen(
 
         Gap(16)
 
+        // Single scroll (including CALL 112 / I'm Safe) so Oppo/Android 15+ cannot
+        // clip service cards under sticky footer buttons.
         Column(
             modifier = Modifier
-                .weight(1f)
+                .weight(1f, fill = true)
                 .verticalScroll(scroll),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -233,7 +235,8 @@ fun EmergencyActiveScreen(
                     )
                 }
             }
-        }
+
+            Gap(8)
 
         if (!isMockDrill) {
             Button(
@@ -290,6 +293,8 @@ fun EmergencyActiveScreen(
             color = TextSecondary,
             fontSize = 11.sp
         )
+            Gap(12)
+        }
     }
 }
 
